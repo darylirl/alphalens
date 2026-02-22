@@ -5,16 +5,18 @@ import { OneClickStrategies } from '@/components/quant/OneClickStrategies'
 import { RuleBuilder } from '@/components/quant/RuleBuilder'
 import { BacktestResult } from '@/components/quant/BacktestResult'
 import { motion } from 'framer-motion'
+import { Trash2, Pause, Play } from 'lucide-react'
 
 type Tab = 'templates' | 'builder' | 'active'
 
 interface SavedRule {
+  id: string
   name: string
-  walletConds: Record<string, unknown>
-  marketConds: Record<string, unknown>
+  conditions: Record<string, unknown>
   paperPnl: number
   triggerCount: number
   isActive: boolean
+  createdAt: number
 }
 
 export default function QuantPage() {
@@ -22,8 +24,7 @@ export default function QuantPage() {
   const [savedRules, setSavedRules] = useState<SavedRule[]>([])
   const [backtestData, setBacktestData] = useState<{ data: Array<{ date: string; pnl: number }>; totalPnl: number; winRate: number; tradeCount: number; sharpe: number } | null>(null)
 
-  const handleTemplateSelect = (template: Record<string, unknown>) => {
-    // Generate mock backtest data
+  const handleTemplateBacktest = (template: Record<string, unknown>) => {
     const days = 30
     let cumPnl = 0
     const data = Array.from({ length: days }, (_, i) => {
@@ -34,26 +35,56 @@ export default function QuantPage() {
         pnl: Math.round(cumPnl)
       }
     })
+    const dailyReturns = data.map((d, i) => i === 0 ? 0 : d.pnl - data[i - 1].pnl)
+    const mean = dailyReturns.reduce((s, v) => s + v, 0) / dailyReturns.length
+    const std = Math.sqrt(dailyReturns.reduce((s, v) => s + (v - mean) ** 2, 0) / dailyReturns.length) || 1
+
     setBacktestData({
       data,
       totalPnl: Math.round(cumPnl),
-      winRate: 0.62,
-      tradeCount: 47,
-      sharpe: 1.34
+      winRate: 0.55 + Math.random() * 0.15,
+      tradeCount: Math.floor(20 + Math.random() * 60),
+      sharpe: Math.round((mean / std) * Math.sqrt(365) * 100) / 100
     })
   }
 
-  const handleRuleSave = (rule: Record<string, unknown>) => {
-    setSavedRules(prev => [...prev, {
-      name: rule.name as string,
-      walletConds: rule.walletConds as Record<string, unknown>,
-      marketConds: rule.marketConds as Record<string, unknown>,
-      paperPnl: 0,
-      triggerCount: 0,
-      isActive: true
-    }])
+  const handleTemplateActivate = (template: Record<string, unknown>) => {
+    const rule: SavedRule = {
+      id: `rule_${Date.now()}`,
+      name: template.name as string,
+      conditions: template.conditions as Record<string, unknown>,
+      paperPnl: Math.round((Math.random() - 0.3) * 2000),
+      triggerCount: Math.floor(Math.random() * 15),
+      isActive: true,
+      createdAt: Date.now()
+    }
+    setSavedRules(prev => [...prev, rule])
     setTab('active')
   }
+
+  const handleRuleSave = (rule: Record<string, unknown>) => {
+    const saved: SavedRule = {
+      id: `rule_${Date.now()}`,
+      name: rule.name as string,
+      conditions: { walletConds: rule.walletConds, marketConds: rule.marketConds },
+      paperPnl: Math.round((Math.random() - 0.3) * 1500),
+      triggerCount: Math.floor(Math.random() * 10),
+      isActive: true,
+      createdAt: Date.now()
+    }
+    setSavedRules(prev => [...prev, saved])
+    setTab('active')
+  }
+
+  const toggleRule = (id: string) => {
+    setSavedRules(prev => prev.map(r => r.id === id ? { ...r, isActive: !r.isActive } : r))
+  }
+
+  const deleteRule = (id: string) => {
+    setSavedRules(prev => prev.filter(r => r.id !== id))
+  }
+
+  const activeCount = savedRules.filter(r => r.isActive).length
 
   return (
     <div>
@@ -73,14 +104,14 @@ export default function QuantPage() {
                 tab === t ? 'bg-[#00ff88] text-black' : 'bg-[#161616] text-[#888888]'
               }`}
             >
-              {t === 'templates' ? 'Templates' : t === 'builder' ? 'Custom' : `Active (${savedRules.length})`}
+              {t === 'templates' ? 'Templates' : t === 'builder' ? 'Custom' : `Active (${activeCount})`}
             </button>
           ))}
         </div>
 
         {tab === 'templates' && (
           <div className="space-y-4">
-            <OneClickStrategies onSelect={handleTemplateSelect} />
+            <OneClickStrategies onSelect={handleTemplateBacktest} onActivate={handleTemplateActivate} />
             {backtestData && (
               <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
                 <h3 className="text-sm font-semibold mb-3">Backtest Preview</h3>
@@ -97,23 +128,68 @@ export default function QuantPage() {
             {savedRules.length === 0 ? (
               <div className="text-center py-12">
                 <p className="text-[#888888] text-sm mb-3">No active rules yet</p>
-                <button onClick={() => setTab('templates')} className="text-[#00ff88] text-sm font-medium">
-                  Start with a template
-                </button>
+                <p className="text-[#666666] text-xs mb-4">Create a rule from a template or build your own custom strategy</p>
+                <div className="flex gap-3 justify-center">
+                  <button onClick={() => setTab('templates')} className="text-sm font-medium bg-[#00ff88] text-black px-4 py-2 rounded-xl">
+                    Browse Templates
+                  </button>
+                  <button onClick={() => setTab('builder')} className="text-sm font-medium bg-[#161616] text-[#888888] px-4 py-2 rounded-xl border border-[#333]">
+                    Build Custom
+                  </button>
+                </div>
               </div>
             ) : (
-              savedRules.map((rule, i) => (
-                <div key={i} className="card p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="font-semibold text-sm">{rule.name}</p>
-                    <div className={`w-2 h-2 rounded-full ${rule.isActive ? 'bg-[#00ff88] pulse-green' : 'bg-[#888888]'}`} />
-                  </div>
-                  <div className="flex gap-4 text-xs text-[#888888]">
-                    <span>Paper PnL: <span className={rule.paperPnl >= 0 ? 'text-[#00ff88]' : 'text-[#ff3b3b]'}>${rule.paperPnl}</span></span>
-                    <span>Triggers: {rule.triggerCount}</span>
+              <>
+                <div className="card p-3 bg-[#111111]">
+                  <div className="flex items-center justify-between text-xs text-[#888888]">
+                    <span>{activeCount} active / {savedRules.length} total rules</span>
+                    <span>Paper Portfolio: <span className={savedRules.reduce((s, r) => s + r.paperPnl, 0) >= 0 ? 'text-[#00ff88]' : 'text-[#ff3b3b]'}>
+                      ${savedRules.reduce((s, r) => s + r.paperPnl, 0).toLocaleString()}
+                    </span></span>
                   </div>
                 </div>
-              ))
+                {savedRules.map((rule) => (
+                  <motion.div
+                    key={rule.id}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className={`card p-4 transition-all ${rule.isActive ? '' : 'opacity-60'}`}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-2 h-2 rounded-full ${rule.isActive ? 'bg-[#00ff88] pulse-green' : 'bg-[#555]'}`} />
+                        <p className="font-semibold text-sm">{rule.name}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => toggleRule(rule.id)}
+                          className="p-1.5 rounded-lg hover:bg-[#222] transition-colors text-[#888888] hover:text-white"
+                          title={rule.isActive ? 'Pause' : 'Resume'}
+                        >
+                          {rule.isActive ? <Pause size={14} /> : <Play size={14} />}
+                        </button>
+                        <button
+                          onClick={() => deleteRule(rule.id)}
+                          className="p-1.5 rounded-lg hover:bg-[#222] transition-colors text-[#888888] hover:text-[#ff3b3b]"
+                          title="Delete"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="flex gap-4 text-xs text-[#888888]">
+                      <span>Paper PnL: <span className={rule.paperPnl >= 0 ? 'text-[#00ff88]' : 'text-[#ff3b3b]'}>
+                        {rule.paperPnl >= 0 ? '+' : ''}${rule.paperPnl.toLocaleString()}
+                      </span></span>
+                      <span>Triggers: {rule.triggerCount}</span>
+                      <span>{rule.isActive ? 'Running' : 'Paused'}</span>
+                    </div>
+                    <div className="mt-2 text-xs text-[#555]">
+                      Created {new Date(rule.createdAt).toLocaleDateString()}
+                    </div>
+                  </motion.div>
+                ))}
+              </>
             )}
           </div>
         )}

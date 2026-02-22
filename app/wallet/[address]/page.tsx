@@ -15,24 +15,29 @@ export default function WalletPage() {
   const address = params.address as string
   const [detail, setDetail] = useState<WalletDetail | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const loadWallet = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/wallets/${address}`)
+      const data = await res.json()
+      if (res.ok && data.state) {
+        setDetail(data as WalletDetail)
+      } else {
+        setError(data.error || 'Could not load wallet data')
+      }
+    } catch {
+      setError('Network error - please try again')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
-    async function load() {
-      setLoading(true)
-      try {
-        const res = await fetch(`/api/wallets/${address}`)
-        if (res.ok) {
-          const data = await res.json()
-          setDetail(data as WalletDetail)
-        }
-      } catch {
-        // Will retry
-      } finally {
-        setLoading(false)
-      }
-    }
-    if (address) load()
-  }, [address])
+    if (address) loadWallet()
+  }, [address]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading) {
     return (
@@ -52,7 +57,11 @@ export default function WalletPage() {
       <div>
         <TopBar title="Wallet" />
         <div className="px-4 py-12 text-center">
-          <p className="text-[#888888]">Wallet not found or API error</p>
+          <p className="text-[#888888] mb-2">{error || 'Wallet not found or API error'}</p>
+          <p className="text-[#666666] text-xs font-mono mb-4">{address}</p>
+          <button onClick={loadWallet} className="text-sm bg-[#00ff88] text-black font-semibold px-4 py-2 rounded-xl">
+            Retry
+          </button>
         </div>
       </div>
     )

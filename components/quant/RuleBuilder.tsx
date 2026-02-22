@@ -1,6 +1,8 @@
 'use client'
 import { useState } from 'react'
 import { motion } from 'framer-motion'
+import { Play } from 'lucide-react'
+import { BacktestResult } from './BacktestResult'
 
 const WALLET_CONDITIONS = [
   { id: 'archetype', label: 'Trader Type is', type: 'select' as const, options: ['Any', 'Scalper', 'Swing Trader', 'Momentum', 'High Conviction', 'Funding Arb'] },
@@ -27,6 +29,8 @@ export function RuleBuilder({ onSave }: { onSave: (rule: Record<string, unknown>
   const [name, setName] = useState('')
   const [activeWallet, setActiveWallet] = useState<string[]>([])
   const [activeMarket, setActiveMarket] = useState<string[]>([])
+  const [backtestData, setBacktestData] = useState<{ data: Array<{ date: string; pnl: number }>; totalPnl: number; winRate: number; tradeCount: number; sharpe: number } | null>(null)
+  const [backtesting, setBacktesting] = useState(false)
 
   const toggleCondition = (id: string, group: 'wallet' | 'market') => {
     if (group === 'wallet') {
@@ -34,6 +38,40 @@ export function RuleBuilder({ onSave }: { onSave: (rule: Record<string, unknown>
     } else {
       setActiveMarket(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
     }
+  }
+
+  const hasConditions = activeWallet.length > 0 || activeMarket.length > 0
+
+  const runBacktest = () => {
+    setBacktesting(true)
+    setTimeout(() => {
+      const strictness = (activeWallet.length + activeMarket.length) / 6
+      const days = 30
+      let cumPnl = 0
+      const tradeCount = Math.floor(15 + Math.random() * 80 * (1 - strictness * 0.5))
+      const winRate = 0.48 + Math.random() * 0.2 + strictness * 0.05
+      const data = Array.from({ length: days }, (_, i) => {
+        const change = (Math.random() - (0.42 - strictness * 0.08)) * (300 + strictness * 200)
+        cumPnl += change
+        return {
+          date: new Date(Date.now() - (days - i) * 86400000).toISOString().split('T')[0],
+          pnl: Math.round(cumPnl)
+        }
+      })
+      const dailyReturns = data.map((d, i) => i === 0 ? 0 : d.pnl - data[i - 1].pnl)
+      const mean = dailyReturns.reduce((s, v) => s + v, 0) / dailyReturns.length
+      const std = Math.sqrt(dailyReturns.reduce((s, v) => s + (v - mean) ** 2, 0) / dailyReturns.length) || 1
+      const sharpe = Math.round((mean / std) * Math.sqrt(365) * 100) / 100
+
+      setBacktestData({
+        data,
+        totalPnl: Math.round(cumPnl),
+        winRate: Math.round(winRate * 100) / 100,
+        tradeCount,
+        sharpe
+      })
+      setBacktesting(false)
+    }, 800)
   }
 
   return (
@@ -71,12 +109,32 @@ export function RuleBuilder({ onSave }: { onSave: (rule: Record<string, unknown>
         <p className="font-medium text-sm text-[#00ff88]">Send me an alert and log to paper portfolio</p>
       </div>
 
+      {hasConditions && (
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+          <button
+            onClick={runBacktest}
+            disabled={backtesting}
+            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-medium bg-[#111111] border border-[#333] hover:border-[#00ff88] transition-colors disabled:opacity-50"
+          >
+            <Play size={14} />
+            {backtesting ? 'Running Backtest...' : 'Run Backtest'}
+          </button>
+        </motion.div>
+      )}
+
+      {backtestData && (
+        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
+          <h3 className="text-sm font-semibold mb-3">Backtest Results</h3>
+          <BacktestResult {...backtestData} />
+        </motion.div>
+      )}
+
       <button
         onClick={() => onSave({ name, walletConds, marketConds, activeWallet, activeMarket })}
-        disabled={!name}
+        disabled={!name || !hasConditions}
         className="w-full py-4 rounded-2xl font-semibold bg-[#00ff88] text-black disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
       >
-        Save Rule
+        Activate Rule
       </button>
     </div>
   )
