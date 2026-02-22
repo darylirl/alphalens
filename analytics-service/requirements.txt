@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+hyperliquid-python-sdk
+supabase
+pandas
+numpy
+scipy
+httpx
+apscheduler
+python-dotenv

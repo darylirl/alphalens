@@ -1,0 +1,192 @@
+'use client'
+import { useEffect, useState } from 'react'
+import { motion } from 'framer-motion'
+import Link from 'next/link'
+import { TopBar } from '@/components/layout/TopBar'
+import { WalletCard } from '@/components/wallet/WalletCard'
+import { SkeletonCard } from '@/components/ui/SkeletonCard'
+import { PulseIndicator } from '@/components/ui/PulseIndicator'
+import { Crosshair, TrendingUp, Activity, Zap } from 'lucide-react'
+import type { WalletAnalytics } from '@/lib/hyperliquid/types'
+
+export default function DashboardPage() {
+  const [topWallets, setTopWallets] = useState<WalletAnalytics[]>([])
+  const [loading, setLoading] = useState(true)
+  const [marketStats, setMarketStats] = useState({ totalVolume: 0, openInterest: 0, topGainer: '', topGainerPct: 0 })
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const res = await fetch('/api/hunters?limit=5&sort=sharpe_30d')
+        if (res.ok) {
+          const data = await res.json()
+          setTopWallets(Array.isArray(data) ? data.map((w: Record<string, unknown>) => ({
+            address: w.address as string,
+            label: w.label as string | undefined,
+            archetype: w.archetype as string || 'unknown',
+            archetypeConfidence: w.archetype_confidence as number || 0,
+            sharpe7d: 0,
+            sharpe30d: w.sharpe_30d as number || 0,
+            sharpe90d: w.sharpe_90d as number || 0,
+            alphaDecayScore: w.alpha_decay_score as number || 0,
+            winRate: w.win_rate as number || 0,
+            totalPnlUsd: w.total_pnl_usd as number || 0,
+            tradeCount30d: w.trade_count_30d as number || 0,
+            avgHoldSeconds: 0,
+            avgLeverage: w.avg_leverage as number || 0,
+            mostTradedAsset: '',
+          })) : [])
+        }
+      } catch {
+        // API not yet configured
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    async function loadMarket() {
+      try {
+        const res = await fetch('https://api.hyperliquid.xyz/info', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 'metaAndAssetCtxs' })
+        })
+        if (res.ok) {
+          const data = await res.json()
+          const ctxs = data[1] || data?.assetCtxs || []
+          const universe = data[0]?.universe || data?.meta?.universe || []
+          let totalVol = 0
+          let totalOI = 0
+          let topPct = 0
+          let topName = ''
+          ctxs.forEach((ctx: Record<string, string>, i: number) => {
+            totalVol += parseFloat(ctx.dayNtlVlm || '0')
+            totalOI += parseFloat(ctx.openInterest || '0') * parseFloat(ctx.markPx || '0')
+            const prevPx = parseFloat(ctx.prevDayPx || '0')
+            const markPx = parseFloat(ctx.markPx || '0')
+            if (prevPx > 0) {
+              const change = ((markPx - prevPx) / prevPx) * 100
+              if (change > topPct) {
+                topPct = change
+                topName = universe[i]?.name || `Asset ${i}`
+              }
+            }
+          })
+          setMarketStats({
+            totalVolume: Math.round(totalVol),
+            openInterest: Math.round(totalOI),
+            topGainer: topName,
+            topGainerPct: Math.round(topPct * 100) / 100
+          })
+        }
+      } catch {
+        // Will retry on next load
+      }
+    }
+
+    load()
+    loadMarket()
+  }, [])
+
+  return (
+    <div>
+      <TopBar title="Dashboard" />
+      <div className="px-4 py-4 lg:px-6 space-y-6">
+        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-xl font-bold">
+                <span className="text-[#00ff88]">Alpha</span> Lens
+              </h2>
+              <p className="text-[#888888] text-xs mt-0.5">Hyperliquid Trader Intelligence</p>
+            </div>
+            <PulseIndicator />
+          </div>
+        </motion.div>
+
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="card p-3">
+            <div className="flex items-center gap-2 mb-2">
+              <Activity size={14} className="text-[#00ff88]" />
+              <span className="text-xs text-[#888888]">24h Volume</span>
+            </div>
+            <p className="font-semibold text-sm">${(marketStats.totalVolume / 1e9).toFixed(2)}B</p>
+          </motion.div>
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="card p-3">
+            <div className="flex items-center gap-2 mb-2">
+              <TrendingUp size={14} className="text-[#00ff88]" />
+              <span className="text-xs text-[#888888]">Open Interest</span>
+            </div>
+            <p className="font-semibold text-sm">${(marketStats.openInterest / 1e9).toFixed(2)}B</p>
+          </motion.div>
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="card p-3">
+            <div className="flex items-center gap-2 mb-2">
+              <Zap size={14} className="text-[#00ff88]" />
+              <span className="text-xs text-[#888888]">Top Gainer</span>
+            </div>
+            <p className="font-semibold text-sm">{marketStats.topGainer || '—'}</p>
+            {marketStats.topGainerPct > 0 && (
+              <p className="text-[#00ff88] text-xs">+{marketStats.topGainerPct}%</p>
+            )}
+          </motion.div>
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="card p-3">
+            <div className="flex items-center gap-2 mb-2">
+              <Crosshair size={14} className="text-[#00ff88]" />
+              <span className="text-xs text-[#888888]">Tracked</span>
+            </div>
+            <p className="font-semibold text-sm">{topWallets.length > 0 ? `${topWallets.length}+` : '—'} wallets</p>
+          </motion.div>
+        </div>
+
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-semibold text-sm">Top Alpha Hunters</h3>
+            <Link href="/hunters" className="text-[#00ff88] text-xs font-medium">View All</Link>
+          </div>
+          {loading ? (
+            <div className="space-y-3">
+              {Array.from({ length: 3 }).map((_, i) => <SkeletonCard key={i} />)}
+            </div>
+          ) : topWallets.length > 0 ? (
+            <div className="space-y-3">
+              {topWallets.slice(0, 5).map((w, i) => (
+                <WalletCard
+                  key={w.address}
+                  address={w.address}
+                  label={w.label}
+                  archetype={w.archetype}
+                  sharpe30d={w.sharpe30d}
+                  winRate={w.winRate}
+                  totalPnl={w.totalPnlUsd}
+                  alphaDecay={w.alphaDecayScore}
+                  rank={i + 1}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="card p-6 text-center">
+              <p className="text-[#888888] text-sm mb-3">No wallets tracked yet</p>
+              <Link href="/hunters" className="inline-block bg-[#00ff88] text-black text-sm font-semibold px-4 py-2 rounded-xl">
+                Start Hunting
+              </Link>
+            </div>
+          )}
+        </div>
+
+        <div className="card p-4">
+          <h3 className="font-semibold text-sm mb-2">Quick Actions</h3>
+          <div className="grid grid-cols-2 gap-2">
+            <Link href="/hunters" className="bg-[#111111] rounded-xl p-3 text-center hover:bg-[#1a1a1a] transition-colors">
+              <Crosshair size={18} className="mx-auto mb-1 text-[#00ff88]" />
+              <span className="text-xs">Hunt Alpha</span>
+            </Link>
+            <Link href="/quant" className="bg-[#111111] rounded-xl p-3 text-center hover:bg-[#1a1a1a] transition-colors">
+              <Zap size={18} className="mx-auto mb-1 text-[#00ff88]" />
+              <span className="text-xs">Build Strategy</span>
+            </Link>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
