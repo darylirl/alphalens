@@ -15,6 +15,7 @@ export default function DashboardPage() {
   const [topWallets, setTopWallets] = useState<WalletAnalytics[]>([])
   const [loading, setLoading] = useState(true)
   const [walletQuery, setWalletQuery] = useState('')
+  const [searchError, setSearchError] = useState('')
   const [marketStats, setMarketStats] = useState({ totalVolume: 0, openInterest: 0, topGainer: '', topGainerPct: 0, topGainers: [] as Array<{ name: string; change: number }> })
 
   useEffect(() => {
@@ -87,19 +88,33 @@ export default function DashboardPage() {
 
         {/* Wallet Search Bar */}
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.02 }}>
-          <form onSubmit={e => { e.preventDefault(); if (walletQuery.startsWith('0x') && walletQuery.length >= 10) { router.push(`/wallet/${walletQuery}`); setWalletQuery('') } }} className="flex gap-2">
-            <div className="flex-1 flex items-center gap-2 bg-[#111111] border border-[#222222] rounded-xl px-3 py-2.5">
-              <Search size={16} className="text-[#888888] flex-shrink-0" />
-              <input
-                value={walletQuery}
-                onChange={e => setWalletQuery(e.target.value)}
-                placeholder="Enter Hyperliquid Wallet Address"
-                className="bg-transparent text-sm outline-none flex-1 placeholder:text-[#888888]"
-              />
+          <form onSubmit={e => {
+            e.preventDefault()
+            setSearchError('')
+            const q = walletQuery.trim()
+            if (!q) { setSearchError('Enter a wallet address'); return }
+            // Auto-prepend 0x if missing
+            const addr = q.startsWith('0x') ? q : `0x${q}`
+            if (addr.length < 10) { setSearchError('Address too short'); return }
+            if (!/^0x[a-fA-F0-9]+$/.test(addr)) { setSearchError('Invalid address format'); return }
+            router.push(`/wallet/${addr}`)
+            setWalletQuery('')
+          }} className="flex gap-2">
+            <div className="flex-1">
+              <div className={`flex items-center gap-2 bg-[#111111] border rounded-xl px-3 py-2.5 ${searchError ? 'border-[#ff3b3b]' : 'border-[#222222]'}`}>
+                <Search size={16} className="text-[#888888] flex-shrink-0" />
+                <input
+                  value={walletQuery}
+                  onChange={e => { setWalletQuery(e.target.value); setSearchError('') }}
+                  placeholder="Enter Hyperliquid Wallet Address (0x...)"
+                  className="bg-transparent text-sm outline-none flex-1 placeholder:text-[#888888]"
+                />
+              </div>
+              {searchError && <p className="text-[#ff3b3b] text-[10px] mt-1 ml-1">{searchError}</p>}
             </div>
             <button
               type="submit"
-              className="bg-[#00ff88] text-black text-sm font-semibold px-4 rounded-xl hover:bg-[#00dd77] transition-colors"
+              className="bg-[#00ff88] text-black text-sm font-semibold px-5 rounded-xl hover:bg-[#00dd77] transition-colors"
             >
               Analyse
             </button>
