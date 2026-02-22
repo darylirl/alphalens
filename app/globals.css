@@ -2,44 +2,19 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
-
-/* Teodor — self-hosted serif display typeface (Displaay Type Foundry) */
-/* Place font files in /public/fonts/ and uncomment:
-@font-face {
-  font-family: 'Teodor';
-  src: url('/fonts/Teodor-Regular.woff2') format('woff2');
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: 'Teodor';
-  src: url('/fonts/Teodor-Bold.woff2') format('woff2');
-  font-weight: 700;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: 'Teodor';
-  src: url('/fonts/Teodor-Light.woff2') format('woff2');
-  font-weight: 300;
-  font-style: normal;
-  font-display: swap;
-}
-*/
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Source+Serif+4:wght@400;500&display=swap');
 
 :root {
-  --bg: #010E0C;
-  --surface: #072724;
-  --elevated: #0C302C;
-  --hover: #0F3D38;
-  --border: #0D2E2A;
+  --bg: #0F1A1E;
+  --surface: #0F1A1E;
+  --elevated: #0F1A1E;
+  --hover: rgba(255,255,255,0.06);
+  --border: rgba(255,255,255,0.08);
   --accent: #34EAB9;
   --danger: #FF3B5C;
   --text: #F0FAF8;
-  --text-secondary: #8AADA9;
-  --text-muted: #4A706C;
+  --text-secondary: rgba(255,255,255,0.55);
+  --text-muted: rgba(255,255,255,0.40);
 }
 
 * {
@@ -57,7 +32,7 @@ body {
 }
 
 .font-display {
-  font-family: 'Teodor', Georgia, Garamond, serif;
+  font-family: 'Source Serif 4', serif;
 }
 
 ::-webkit-scrollbar {
@@ -82,11 +57,11 @@ body {
 }
 
 .card {
-  @apply bg-[#072724] border border-[#0D2E2A] rounded-lg;
+  @apply bg-[#0F1A1E] border border-white/[0.08] rounded-lg;
 }
 
 .card-elevated {
-  @apply bg-[#0C302C] border border-[#0D2E2A] rounded-lg;
+  @apply bg-[#0F1A1E] border border-white/[0.08] rounded-lg;
 }
 
 .metric-up {
@@ -107,7 +82,7 @@ body {
 }
 
 .skeleton {
-  @apply bg-[#0C302C] rounded;
+  @apply bg-white/[0.06] rounded;
   animation: skeleton-pulse 1.5s ease-in-out infinite;
 }
 

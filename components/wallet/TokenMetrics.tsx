@@ -58,14 +58,14 @@ export function TokenMetrics({ fills }: { fills: Fill[] }) {
   const metrics = computeTokenMetrics(fills)
 
   if (!metrics.length) {
-    return <p className="text-[#8AADA9] text-sm text-center py-4">No trade history</p>
+    return <p className="text-white/55 text-sm text-center py-4">No trade history</p>
   }
 
   return (
     <div className="overflow-x-auto -mx-4 px-4">
       <table className="w-full text-sm">
         <thead>
-          <tr className="text-[#8AADA9] text-xs">
+          <tr className="text-white/55 text-xs">
             <th className="text-left py-2 font-medium">Token</th>
             <th className="text-right py-2 font-medium">ROI %</th>
             <th className="text-right py-2 font-medium">Net PnL</th>
@@ -80,7 +80,7 @@ export function TokenMetrics({ fills }: { fills: Fill[] }) {
         </thead>
         <tbody>
           {metrics.map(m => (
-            <tr key={m.token} className="border-t border-[#0D2E2A]">
+            <tr key={m.token} className="border-t border-white/[0.08]">
               <td className="py-2.5 font-medium">{m.token}</td>
               <td className={`py-2.5 text-right font-mono ${m.roi >= 0 ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>
                 {m.roi.toFixed(2)}%

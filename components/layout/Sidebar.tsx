@@ -33,7 +33,7 @@ export function Sidebar({ className = '' }: { className?: string }) {
   }
 
   return (
-    <aside className={`w-64 bg-[#072724] border-r border-[#0D2E2A] flex-col ${className}`}>
+    <aside className={`w-64 bg-[#0F1A1E] border-r border-white/[0.08] flex-col ${className}`}>
       <div className="px-5 pt-5 pb-4">
         <Link href="/" className="block">
           <h1 className="text-lg font-bold tracking-tight">
@@ -44,13 +44,13 @@ export function Sidebar({ className = '' }: { className?: string }) {
 
       <div className="px-3 mb-4">
         <form onSubmit={handleSearch}>
-          <div className="flex items-center gap-2 bg-[#0C302C] border border-[#0D2E2A] rounded px-3 py-2 focus-within:border-[#34EAB9] transition-colors">
-            <Search size={14} className="text-[#4A706C]" />
+          <div className="flex items-center gap-2 bg-[#0F1A1E] border border-white/[0.08] rounded px-3 py-2 focus-within:border-[#34EAB9] transition-colors">
+            <Search size={14} className="text-white/40" />
             <input
               value={query}
               onChange={e => setQuery(e.target.value)}
               placeholder="Search wallet 0x..."
-              className="bg-transparent text-sm outline-none flex-1 placeholder:text-[#4A706C] text-[#F0FAF8]"
+              className="bg-transparent text-sm outline-none flex-1 placeholder:text-white/40 text-[#F0FAF8]"
             />
           </div>
         </form>
@@ -65,8 +65,8 @@ export function Sidebar({ className = '' }: { className?: string }) {
               href={href}
               className={`flex items-center gap-3 px-3 py-2.5 text-sm transition-all duration-150 relative ${
                 active
-                  ? 'text-[#34EAB9] bg-[#0F3D38]'
-                  : 'text-[#8AADA9] hover:text-[#F0FAF8] hover:bg-[#0F3D38]'
+                  ? 'text-[#34EAB9] bg-white/[0.06]'
+                  : 'text-white/55 hover:text-[#F0FAF8] hover:bg-white/[0.06]'
               }`}
             >
               {active && (
@@ -79,11 +79,11 @@ export function Sidebar({ className = '' }: { className?: string }) {
         })}
       </nav>
 
-      <div className="mt-auto px-3 pb-4 pt-3 border-t border-[#0D2E2A] space-y-3">
+      <div className="mt-auto px-3 pb-4 pt-3 border-t border-white/[0.08] space-y-3">
         {address ? (
           <button
             onClick={disconnect}
-            className="w-full flex items-center gap-2 px-3 py-2.5 text-sm bg-[#0C302C] text-[#34EAB9] hover:bg-[#0F3D38] transition-colors rounded"
+            className="w-full flex items-center gap-2 px-3 py-2.5 text-sm bg-[#0F1A1E] text-[#34EAB9] hover:bg-white/[0.06] transition-colors rounded"
           >
             <Wallet size={14} />
             <span className="font-mono text-xs">{address.slice(0, 6)}...{address.slice(-4)}</span>
@@ -92,7 +92,7 @@ export function Sidebar({ className = '' }: { className?: string }) {
           <button
             onClick={connect}
             disabled={connecting}
-            className="w-full flex items-center gap-2 px-3 py-2.5 text-sm bg-[#34EAB9] text-[#010E0C] font-semibold hover:brightness-110 transition-all rounded disabled:opacity-50"
+            className="w-full flex items-center gap-2 px-3 py-2.5 text-sm bg-[#34EAB9] text-[#0F1A1E] font-semibold hover:brightness-110 transition-all rounded disabled:opacity-50"
           >
             <Wallet size={14} />
             {connecting ? 'Connecting...' : 'Connect Wallet'}
@@ -100,7 +100,7 @@ export function Sidebar({ className = '' }: { className?: string }) {
         )}
         <div className="flex items-center gap-2 px-3 py-1">
           <div className="w-1.5 h-1.5 rounded-full bg-[#34EAB9] pulse-accent" />
-          <span className="text-[11px] text-[#4A706C]">Live data connected</span>
+          <span className="text-[11px] text-white/40">Live data connected</span>
         </div>
       </div>
     </aside>

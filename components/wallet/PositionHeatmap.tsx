@@ -63,7 +63,7 @@ export function PositionHeatmap({ positions }: { positions: AssetPosition[] }) {
   }, [positions])
 
   if (!cells.length) {
-    return <p className="text-[#8AADA9] text-sm text-center py-4">No open positions to display</p>
+    return <p className="text-white/55 text-sm text-center py-4">No open positions to display</p>
   }
 
   const rects = computeTreemapLayout(cells, 0, 0, 100, 100)
@@ -177,31 +177,31 @@ export function PositionHeatmap({ positions }: { positions: AssetPosition[] }) {
             className="card p-3 grid grid-cols-6 gap-2 text-xs"
           >
             <div>
-              <p className="text-[10px] text-[#4A706C]">Coin</p>
+              <p className="text-[10px] text-white/40">Coin</p>
               <p className="font-bold">{hoveredCell.coin}</p>
             </div>
             <div>
-              <p className="text-[10px] text-[#4A706C]">Side</p>
+              <p className="text-[10px] text-white/40">Side</p>
               <p className={`font-semibold ${hoveredCell.szi > 0 ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>
                 {hoveredCell.szi > 0 ? 'Long' : 'Short'} <span className="font-mono">{hoveredCell.leverage}x</span>
               </p>
             </div>
             <div>
-              <p className="text-[10px] text-[#4A706C]">Size</p>
+              <p className="text-[10px] text-white/40">Size</p>
               <p className="font-mono font-semibold">{formatNotional(hoveredCell.size)}</p>
             </div>
             <div>
-              <p className="text-[10px] text-[#4A706C]">Entry</p>
+              <p className="text-[10px] text-white/40">Entry</p>
               <p className="font-mono">${hoveredCell.entryPx.toLocaleString()}</p>
             </div>
             <div>
-              <p className="text-[10px] text-[#4A706C]">uPnL</p>
+              <p className="text-[10px] text-white/40">uPnL</p>
               <p className={`font-mono font-bold ${hoveredCell.pnl >= 0 ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>
                 {hoveredCell.pnl >= 0 ? '+' : ''}{formatPnl(hoveredCell.pnl)}
               </p>
             </div>
             <div>
-              <p className="text-[10px] text-[#4A706C]">ROE</p>
+              <p className="text-[10px] text-white/40">ROE</p>
               <p className={`font-mono font-bold ${hoveredCell.roe >= 0 ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>
                 {hoveredCell.roe >= 0 ? '+' : ''}{hoveredCell.roe.toFixed(1)}%
               </p>
@@ -211,7 +211,7 @@ export function PositionHeatmap({ positions }: { positions: AssetPosition[] }) {
       </AnimatePresence>
 
       {/* Legend */}
-      <div className="flex items-center justify-between text-[10px] text-[#4A706C] px-1">
+      <div className="flex items-center justify-between text-[10px] text-white/40 px-1">
         <div className="flex items-center gap-3">
           <span className="flex items-center gap-1">
             <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: 'linear-gradient(135deg, rgba(0,255,136,0.9), rgba(0,180,100,0.7))' }} /> Profit

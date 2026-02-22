@@ -50,7 +50,7 @@ export default function WatchlistPage() {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-lg font-bold mb-1">Watchlists</h2>
-            <p className="text-[#8AADA9] text-xs">Track your favorite wallets in organized lists</p>
+            <p className="text-white/55 text-xs">Track your favorite wallets in organized lists</p>
           </div>
           <button
             onClick={() => setShowCreate(!showCreate)}
@@ -69,19 +69,19 @@ export default function WatchlistPage() {
               exit={{ opacity: 0, height: 0 }}
               className="card p-4"
             >
-              <label className="text-sm text-[#8AADA9] block mb-2">List Name</label>
+              <label className="text-sm text-white/55 block mb-2">List Name</label>
               <div className="flex gap-2">
                 <input
                   value={newName}
                   onChange={e => setNewName(e.target.value)}
                   placeholder="e.g., Top Scalpers"
-                  className="flex-1 bg-[#072724] border border-[#0D2E2A] rounded px-3 py-2.5 text-sm outline-none focus:border-[#34EAB9]"
+                  className="flex-1 bg-[#0F1A1E] border border-white/[0.08] rounded px-3 py-2.5 text-sm outline-none focus:border-[#34EAB9]"
                   onKeyDown={e => e.key === 'Enter' && handleCreate()}
                 />
                 <button
                   onClick={handleCreate}
                   disabled={!newName.trim()}
-                  className="px-4 py-2.5 rounded bg-[#34EAB9] text-[#010E0C] text-sm font-semibold disabled:opacity-40"
+                  className="px-4 py-2.5 rounded bg-[#34EAB9] text-[#0F1A1E] text-sm font-semibold disabled:opacity-40"
                 >
                   Create
                 </button>
@@ -98,8 +98,8 @@ export default function WatchlistPage() {
                 onClick={() => setActiveList(wl.id)}
                 className={`whitespace-nowrap text-xs font-medium px-3 py-1.5 rounded-full transition-colors ${
                   activeList === wl.id
-                    ? 'bg-[#34EAB9] text-[#010E0C]'
-                    : 'bg-[#0C302C] text-[#8AADA9]'
+                    ? 'bg-[#34EAB9] text-[#0F1A1E]'
+                    : 'bg-[#0F1A1E] text-white/55'
                 }`}
               >
                 {wl.name} ({wl.wallets.length})
@@ -116,7 +116,7 @@ export default function WatchlistPage() {
             action={
               <button
                 onClick={() => setShowCreate(true)}
-                className="bg-[#34EAB9] text-[#010E0C] text-sm font-semibold px-4 py-2 rounded"
+                className="bg-[#34EAB9] text-[#0F1A1E] text-sm font-semibold px-4 py-2 rounded"
               >
                 Create First Watchlist
               </button>
@@ -141,8 +141,8 @@ export default function WatchlistPage() {
             </div>
           ) : (
             <div className="text-center py-8">
-              <p className="text-[#8AADA9] text-sm mb-2">No wallets in this list yet</p>
-              <p className="text-xs text-[#8AADA9]">Browse the Alpha Hunters and tap the star icon to add wallets</p>
+              <p className="text-white/55 text-sm mb-2">No wallets in this list yet</p>
+              <p className="text-xs text-white/55">Browse the Alpha Hunters and tap the star icon to add wallets</p>
             </div>
           )
         ) : null}
@@ -152,19 +152,19 @@ export default function WatchlistPage() {
             <h3 className="font-semibold text-sm mb-3">Portfolio Summary</h3>
             <div className="grid grid-cols-3 gap-3">
               <div>
-                <p className="text-[#8AADA9] text-xs mb-1">Total PnL</p>
+                <p className="text-white/55 text-xs mb-1">Total PnL</p>
                 <p className="font-mono font-semibold text-sm text-[#34EAB9]">
                   ${currentList.wallets.reduce((s, w) => s + w.totalPnl, 0).toLocaleString()}
                 </p>
               </div>
               <div>
-                <p className="text-[#8AADA9] text-xs mb-1">Avg Win Rate</p>
+                <p className="text-white/55 text-xs mb-1">Avg Win Rate</p>
                 <p className="font-mono font-semibold text-sm">
                   {(currentList.wallets.reduce((s, w) => s + w.winRate, 0) / currentList.wallets.length * 100).toFixed(0)}%
                 </p>
               </div>
               <div>
-                <p className="text-[#8AADA9] text-xs mb-1">Wallets</p>
+                <p className="text-white/55 text-xs mb-1">Wallets</p>
                 <p className="font-mono font-semibold text-sm">{currentList.wallets.length}</p>
               </div>
             </div>

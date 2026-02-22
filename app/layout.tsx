@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 }
 
 export const viewport: Viewport = {
-  themeColor: '#010E0C',
+  themeColor: '#0F1A1E',
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
@@ -18,7 +18,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className="dark">
-      <body className="bg-[#010E0C] text-[#F0FAF8] antialiased">
+      <body className="bg-[#0F1A1E] text-[#F0FAF8] antialiased">
         <WalletProvider>
           <AppShell>{children}</AppShell>
         </WalletProvider>

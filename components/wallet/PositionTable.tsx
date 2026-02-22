@@ -8,14 +8,14 @@ export function PositionTable({ positions }: PositionTableProps) {
   const active = positions.filter(p => parseFloat(p.position.szi) !== 0)
 
   if (!active.length) {
-    return <p className="text-[#8AADA9] text-sm text-center py-4">No open positions</p>
+    return <p className="text-white/55 text-sm text-center py-4">No open positions</p>
   }
 
   return (
     <div className="overflow-x-auto -mx-4 px-4">
       <table className="w-full text-sm">
         <thead>
-          <tr className="text-[#8AADA9] text-xs">
+          <tr className="text-white/55 text-xs">
             <th className="text-left py-2 font-medium">Asset</th>
             <th className="text-left py-2 font-medium">Side</th>
             <th className="text-right py-2 font-medium">Size</th>
@@ -34,7 +34,7 @@ export function PositionTable({ positions }: PositionTableProps) {
             const leverage = pos.leverage?.value || 0
 
             return (
-              <tr key={i} className="border-t border-[#0D2E2A]">
+              <tr key={i} className="border-t border-white/[0.08]">
                 <td className="py-2.5 font-medium">{pos.coin}</td>
                 <td className={`py-2.5 ${isLong ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>
                   {isLong ? 'Long' : 'Short'}

@@ -8,7 +8,7 @@ interface PnLChartProps {
 
 export function PnLChart({ data }: PnLChartProps) {
   if (!data.length) {
-    return <p className="text-[#8AADA9] text-sm text-center py-8">No PnL data available</p>
+    return <p className="text-white/55 text-sm text-center py-8">No PnL data available</p>
   }
 
   const isPositive = data[data.length - 1]?.cumulative >= 0
@@ -24,7 +24,7 @@ export function PnLChart({ data }: PnLChartProps) {
         </defs>
         <XAxis
           dataKey="date"
-          tick={{ fill: '#8AADA9', fontSize: 10 }}
+          tick={{ fill: 'rgba(255,255,255,0.55)', fontSize: 10 }}
           axisLine={false}
           tickLine={false}
           tickFormatter={(val) => {
@@ -33,19 +33,19 @@ export function PnLChart({ data }: PnLChartProps) {
           }}
         />
         <YAxis
-          tick={{ fill: '#8AADA9', fontSize: 10 }}
+          tick={{ fill: 'rgba(255,255,255,0.55)', fontSize: 10 }}
           axisLine={false}
           tickLine={false}
           tickFormatter={(val) => `$${val >= 1000 ? `${(val / 1000).toFixed(0)}k` : val}`}
         />
         <Tooltip
           contentStyle={{
-            backgroundColor: '#0C302C',
-            border: '1px solid #0D2E2A',
+            backgroundColor: '#0F1A1E',
+            border: '1px solid rgba(255,255,255,0.08)',
             borderRadius: '12px',
             fontSize: '12px',
           }}
-          labelStyle={{ color: '#8AADA9' }}
+          labelStyle={{ color: 'rgba(255,255,255,0.55)' }}
           formatter={(value: number) => [`$${value.toLocaleString()}`, 'Cumulative PnL']}
         />
         <Area

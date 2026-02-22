@@ -20,7 +20,7 @@ export function TopBar({ title }: { title: string }) {
   }
 
   return (
-    <header className="sticky top-0 z-40 bg-[#010E0C]/80 backdrop-blur-xl border-b border-[#0D2E2A]">
+    <header className="sticky top-0 z-40 bg-[#0F1A1E]/80 backdrop-blur-xl border-b border-white/[0.08]">
       <div className="flex items-center justify-between px-4 py-3 lg:px-6">
         <h1 className="text-lg font-bold lg:hidden">
           <span className="text-[#34EAB9]">A</span><span className="text-[#F0FAF8]">L</span>
@@ -28,19 +28,19 @@ export function TopBar({ title }: { title: string }) {
         <h2 className="hidden lg:block text-base font-semibold text-[#F0FAF8]">{title}</h2>
 
         <form onSubmit={handleSearch} className="flex-1 max-w-xs ml-4 lg:max-w-sm">
-          <div className="flex items-center gap-2 bg-[#0C302C] border border-[#0D2E2A] rounded px-3 py-2 focus-within:border-[#34EAB9] transition-colors">
-            <Search size={14} className="text-[#4A706C]" />
+          <div className="flex items-center gap-2 bg-[#0F1A1E] border border-white/[0.08] rounded px-3 py-2 focus-within:border-[#34EAB9] transition-colors">
+            <Search size={14} className="text-white/40" />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search wallet 0x..."
-              className="bg-transparent text-sm outline-none flex-1 placeholder:text-[#4A706C] text-[#F0FAF8]"
+              className="bg-transparent text-sm outline-none flex-1 placeholder:text-white/40 text-[#F0FAF8]"
             />
           </div>
         </form>
 
         <div className="flex items-center gap-3 ml-3">
-          <button className="relative text-[#4A706C] hover:text-[#8AADA9] transition-colors lg:hidden">
+          <button className="relative text-white/40 hover:text-white/55 transition-colors lg:hidden">
             <Bell size={18} />
             <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-[#34EAB9] pulse-accent" />
           </button>
@@ -48,7 +48,7 @@ export function TopBar({ title }: { title: string }) {
             <button
               onClick={connect}
               disabled={connecting}
-              className="hidden sm:flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded border border-[#34EAB9] text-[#34EAB9] hover:bg-[#34EAB9] hover:text-[#010E0C] transition-all lg:hidden"
+              className="hidden sm:flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded border border-[#34EAB9] text-[#34EAB9] hover:bg-[#34EAB9] hover:text-[#0F1A1E] transition-all lg:hidden"
             >
               {connecting ? 'Connecting...' : 'Connect'}
             </button>

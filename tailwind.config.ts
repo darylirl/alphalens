@@ -7,20 +7,16 @@ const config: Config = {
     extend: {
       fontFamily: {
         sans: ['Inter', 'system-ui', 'Segoe UI', 'Roboto', 'Ubuntu', 'Helvetica Neue', 'sans-serif'],
-        display: ['Teodor', 'Georgia', 'Garamond', 'serif'],
+        display: ['Source Serif 4', 'serif'],
         mono: ['JetBrains Mono', 'IBM Plex Mono', 'monospace'],
       },
       colors: {
-        bg: '#010E0C',
-        surface: '#072724',
-        elevated: '#0C302C',
-        hover: '#0F3D38',
-        border: '#0D2E2A',
+        bg: '#0F1A1E',
+        surface: '#0F1A1E',
+        elevated: '#0F1A1E',
         accent: '#34EAB9',
         danger: '#FF3B5C',
         'text-primary': '#F0FAF8',
-        'text-secondary': '#8AADA9',
-        'text-muted': '#4A706C',
       },
       animation: {
         'fade-in': 'fadeIn 0.2s ease-out',

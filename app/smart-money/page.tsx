@@ -91,18 +91,18 @@ const formatUsd = (n: number) => {
 const directionBg = (d: string) => {
   if (d === 'Long') return 'bg-[#34EAB920] text-[#34EAB9]'
   if (d === 'Short') return 'bg-[#FF3B5C20] text-[#FF3B5C]'
-  return 'bg-[#8AADA920] text-[#8AADA9]'
+  return 'bg-white/[0.08] text-white/55'
 }
 
 const biasColor = (b: string) => {
   if (b === 'Bullish') return 'text-[#34EAB9]'
   if (b === 'Bearish') return 'text-[#FF3B5C]'
-  return 'text-[#8AADA9]'
+  return 'text-white/55'
 }
 
 const confidenceColor = (score: number) => {
   if (score >= 7) return '#34EAB9'
-  if (score >= 4) return '#8AADA9'
+  if (score >= 4) return 'rgba(255,255,255,0.55)'
   return '#FF3B5C'
 }
 
@@ -130,7 +130,7 @@ function ConfidenceGauge({ score, size = 'lg' }: { score: number; size?: 'sm' | 
   return (
     <div className="relative inline-flex items-center justify-center">
       <svg width={radius * 2 + stroke * 2} height={radius * 2 + stroke * 2} className="-rotate-90">
-        <circle cx={radius + stroke} cy={radius + stroke} r={radius} fill="none" stroke="#0D2E2A" strokeWidth={stroke} />
+        <circle cx={radius + stroke} cy={radius + stroke} r={radius} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={stroke} />
         <circle cx={radius + stroke} cy={radius + stroke} r={radius} fill="none" stroke={color} strokeWidth={stroke}
           strokeDasharray={circumference} strokeDashoffset={circumference - progress} strokeLinecap="round" />
       </svg>
@@ -205,7 +205,7 @@ export default function SmartMoneyPage() {
       <div className="px-4 py-4 lg:px-6 space-y-4">
         <div>
           <h2 className="text-lg font-bold mb-1">Smart Money Flow</h2>
-          <p className="text-[#8AADA9] text-xs">
+          <p className="text-white/55 text-xs">
             Live scan of <span className="font-mono">{total > 0 ? total.toLocaleString() : '—'}</span> wallets across <span className="font-mono">{tokens.length}</span> assets.
             Confidence scoring powered by consensus, liquidity, participation, and whale alignment.
           </p>
@@ -216,7 +216,7 @@ export default function SmartMoneyPage() {
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <h3 className="font-semibold text-sm">Wallet Tiers</h3>
-              <span className="text-[10px] text-[#4A706C]">Click to view wallets</span>
+              <span className="text-[10px] text-white/40">Click to view wallets</span>
             </div>
 
             <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
@@ -227,7 +227,7 @@ export default function SmartMoneyPage() {
                   className={`card px-3 py-2 min-w-[120px] flex-shrink-0 text-left transition-all ${
                     expandedTier === t.name
                       ? 'border-[#34EAB9] bg-[#34EAB908]'
-                      : 'hover:border-[#0F3D38]'
+                      : 'hover:border-white/[0.12]'
                   }`}
                 >
                   <div className="flex items-center gap-1.5 mb-1">
@@ -235,17 +235,17 @@ export default function SmartMoneyPage() {
                     <span className="text-xs font-semibold">{t.name}</span>
                     <ChevronDown
                       size={10}
-                      className={`ml-auto text-[#8AADA9] transition-transform ${expandedTier === t.name ? 'rotate-180' : ''}`}
+                      className={`ml-auto text-white/55 transition-transform ${expandedTier === t.name ? 'rotate-180' : ''}`}
                     />
                   </div>
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-[10px] text-[#8AADA9]">{t.count} wallets</span>
-                    <span className={`text-[10px] font-semibold ${t.longRatio > 55 ? 'text-[#34EAB9]' : t.longRatio < 45 ? 'text-[#FF3B5C]' : 'text-[#8AADA9]'}`}>
+                    <span className="text-[10px] text-white/55">{t.count} wallets</span>
+                    <span className={`text-[10px] font-semibold ${t.longRatio > 55 ? 'text-[#34EAB9]' : t.longRatio < 45 ? 'text-[#FF3B5C]' : 'text-white/55'}`}>
                       {t.longRatio}%L
                     </span>
                   </div>
                   <div className="flex items-center justify-between mt-1">
-                    <span className="text-[9px] text-[#4A706C]">{formatUsd(t.totalNotional)}</span>
+                    <span className="text-[9px] text-white/40">{formatUsd(t.totalNotional)}</span>
                     <span className={`text-[9px] font-semibold ${pnlColor(t.totalPnl)}`}>
                       {t.totalPnl >= 0 ? '+' : ''}{formatUsd(t.totalPnl)}
                     </span>
@@ -272,10 +272,10 @@ export default function SmartMoneyPage() {
                         <div className="flex items-center gap-2">
                           <Users size={14} className="text-[#34EAB9]" />
                           <h4 className="text-sm font-bold">{tier.emoji} {tier.name} Wallets</h4>
-                          <span className="text-[10px] text-[#8AADA9]">{tier.count} total</span>
+                          <span className="text-[10px] text-white/55">{tier.count} total</span>
                         </div>
                         <div className="text-right text-[10px]">
-                          <span className="text-[#8AADA9]">Avg PnL: </span>
+                          <span className="text-white/55">Avg PnL: </span>
                           <span className={pnlColor(tier.avgPnl)}>
                             {tier.avgPnl >= 0 ? '+' : ''}{formatUsd(tier.avgPnl)}
                           </span>
@@ -285,7 +285,7 @@ export default function SmartMoneyPage() {
                       <div className="overflow-x-auto -mx-4 px-4">
                         <table className="w-full text-xs min-w-[700px]">
                           <thead>
-                            <tr className="text-[#4A706C] text-[10px] border-b border-[#0D2E2A]">
+                            <tr className="text-white/40 text-[10px] border-b border-white/[0.08]">
                               <th className="text-left py-2 font-medium">Wallet</th>
                               <th className="text-right py-2 font-medium">Account Value</th>
                               <th className="text-right py-2 font-medium">Positions</th>
@@ -306,19 +306,19 @@ export default function SmartMoneyPage() {
                           </thead>
                           <tbody>
                             {tier.wallets.map(w => (
-                              <tr key={w.address} className="border-t border-[#072724] hover:bg-[#010E0C] transition-colors">
+                              <tr key={w.address} className="border-t border-[#0F1A1E] hover:bg-[#0F1A1E] transition-colors">
                                 <td className="py-2.5 font-mono text-[11px]">
                                   {w.address.slice(0, 6)}...{w.address.slice(-4)}
                                 </td>
                                 <td className="py-2.5 text-right font-mono font-semibold">
                                   {formatUsd(w.accountValue)}
                                 </td>
-                                <td className="py-2.5 text-right text-[#8AADA9]">
+                                <td className="py-2.5 text-right text-white/55">
                                   {w.positionCount}
                                 </td>
                                 <td className="py-2.5 text-right">
                                   <span className="text-[#34EAB9]">{formatUsd(w.totalLong)}</span>
-                                  <span className="text-[#4A706C] mx-0.5">/</span>
+                                  <span className="text-white/40 mx-0.5">/</span>
                                   <span className="text-[#FF3B5C]">{formatUsd(w.totalShort)}</span>
                                 </td>
                                 <td className={`py-2.5 text-right font-mono ${pnlColor(w.cumulativePnl)}`}>
@@ -333,7 +333,7 @@ export default function SmartMoneyPage() {
                                 <td className={`py-2.5 text-right font-mono font-semibold ${pnlColor(w.totalPnl)}`}>
                                   {w.totalPnl >= 0 ? '+' : ''}{formatUsd(w.totalPnl)}
                                 </td>
-                                <td className="py-2.5 text-right text-[10px] text-[#8AADA9]">
+                                <td className="py-2.5 text-right text-[10px] text-white/55">
                                   {timeAgo(w.firstTradeTime)}
                                 </td>
                                 <td className="py-2.5 pl-3">
@@ -351,7 +351,7 @@ export default function SmartMoneyPage() {
                                   </div>
                                 </td>
                                 <td className="py-2.5 pl-2">
-                                  <Link href={`/wallet/${w.address}`} className="text-[#8AADA9] hover:text-[#34EAB9] transition-colors">
+                                  <Link href={`/wallet/${w.address}`} className="text-white/55 hover:text-[#34EAB9] transition-colors">
                                     <Eye size={12} />
                                   </Link>
                                 </td>
@@ -377,8 +377,8 @@ export default function SmartMoneyPage() {
                 onClick={() => setActiveCategory(cat)}
                 className={`whitespace-nowrap text-xs font-medium px-3 py-1.5 rounded-full transition-colors ${
                   activeCategory === cat
-                    ? 'bg-[#34EAB9] text-[#010E0C]'
-                    : 'bg-[#0C302C] text-[#8AADA9] hover:text-[#F0FAF8]'
+                    ? 'bg-[#34EAB9] text-[#0F1A1E]'
+                    : 'bg-[#0F1A1E] text-white/55 hover:text-[#F0FAF8]'
                 }`}
               >
                 {cat}
@@ -410,20 +410,20 @@ export default function SmartMoneyPage() {
               </div>
             </div>
             <div className="grid grid-cols-4 gap-2 text-xs">
-              <div className="bg-[#072724] rounded-lg p-2 text-center">
-                <p className="text-[10px] text-[#4A706C] mb-0.5">Assets</p>
+              <div className="bg-[#0F1A1E] rounded-lg p-2 text-center">
+                <p className="text-[10px] text-white/40 mb-0.5">Assets</p>
                 <p className="font-bold">{activeSectorInsight.tokenCount}</p>
               </div>
-              <div className="bg-[#072724] rounded-lg p-2 text-center">
-                <p className="text-[10px] text-[#4A706C] mb-0.5">Liquidity</p>
+              <div className="bg-[#0F1A1E] rounded-lg p-2 text-center">
+                <p className="text-[10px] text-white/40 mb-0.5">Liquidity</p>
                 <p className="font-bold">{formatUsd(activeSectorInsight.totalLiquidity)}</p>
               </div>
-              <div className="bg-[#072724] rounded-lg p-2 text-center">
-                <p className="text-[10px] text-[#4A706C] mb-0.5">Wallets</p>
+              <div className="bg-[#0F1A1E] rounded-lg p-2 text-center">
+                <p className="text-[10px] text-white/40 mb-0.5">Wallets</p>
                 <p className="font-bold">{activeSectorInsight.totalWallets}</p>
               </div>
-              <div className="bg-[#072724] rounded-lg p-2 text-center">
-                <p className="text-[10px] text-[#4A706C] mb-0.5">Avg Conf.</p>
+              <div className="bg-[#0F1A1E] rounded-lg p-2 text-center">
+                <p className="text-[10px] text-white/40 mb-0.5">Avg Conf.</p>
                 <p className="font-bold" style={{ color: confidenceColor(activeSectorInsight.avgConfidence) }}>
                   {activeSectorInsight.avgConfidence}/10
                 </p>
@@ -441,7 +441,7 @@ export default function SmartMoneyPage() {
                 <button
                   key={s.category}
                   onClick={() => setActiveCategory(s.category)}
-                  className="card p-3 text-left hover:border-[#0F3D38] transition-colors"
+                  className="card p-3 text-left hover:border-white/[0.12] transition-colors"
                 >
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="text-xs font-bold">{s.category}</span>
@@ -449,13 +449,13 @@ export default function SmartMoneyPage() {
                   </div>
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-[10px] text-[#8AADA9]">{s.tokenCount} assets</p>
+                      <p className="text-[10px] text-white/55">{s.tokenCount} assets</p>
                       <p className="text-xs font-semibold">{formatUsd(s.totalLiquidity)}</p>
                     </div>
                     <ConfidenceGauge score={s.avgConfidence} size="sm" />
                   </div>
                   {s.topToken && (
-                    <p className="text-[9px] text-[#4A706C] mt-1.5">
+                    <p className="text-[9px] text-white/40 mt-1.5">
                       Top: {s.topToken} ({s.topTokenConfidence}/10)
                     </p>
                   )}
@@ -483,7 +483,7 @@ export default function SmartMoneyPage() {
                 >
                   <button
                     onClick={() => toggleCoin(token.coin)}
-                    className="card p-4 w-full text-left hover:border-[#0F3D38] transition-colors"
+                    className="card p-4 w-full text-left hover:border-white/[0.12] transition-colors"
                   >
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-3">
@@ -498,7 +498,7 @@ export default function SmartMoneyPage() {
                               {token.direction === 'Long' ? 'BULLISH' : token.direction === 'Short' ? 'BEARISH' : 'MIXED'}
                             </span>
                           </div>
-                          <div className="flex items-center gap-2 text-[10px] text-[#4A706C]">
+                          <div className="flex items-center gap-2 text-[10px] text-white/40">
                             <span>{token.walletCount} wallet{token.walletCount !== 1 ? 's' : ''}</span>
                             <span>&middot;</span>
                             <span>{formatUsd(token.totalLiquidity)} liq</span>
@@ -511,7 +511,7 @@ export default function SmartMoneyPage() {
                                 </span>
                               </>
                             )}
-                            <span className="text-[#4A706C]">{token.category}</span>
+                            <span className="text-white/40">{token.category}</span>
                           </div>
                         </div>
                       </div>
@@ -520,27 +520,27 @@ export default function SmartMoneyPage() {
                           <p className={`font-mono text-sm font-bold ${pnlColor(token.aggregatePnl)}`}>
                             {token.aggregatePnl >= 0 ? '+' : ''}{formatUsd(token.aggregatePnl)}
                           </p>
-                          <p className="text-[9px] text-[#4A706C]">Agg. uPnL</p>
+                          <p className="text-[9px] text-white/40">Agg. uPnL</p>
                         </div>
-                        <ChevronDown size={16} className={`text-[#8AADA9] transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                        <ChevronDown size={16} className={`text-white/55 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                       </div>
                     </div>
 
                     <div className="grid grid-cols-4 gap-2 text-xs">
-                      <div className="bg-[#072724] rounded-lg p-2">
-                        <p className="text-[#4A706C] text-[10px] mb-0.5">Long</p>
+                      <div className="bg-[#0F1A1E] rounded-lg p-2">
+                        <p className="text-white/40 text-[10px] mb-0.5">Long</p>
                         <p className="font-mono text-[#34EAB9] font-semibold">{formatUsd(token.longNotional)}</p>
                       </div>
-                      <div className="bg-[#072724] rounded-lg p-2">
-                        <p className="text-[#4A706C] text-[10px] mb-0.5">Short</p>
+                      <div className="bg-[#0F1A1E] rounded-lg p-2">
+                        <p className="text-white/40 text-[10px] mb-0.5">Short</p>
                         <p className="font-mono text-[#FF3B5C] font-semibold">{formatUsd(token.shortNotional)}</p>
                       </div>
-                      <div className="bg-[#072724] rounded-lg p-2">
-                        <p className="text-[#4A706C] text-[10px] mb-0.5">L/S Split</p>
+                      <div className="bg-[#0F1A1E] rounded-lg p-2">
+                        <p className="text-white/40 text-[10px] mb-0.5">L/S Split</p>
                         <p className="font-mono font-semibold">{token.longPct}% / {100 - token.longPct}%</p>
                       </div>
-                      <div className="bg-[#072724] rounded-lg p-2">
-                        <p className="text-[#4A706C] text-[10px] mb-0.5">24h Vol</p>
+                      <div className="bg-[#0F1A1E] rounded-lg p-2">
+                        <p className="text-white/40 text-[10px] mb-0.5">24h Vol</p>
                         <p className="font-mono font-semibold">{formatUsd(token.volume24h)}</p>
                       </div>
                     </div>
@@ -564,8 +564,8 @@ export default function SmartMoneyPage() {
                       >
                         <div className="mt-2 card p-3">
                           <div className="flex items-center gap-1.5 mb-2">
-                            <Shield size={12} className="text-[#8AADA9]" />
-                            <p className="text-[10px] uppercase tracking-wider text-[#4A706C]">Confidence Breakdown</p>
+                            <Shield size={12} className="text-white/55" />
+                            <p className="text-[10px] uppercase tracking-wider text-white/40">Confidence Breakdown</p>
                           </div>
                           <div className="grid grid-cols-4 gap-2">
                             {[
@@ -577,7 +577,7 @@ export default function SmartMoneyPage() {
                               <div key={f.label} className="text-center">
                                 <ConfidenceGauge score={f.value} size="sm" />
                                 <p className="text-[10px] font-semibold mt-1">{f.label}</p>
-                                <p className="text-[8px] text-[#4A706C]">{f.desc}</p>
+                                <p className="text-[8px] text-white/40">{f.desc}</p>
                               </div>
                             ))}
                           </div>
@@ -585,17 +585,17 @@ export default function SmartMoneyPage() {
 
                         {token.tierBreakdown.length > 0 && (
                           <div className="mt-2 card p-3">
-                            <p className="text-[10px] uppercase tracking-wider text-[#4A706C] mb-2">Who&apos;s Trading {token.coin}</p>
+                            <p className="text-[10px] uppercase tracking-wider text-white/40 mb-2">Who&apos;s Trading {token.coin}</p>
                             <div className="flex gap-2 flex-wrap">
                               {token.tierBreakdown.map(tb => (
                                 <button
                                   key={tb.tier}
                                   onClick={() => toggleTier(tb.tier)}
-                                  className="bg-[#072724] rounded-lg px-3 py-1.5 flex items-center gap-1.5 hover:bg-[#0D2E2A] transition-colors"
+                                  className="bg-[#0F1A1E] rounded-lg px-3 py-1.5 flex items-center gap-1.5 hover:bg-white/[0.06] transition-colors"
                                 >
                                   <span className="text-sm">{tb.emoji}</span>
                                   <span className="text-xs">{tb.tier}</span>
-                                  <span className="text-[10px] text-[#8AADA9]">&times;{tb.count}</span>
+                                  <span className="text-[10px] text-white/55">&times;{tb.count}</span>
                                   <ArrowUpRight size={9} className="text-[#34EAB9] ml-0.5" />
                                 </button>
                               ))}
@@ -605,11 +605,11 @@ export default function SmartMoneyPage() {
 
                         {token.wallets.length > 0 && (
                           <div className="mt-2 card p-3">
-                            <p className="text-[10px] uppercase tracking-wider text-[#4A706C] mb-2">Top Wallets on {token.coin}</p>
+                            <p className="text-[10px] uppercase tracking-wider text-white/40 mb-2">Top Wallets on {token.coin}</p>
                             <div className="overflow-x-auto -mx-3 px-3">
                               <table className="w-full text-xs min-w-[600px]">
                                 <thead>
-                                  <tr className="text-[#4A706C] text-[10px]">
+                                  <tr className="text-white/40 text-[10px]">
                                     <th className="text-left py-1.5 font-medium">Wallet</th>
                                     <th className="text-left py-1.5 font-medium">Tier</th>
                                     <th className="text-left py-1.5 font-medium">Side</th>
@@ -629,9 +629,9 @@ export default function SmartMoneyPage() {
                                 </thead>
                                 <tbody>
                                   {token.wallets.map(w => (
-                                    <tr key={w.address} className="border-t border-[#0D2E2A]">
+                                    <tr key={w.address} className="border-t border-white/[0.08]">
                                       <td className="py-2 font-mono text-[11px]">{w.address.slice(0, 6)}...{w.address.slice(-4)}</td>
-                                      <td className="py-2 text-[10px] text-[#8AADA9]">{w.tier}</td>
+                                      <td className="py-2 text-[10px] text-white/55">{w.tier}</td>
                                       <td className="py-2">
                                         <span className={`inline-flex items-center gap-0.5 font-semibold ${w.side === 'Long' ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>
                                           {w.side === 'Long' ? <ArrowUpRight size={10} /> : <ArrowDownRight size={10} />}
@@ -649,11 +649,11 @@ export default function SmartMoneyPage() {
                                       <td className={`py-2 text-right font-mono ${pnlColor(w.fundingPnl)}`}>
                                         {w.fundingPnl >= 0 ? '+' : ''}{formatUsd(w.fundingPnl)}
                                       </td>
-                                      <td className="py-2 text-right text-[10px] text-[#8AADA9]">
+                                      <td className="py-2 text-right text-[10px] text-white/55">
                                         {timeAgo(w.firstTradeTime)}
                                       </td>
                                       <td className="py-2 pl-2">
-                                        <Link href={`/wallet/${w.address}`} className="text-[#8AADA9] hover:text-[#34EAB9] transition-colors">
+                                        <Link href={`/wallet/${w.address}`} className="text-white/55 hover:text-[#34EAB9] transition-colors">
                                           <Eye size={11} />
                                         </Link>
                                       </td>
@@ -673,14 +673,14 @@ export default function SmartMoneyPage() {
           </div>
         ) : (
           <div className="card p-8 text-center">
-            <p className="text-[#8AADA9] text-sm mb-2">
+            <p className="text-white/55 text-sm mb-2">
               {activeCategory === 'Stock Perps'
                 ? 'No stock perps detected on Hyperliquid yet'
                 : activeCategory !== 'All'
                   ? `No positions found in ${activeCategory}`
                   : 'No wallet data available'}
             </p>
-            <p className="text-[#4A706C] text-xs">
+            <p className="text-white/40 text-xs">
               {activeCategory === 'Stock Perps'
                 ? 'Stock perps (NVDA, TSLA, AAPL, etc.) will appear here automatically when Hyperliquid adds them to their universe.'
                 : 'Make sure wallets are seeded and the Hyperliquid API is reachable.'}

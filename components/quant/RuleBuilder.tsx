@@ -77,12 +77,12 @@ export function RuleBuilder({ onSave }: { onSave: (rule: Record<string, unknown>
   return (
     <div className="space-y-6">
       <div>
-        <label className="text-sm text-[#8AADA9] block mb-2">Rule Name</label>
+        <label className="text-sm text-white/55 block mb-2">Rule Name</label>
         <input
           value={name}
           onChange={e => setName(e.target.value)}
           placeholder="My strategy rule..."
-          className="w-full bg-[#0C302C] border border-[#0D2E2A] rounded px-4 py-3 text-sm outline-none focus:border-[#34EAB9] transition-colors"
+          className="w-full bg-[#0F1A1E] border border-white/[0.08] rounded px-4 py-3 text-sm outline-none focus:border-[#34EAB9] transition-colors"
         />
       </div>
 
@@ -105,7 +105,7 @@ export function RuleBuilder({ onSave }: { onSave: (rule: Record<string, unknown>
       />
 
       <div className="card p-4 border-[#34EAB9]/30">
-        <p className="text-xs text-[#8AADA9] mb-1">THEN</p>
+        <p className="text-xs text-white/55 mb-1">THEN</p>
         <p className="font-medium text-sm text-[#34EAB9]">Send me an alert and log to paper portfolio</p>
       </div>
 
@@ -114,7 +114,7 @@ export function RuleBuilder({ onSave }: { onSave: (rule: Record<string, unknown>
           <button
             onClick={runBacktest}
             disabled={backtesting}
-            className="w-full flex items-center justify-center gap-2 py-3 rounded text-sm font-medium bg-[#072724] border border-[#0F3D38] hover:border-[#34EAB9] transition-colors disabled:opacity-50"
+            className="w-full flex items-center justify-center gap-2 py-3 rounded text-sm font-medium bg-[#0F1A1E] border border-white/[0.12] hover:border-[#34EAB9] transition-colors disabled:opacity-50"
           >
             <Play size={14} />
             {backtesting ? 'Running Backtest...' : 'Run Backtest'}
@@ -132,7 +132,7 @@ export function RuleBuilder({ onSave }: { onSave: (rule: Record<string, unknown>
       <button
         onClick={() => onSave({ name, walletConds, marketConds, activeWallet, activeMarket })}
         disabled={!name || !hasConditions}
-        className="w-full py-4 rounded-lg font-semibold bg-[#34EAB9] text-[#010E0C] disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
+        className="w-full py-4 rounded-lg font-semibold bg-[#34EAB9] text-[#0F1A1E] disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
       >
         Activate Rule
       </button>
@@ -150,7 +150,7 @@ function ConditionSection({ title, conditions, active, values, onToggle, onChang
 }) {
   return (
     <div>
-      <p className="text-xs text-[#8AADA9] uppercase tracking-wider mb-3">{title}</p>
+      <p className="text-xs text-white/55 uppercase tracking-wider mb-3">{title}</p>
       <div className="space-y-2">
         {conditions.map((cond) => {
           const isActive = active.includes(cond.id)
@@ -158,20 +158,20 @@ function ConditionSection({ title, conditions, active, values, onToggle, onChang
             <motion.div
               key={cond.id}
               layout
-              className={`card p-3 cursor-pointer transition-all ${isActive ? 'border-[#34EAB9]/40' : 'hover:border-[#0F3D38]'}`}
+              className={`card p-3 cursor-pointer transition-all ${isActive ? 'border-[#34EAB9]/40' : 'hover:border-white/[0.12]'}`}
               onClick={() => onToggle(cond.id)}
             >
               <div className="flex items-center justify-between">
                 <span className="text-sm">{cond.label}</span>
-                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${isActive ? 'border-[#34EAB9] bg-[#34EAB9]' : 'border-[#4A706C]'}`}>
-                  {isActive && <span className="text-[#010E0C] text-xs font-bold">&#10003;</span>}
+                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${isActive ? 'border-[#34EAB9] bg-[#34EAB9]' : 'border-white/40'}`}>
+                  {isActive && <span className="text-[#0F1A1E] text-xs font-bold">&#10003;</span>}
                 </div>
               </div>
               {isActive && (
                 <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="mt-2" onClick={e => e.stopPropagation()}>
                   {cond.type === 'select' && cond.options ? (
                     <select
-                      className="w-full bg-[#010E0C] border border-[#0F3D38] rounded-lg px-3 py-2 text-sm outline-none"
+                      className="w-full bg-[#0F1A1E] border border-white/[0.12] rounded-lg px-3 py-2 text-sm outline-none"
                       value={values[cond.id] || ''}
                       onChange={e => onChange(cond.id, e.target.value)}
                     >
@@ -183,7 +183,7 @@ function ConditionSection({ title, conditions, active, values, onToggle, onChang
                       placeholder={cond.placeholder}
                       value={values[cond.id] || ''}
                       onChange={e => onChange(cond.id, e.target.value)}
-                      className="w-full bg-[#010E0C] border border-[#0F3D38] rounded-lg px-3 py-2 text-sm outline-none focus:border-[#34EAB9]"
+                      className="w-full bg-[#0F1A1E] border border-white/[0.12] rounded-lg px-3 py-2 text-sm outline-none focus:border-[#34EAB9]"
                     />
                   )}
                 </motion.div>

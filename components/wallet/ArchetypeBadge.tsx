@@ -1,12 +1,12 @@
 const ARCHETYPES: Record<string, { label: string; color: string; bg: string }> = {
-  scalper: { label: 'Scalper', color: '#34EAB9', bg: '#072724' },
-  swing_trader: { label: 'Swing', color: '#8AADA9', bg: '#072724' },
-  momentum_trader: { label: 'Momentum', color: '#34EAB9', bg: '#072724' },
-  high_conviction: { label: 'High Conv.', color: '#F0FAF8', bg: '#0C302C' },
-  funding_arb: { label: 'Funding Arb', color: '#8AADA9', bg: '#072724' },
-  farmer: { label: 'Farmer', color: '#34EAB9', bg: '#072724' },
-  market_maker: { label: 'Market Maker', color: '#8AADA9', bg: '#0C302C' },
-  unknown: { label: 'Unknown', color: '#4A706C', bg: '#072724' },
+  scalper: { label: 'Scalper', color: '#34EAB9', bg: '#0F1A1E' },
+  swing_trader: { label: 'Swing', color: 'rgba(255,255,255,0.55)', bg: '#0F1A1E' },
+  momentum_trader: { label: 'Momentum', color: '#34EAB9', bg: '#0F1A1E' },
+  high_conviction: { label: 'High Conv.', color: '#F0FAF8', bg: '#0F1A1E' },
+  funding_arb: { label: 'Funding Arb', color: 'rgba(255,255,255,0.55)', bg: '#0F1A1E' },
+  farmer: { label: 'Farmer', color: '#34EAB9', bg: '#0F1A1E' },
+  market_maker: { label: 'Market Maker', color: 'rgba(255,255,255,0.55)', bg: '#0F1A1E' },
+  unknown: { label: 'Unknown', color: 'rgba(255,255,255,0.40)', bg: '#0F1A1E' },
 }
 
 export function ArchetypeBadge({ type }: { type: string }) {

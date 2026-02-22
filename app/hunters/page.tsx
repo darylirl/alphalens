@@ -66,7 +66,7 @@ export default function HuntersPage() {
       <div className="px-4 py-4 lg:px-6 space-y-4">
         <div>
           <h2 className="text-lg font-bold mb-1">Alpha Hunting Engine</h2>
-          <p className="text-[#8AADA9] text-xs">Discover high-performing wallets with advanced filtering including drawdown analysis, trade size metrics, and current account balances</p>
+          <p className="text-white/55 text-xs">Discover high-performing wallets with advanced filtering including drawdown analysis, trade size metrics, and current account balances</p>
         </div>
 
         <FilterPanel
@@ -81,8 +81,8 @@ export default function HuntersPage() {
         {seeding ? (
           <div className="text-center py-12">
             <div className="inline-block w-8 h-8 border-2 border-[#34EAB9] border-t-transparent rounded-full animate-spin mb-4" />
-            <p className="text-[#8AADA9] text-sm">Discovering wallets from Hyperliquid...</p>
-            <p className="text-[#4A706C] text-xs mt-1">This takes ~30 seconds on first load</p>
+            <p className="text-white/55 text-sm">Discovering wallets from Hyperliquid...</p>
+            <p className="text-white/40 text-xs mt-1">This takes ~30 seconds on first load</p>
           </div>
         ) : (
           <HunterLeaderboard wallets={wallets} loading={loading} />

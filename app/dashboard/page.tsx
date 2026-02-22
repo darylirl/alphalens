@@ -80,7 +80,7 @@ export default function DashboardPage() {
               <h2 className="text-xl font-bold">
                 <span className="text-[#34EAB9]">Alpha</span> Lens
               </h2>
-              <p className="text-[#8AADA9] text-xs mt-0.5">Hyperliquid Trader Intelligence</p>
+              <p className="text-white/55 text-xs mt-0.5">Hyperliquid Trader Intelligence</p>
             </div>
             <PulseIndicator />
           </div>
@@ -101,20 +101,20 @@ export default function DashboardPage() {
             setWalletQuery('')
           }} className="flex gap-2">
             <div className="flex-1">
-              <div className={`flex items-center gap-2 bg-[#072724] border rounded px-3 py-2.5 ${searchError ? 'border-[#FF3B5C]' : 'border-[#0D2E2A]'}`}>
-                <Search size={16} className="text-[#8AADA9] flex-shrink-0" />
+              <div className={`flex items-center gap-2 bg-[#0F1A1E] border rounded px-3 py-2.5 ${searchError ? 'border-[#FF3B5C]' : 'border-white/[0.08]'}`}>
+                <Search size={16} className="text-white/55 flex-shrink-0" />
                 <input
                   value={walletQuery}
                   onChange={e => { setWalletQuery(e.target.value); setSearchError('') }}
                   placeholder="Enter Hyperliquid Wallet Address (0x...)"
-                  className="bg-transparent text-sm outline-none flex-1 placeholder:text-[#8AADA9]"
+                  className="bg-transparent text-sm outline-none flex-1 placeholder:text-white/55"
                 />
               </div>
               {searchError && <p className="text-[#FF3B5C] text-[10px] mt-1 ml-1">{searchError}</p>}
             </div>
             <button
               type="submit"
-              className="bg-[#34EAB9] text-[#010E0C] text-sm font-semibold px-5 rounded hover:bg-[#2BD4A6] transition-colors"
+              className="bg-[#34EAB9] text-[#0F1A1E] text-sm font-semibold px-5 rounded hover:bg-[#2BD4A6] transition-colors"
             >
               Analyse
             </button>
@@ -125,21 +125,21 @@ export default function DashboardPage() {
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="card p-3">
             <div className="flex items-center gap-2 mb-2">
               <Activity size={14} className="text-[#34EAB9]" />
-              <span className="text-xs text-[#8AADA9]">24h Volume</span>
+              <span className="text-xs text-white/55">24h Volume</span>
             </div>
             <p className="font-mono font-semibold text-sm">${(marketStats.totalVolume / 1e9).toFixed(2)}B</p>
           </motion.div>
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="card p-3">
             <div className="flex items-center gap-2 mb-2">
               <TrendingUp size={14} className="text-[#34EAB9]" />
-              <span className="text-xs text-[#8AADA9]">Open Interest</span>
+              <span className="text-xs text-white/55">Open Interest</span>
             </div>
             <p className="font-mono font-semibold text-sm">${(marketStats.openInterest / 1e9).toFixed(2)}B</p>
           </motion.div>
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="card p-3">
             <div className="flex items-center gap-2 mb-2">
               <Zap size={14} className="text-[#34EAB9]" />
-              <span className="text-xs text-[#8AADA9]">Top Gainer</span>
+              <span className="text-xs text-white/55">Top Gainer</span>
             </div>
             <p className="font-semibold text-sm">{marketStats.topGainer || '—'}</p>
             {marketStats.topGainerPct > 0 && (
@@ -149,7 +149,7 @@ export default function DashboardPage() {
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="card p-3">
             <div className="flex items-center gap-2 mb-2">
               <Crosshair size={14} className="text-[#34EAB9]" />
-              <span className="text-xs text-[#8AADA9]">Tracked</span>
+              <span className="text-xs text-white/55">Tracked</span>
             </div>
             <p className="font-semibold text-sm">{topWallets.length > 0 ? `${topWallets.length}+` : '—'} wallets</p>
           </motion.div>
@@ -198,8 +198,8 @@ export default function DashboardPage() {
             </div>
           ) : (
             <div className="card p-6 text-center">
-              <p className="text-[#8AADA9] text-sm mb-3">No wallets tracked yet</p>
-              <Link href="/hunters" className="inline-block bg-[#34EAB9] text-[#010E0C] text-sm font-semibold px-4 py-2 rounded">
+              <p className="text-white/55 text-sm mb-3">No wallets tracked yet</p>
+              <Link href="/hunters" className="inline-block bg-[#34EAB9] text-[#0F1A1E] text-sm font-semibold px-4 py-2 rounded">
                 Start Hunting
               </Link>
             </div>
@@ -209,19 +209,19 @@ export default function DashboardPage() {
         <div className="card p-4">
           <h3 className="font-semibold text-sm mb-2">Quick Actions</h3>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <Link href="/hunters" className="bg-[#072724] rounded p-3 text-center hover:bg-[#0D2E2A] transition-colors">
+            <Link href="/hunters" className="bg-[#0F1A1E] rounded p-3 text-center hover:bg-white/[0.06] transition-colors">
               <Crosshair size={18} className="mx-auto mb-1 text-[#34EAB9]" />
               <span className="text-xs">Hunt Alpha</span>
             </Link>
-            <Link href="/smart-money" className="bg-[#072724] rounded p-3 text-center hover:bg-[#0D2E2A] transition-colors">
+            <Link href="/smart-money" className="bg-[#0F1A1E] rounded p-3 text-center hover:bg-white/[0.06] transition-colors">
               <DollarSign size={18} className="mx-auto mb-1 text-[#34EAB9]" />
               <span className="text-xs">Smart Money</span>
             </Link>
-            <Link href="/copy-trade" className="bg-[#072724] rounded p-3 text-center hover:bg-[#0D2E2A] transition-colors">
+            <Link href="/copy-trade" className="bg-[#0F1A1E] rounded p-3 text-center hover:bg-white/[0.06] transition-colors">
               <Copy size={18} className="mx-auto mb-1 text-[#34EAB9]" />
               <span className="text-xs">Copy Trade</span>
             </Link>
-            <Link href="/quant" className="bg-[#072724] rounded p-3 text-center hover:bg-[#0D2E2A] transition-colors">
+            <Link href="/quant" className="bg-[#0F1A1E] rounded p-3 text-center hover:bg-white/[0.06] transition-colors">
               <Zap size={18} className="mx-auto mb-1 text-[#34EAB9]" />
               <span className="text-xs">Pocket Quant</span>
             </Link>

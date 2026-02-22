@@ -14,14 +14,14 @@ interface SectionProps {
 function Section({ id, icon, title, children, defaultOpen = false }: SectionProps) {
   const [open, setOpen] = useState(defaultOpen)
   return (
-    <div className="border border-[#0D2E2A] rounded-lg overflow-hidden">
+    <div className="border border-white/[0.08] rounded-lg overflow-hidden">
       <button
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center gap-3 px-5 py-4 text-left hover:bg-[#0C302C] transition-colors"
+        className="w-full flex items-center gap-3 px-5 py-4 text-left hover:bg-[#0F1A1E] transition-colors"
       >
         <span className="text-[#34EAB9]">{icon}</span>
         <span className="text-sm font-semibold flex-1">{title}</span>
-        <ChevronDown size={16} className={`text-[#8AADA9] transition-transform ${open ? 'rotate-180' : ''}`} />
+        <ChevronDown size={16} className={`text-white/55 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       <AnimatePresence>
         {open && (
@@ -44,9 +44,9 @@ function Section({ id, icon, title, children, defaultOpen = false }: SectionProp
 
 function Term({ name, children }: { name: string; children: React.ReactNode }) {
   return (
-    <div className="bg-[#072724] rounded p-4 border border-[#0D2E2A]">
+    <div className="bg-[#0F1A1E] rounded p-4 border border-white/[0.08]">
       <p className="text-[#F0FAF8] font-medium mb-1.5">{name}</p>
-      <p className="text-[#8AADA9] text-xs leading-relaxed">{children}</p>
+      <p className="text-white/55 text-xs leading-relaxed">{children}</p>
     </div>
   )
 }
@@ -69,7 +69,7 @@ export default function LearnPage() {
         <h1 className="text-2xl font-bold mb-2">
           Learn <span className="text-[#34EAB9]">AlphaLens</span>
         </h1>
-        <p className="text-[#8AADA9] text-sm">
+        <p className="text-white/55 text-sm">
           Everything you need to understand the platform — trader archetypes, smart money signals,
           confidence scoring, and more.
         </p>
@@ -94,7 +94,7 @@ export default function LearnPage() {
             Medium-term traders who hold positions for hours to days, using moderate leverage (3-10x).
             They aim to capture larger price swings and typically make 10-50 trades per window.
             Swing traders often time entries around key support/resistance levels.
-            <div className="mt-2"><Badge color="#8AADA9" label="Swing" /></div>
+            <div className="mt-2"><Badge color="rgba(255,255,255,0.55)" label="Swing" /></div>
           </Term>
 
           <Term name="Momentum Trader">
@@ -115,7 +115,7 @@ export default function LearnPage() {
             Traders who exploit funding rate differences. They keep positions open with low
             leverage and low PnL variance, steadily collecting funding payments.
             Typically low trade frequency with consistent small gains.
-            <div className="mt-2"><Badge color="#8AADA9" label="Funding Arb" /></div>
+            <div className="mt-2"><Badge color="rgba(255,255,255,0.55)" label="Funding Arb" /></div>
           </Term>
 
           <Term name="Farmer (Delta-Neutral)">
@@ -203,20 +203,20 @@ export default function LearnPage() {
           </Term>
         </div>
 
-        <div className="bg-[#072724] rounded p-4 border border-[#34EAB920]">
+        <div className="bg-[#0F1A1E] rounded p-4 border border-[#34EAB920]">
           <p className="text-[#F0FAF8] font-medium mb-2">Reading the Score</p>
           <div className="grid grid-cols-3 gap-3 text-xs">
             <div>
               <span className="text-[#34EAB9] font-bold text-lg">8-10</span>
-              <p className="text-[#8AADA9] mt-1">Very high conviction. Strong agreement across large and small wallets with significant capital deployed.</p>
+              <p className="text-white/55 mt-1">Very high conviction. Strong agreement across large and small wallets with significant capital deployed.</p>
             </div>
             <div>
-              <span className="text-[#8AADA9] font-bold text-lg">5-7</span>
-              <p className="text-[#8AADA9] mt-1">Moderate conviction. Mixed signals or limited participation. Worth monitoring but not a strong signal alone.</p>
+              <span className="text-white/55 font-bold text-lg">5-7</span>
+              <p className="text-white/55 mt-1">Moderate conviction. Mixed signals or limited participation. Worth monitoring but not a strong signal alone.</p>
             </div>
             <div>
               <span className="text-[#FF3B5C] font-bold text-lg">0-4</span>
-              <p className="text-[#8AADA9] mt-1">Low conviction. Disagreement among wallets, thin liquidity, or limited whale participation.</p>
+              <p className="text-white/55 mt-1">Low conviction. Disagreement among wallets, thin liquidity, or limited whale participation.</p>
             </div>
           </div>
         </div>
@@ -351,9 +351,9 @@ export default function LearnPage() {
           </Term>
         </div>
 
-        <div className="bg-[#072724] rounded p-4 border border-[#FF3B5C20]">
+        <div className="bg-[#0F1A1E] rounded p-4 border border-[#FF3B5C20]">
           <p className="text-[#FF3B5C] font-medium text-xs mb-1.5">Risk Warning</p>
-          <p className="text-[#8AADA9] text-xs">
+          <p className="text-white/55 text-xs">
             Copy trading involves significant risk. Past performance does not guarantee future results.
             Always set conservative max positions and never copy trade with funds you cannot afford to lose.
             Slippage and timing differences mean your results will differ from the target trader.
@@ -439,7 +439,7 @@ export default function LearnPage() {
 
       {/* Platform Tips */}
       <Section id="tips" icon={<Shield size={18} />} title="Tips & Best Practices">
-        <div className="space-y-3 text-xs text-[#8AADA9]">
+        <div className="space-y-3 text-xs text-white/55">
           <div className="flex gap-3 items-start">
             <span className="text-[#34EAB9] font-bold text-sm mt-0.5">1</span>
             <p><strong className="text-[#F0FAF8]">Don&apos;t blindly follow whales.</strong> Large wallets can absorb losses you can&apos;t. Always consider position sizing relative to your own account.</p>
@@ -467,7 +467,7 @@ export default function LearnPage() {
         </div>
       </Section>
 
-      <div className="text-center py-6 text-[#4A706C] text-xs">
+      <div className="text-center py-6 text-white/40 text-xs">
         AlphaLens — Hyperliquid Trader Intelligence
       </div>
     </div>

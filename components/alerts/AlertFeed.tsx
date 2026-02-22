@@ -24,8 +24,8 @@ export function AlertFeed({ alerts, loading }: AlertFeedProps) {
       <div className="space-y-3">
         {Array.from({ length: 5 }).map((_, i) => (
           <div key={i} className="card p-4 animate-pulse">
-            <div className="w-32 h-4 bg-[#0D2E2A] rounded mb-2" />
-            <div className="w-48 h-3 bg-[#0D2E2A] rounded" />
+            <div className="w-32 h-4 bg-[#0F1A1E] rounded mb-2" />
+            <div className="w-48 h-3 bg-[#0F1A1E] rounded" />
           </div>
         ))}
       </div>
@@ -35,7 +35,7 @@ export function AlertFeed({ alerts, loading }: AlertFeedProps) {
   if (!alerts.length) {
     return (
       <div className="text-center py-12">
-        <p className="text-[#8AADA9] text-sm">No alerts yet. Set up tracking to get started.</p>
+        <p className="text-white/55 text-sm">No alerts yet. Set up tracking to get started.</p>
       </div>
     )
   }
@@ -61,17 +61,17 @@ export function AlertFeed({ alerts, loading }: AlertFeedProps) {
                 <div className={`w-2 h-2 rounded-full ${isLong ? 'bg-[#34EAB9]' : 'bg-[#FF3B5C]'}`} />
                 <div>
                   <p className="text-sm font-medium">
-                    <span className="font-mono text-[#8AADA9]">{shortAddr}</span>
+                    <span className="font-mono text-white/55">{shortAddr}</span>
                     {' '}opened{' '}
                     <span className={isLong ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}>{isLong ? 'Long' : 'Short'}</span>
                     {' '}{alert.asset}
                   </p>
-                  <p className="font-mono text-xs text-[#8AADA9] mt-0.5">
+                  <p className="font-mono text-xs text-white/55 mt-0.5">
                     ${alert.size.toLocaleString()} @ ${alert.price.toLocaleString()} ({alert.leverage}x)
                   </p>
                 </div>
               </div>
-              <span className="font-mono text-xs text-[#8AADA9]">{timeStr}</span>
+              <span className="font-mono text-xs text-white/55">{timeStr}</span>
             </div>
           </motion.div>
         )

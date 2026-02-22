@@ -25,39 +25,39 @@ export function AlertConfig({ onSave }: AlertConfigProps) {
   return (
     <div className="space-y-6">
       <div>
-        <label className="text-sm text-[#8AADA9] block mb-2">Telegram Chat ID</label>
+        <label className="text-sm text-white/55 block mb-2">Telegram Chat ID</label>
         <input
           value={telegramChatId}
           onChange={e => setTelegramChatId(e.target.value)}
           placeholder="Your Telegram chat ID"
-          className="w-full bg-[#0C302C] border border-[#0D2E2A] rounded px-4 py-3 text-sm outline-none focus:border-[#34EAB9] transition-colors"
+          className="w-full bg-[#0F1A1E] border border-white/[0.08] rounded px-4 py-3 text-sm outline-none focus:border-[#34EAB9] transition-colors"
         />
-        <p className="text-xs text-[#8AADA9] mt-1">Message @userinfobot on Telegram to get your chat ID</p>
+        <p className="text-xs text-white/55 mt-1">Message @userinfobot on Telegram to get your chat ID</p>
       </div>
 
       <div>
-        <label className="text-sm text-[#8AADA9] block mb-2">ntfy.sh Topic</label>
+        <label className="text-sm text-white/55 block mb-2">ntfy.sh Topic</label>
         <input
           value={ntfyTopic}
           onChange={e => setNtfyTopic(e.target.value)}
           placeholder="alphalens-your-unique-id"
-          className="w-full bg-[#0C302C] border border-[#0D2E2A] rounded px-4 py-3 text-sm outline-none focus:border-[#34EAB9] transition-colors"
+          className="w-full bg-[#0F1A1E] border border-white/[0.08] rounded px-4 py-3 text-sm outline-none focus:border-[#34EAB9] transition-colors"
         />
-        <p className="text-xs text-[#8AADA9] mt-1">Install the ntfy app and subscribe to this topic</p>
+        <p className="text-xs text-white/55 mt-1">Install the ntfy app and subscribe to this topic</p>
       </div>
 
       <div>
-        <label className="text-sm text-[#8AADA9] block mb-2">Min Position Size (USD)</label>
+        <label className="text-sm text-white/55 block mb-2">Min Position Size (USD)</label>
         <input
           type="number"
           value={minPositionSize}
           onChange={e => setMinPositionSize(Number(e.target.value))}
-          className="w-full bg-[#0C302C] border border-[#0D2E2A] rounded px-4 py-3 text-sm outline-none focus:border-[#34EAB9] transition-colors"
+          className="w-full bg-[#0F1A1E] border border-white/[0.08] rounded px-4 py-3 text-sm outline-none focus:border-[#34EAB9] transition-colors"
         />
       </div>
 
       <div>
-        <label className="text-sm text-[#8AADA9] block mb-2">Filter by Trader Type</label>
+        <label className="text-sm text-white/55 block mb-2">Filter by Trader Type</label>
         <div className="flex flex-wrap gap-2">
           {ARCHETYPE_OPTIONS.map(a => (
             <button
@@ -65,8 +65,8 @@ export function AlertConfig({ onSave }: AlertConfigProps) {
               onClick={() => toggleArchetype(a)}
               className={`text-xs px-3 py-1.5 rounded-full transition-colors ${
                 selectedArchetypes.includes(a)
-                  ? 'bg-[#34EAB9] text-[#010E0C]'
-                  : 'bg-[#0C302C] text-[#8AADA9]'
+                  ? 'bg-[#34EAB9] text-[#0F1A1E]'
+                  : 'bg-[#0F1A1E] text-white/55'
               }`}
             >
               {a.replace('_', ' ')}
@@ -77,7 +77,7 @@ export function AlertConfig({ onSave }: AlertConfigProps) {
 
       <button
         onClick={() => onSave({ telegramChatId, ntfyTopic, minPositionSize, archetypesFilter: selectedArchetypes })}
-        className="w-full py-4 rounded-lg font-semibold bg-[#34EAB9] text-[#010E0C] transition-opacity hover:opacity-90"
+        className="w-full py-4 rounded-lg font-semibold bg-[#34EAB9] text-[#0F1A1E] transition-opacity hover:opacity-90"
       >
         Save Alert Settings
       </button>
