@@ -1,5 +1,6 @@
 'use client'
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import type { AssetPosition } from '@/lib/hyperliquid/types'
 
 interface HeatmapCell {
@@ -9,29 +10,37 @@ interface HeatmapCell {
   pnl: number
   leverage: number
   pctOfTotal: number
+  entryPx: number
+  roe: number
 }
 
-function getPnlColor(pnl: number): string {
+function getPnlGradient(pnl: number, roe: number): string {
   if (pnl > 0) {
-    const intensity = Math.min(pnl / 1000, 1)
-    const g = Math.round(100 + intensity * 155)
-    return `rgb(0, ${g}, ${Math.round(intensity * 80)})`
+    const intensity = Math.min(Math.abs(roe) / 50, 1)
+    return `linear-gradient(135deg, rgba(0,${Math.round(140 + intensity * 115)},${Math.round(60 + intensity * 40)},0.9), rgba(0,${Math.round(100 + intensity * 80)},${Math.round(40 + intensity * 20)},0.7))`
   }
   if (pnl < 0) {
-    const intensity = Math.min(Math.abs(pnl) / 1000, 1)
-    const r = Math.round(100 + intensity * 155)
-    return `rgb(${r}, ${Math.round(30 - intensity * 20)}, ${Math.round(30 - intensity * 20)})`
+    const intensity = Math.min(Math.abs(roe) / 50, 1)
+    return `linear-gradient(135deg, rgba(${Math.round(140 + intensity * 115)},${Math.round(20 + intensity * 10)},${Math.round(20 + intensity * 10)},0.9), rgba(${Math.round(100 + intensity * 80)},${Math.round(15)},${Math.round(15)},0.7))`
   }
-  return '#222222'
+  return 'linear-gradient(135deg, rgba(34,34,34,0.9), rgba(28,28,28,0.7))'
 }
 
-function getPnlTextColor(pnl: number): string {
-  if (pnl > 0) return '#00ff88'
-  if (pnl < 0) return '#ff3b3b'
-  return '#888888'
+function formatPnl(n: number): string {
+  if (Math.abs(n) >= 1e6) return `$${(n / 1e6).toFixed(1)}M`
+  if (Math.abs(n) >= 1e3) return `$${(n / 1e3).toFixed(1)}K`
+  return `$${n.toFixed(0)}`
+}
+
+function formatNotional(n: number): string {
+  if (n >= 1e6) return `$${(n / 1e6).toFixed(2)}M`
+  if (n >= 1e3) return `$${(n / 1e3).toFixed(1)}K`
+  return `$${n.toFixed(0)}`
 }
 
 export function PositionHeatmap({ positions }: { positions: AssetPosition[] }) {
+  const [hoveredCoin, setHoveredCoin] = useState<string | null>(null)
+
   const cells = useMemo(() => {
     const active = positions
       .filter(p => parseFloat(p.position.szi) !== 0)
@@ -41,21 +50,15 @@ export function PositionHeatmap({ positions }: { positions: AssetPosition[] }) {
         const posValue = Math.abs(parseFloat(pos.positionValue || '0'))
         const pnl = parseFloat(pos.unrealizedPnl || '0')
         const leverage = pos.leverage?.value || 0
-        return {
-          coin: pos.coin,
-          size: posValue,
-          szi,
-          pnl,
-          leverage,
-          pctOfTotal: 0,
-        }
+        const entryPx = parseFloat(pos.entryPx || '0')
+        const marginUsed = parseFloat(pos.marginUsed || '0')
+        const roe = marginUsed > 0 ? (pnl / marginUsed) * 100 : 0
+        return { coin: pos.coin, size: posValue, szi, pnl, leverage, pctOfTotal: 0, entryPx, roe }
       })
       .sort((a, b) => b.size - a.size)
 
     const total = active.reduce((sum, c) => sum + c.size, 0)
-    for (const c of active) {
-      c.pctOfTotal = total > 0 ? (c.size / total) * 100 : 0
-    }
+    for (const c of active) c.pctOfTotal = total > 0 ? (c.size / total) * 100 : 0
     return active
   }, [positions])
 
@@ -63,93 +66,161 @@ export function PositionHeatmap({ positions }: { positions: AssetPosition[] }) {
     return <p className="text-[#888888] text-sm text-center py-4">No open positions to display</p>
   }
 
-  // Compute treemap layout (simple squarified algorithm)
   const rects = computeTreemapLayout(cells, 0, 0, 100, 100)
+  const hoveredCell = hoveredCoin ? cells.find(c => c.coin === hoveredCoin) : null
 
   return (
-    <div className="relative w-full" style={{ paddingBottom: '60%' }}>
-      <svg
-        viewBox="0 0 100 100"
-        className="absolute inset-0 w-full h-full"
-        preserveAspectRatio="none"
-      >
-        {rects.map((r, i) => {
-          const cell = cells[i]
-          const bgColor = getPnlColor(cell.pnl)
-          const textColor = getPnlTextColor(cell.pnl)
-          const isLong = cell.szi > 0
-          const showLabels = r.w > 12 && r.h > 10
+    <div className="space-y-3">
+      {/* Heatmap grid */}
+      <div className="relative w-full rounded-xl overflow-hidden" style={{ paddingBottom: '55%' }}>
+        <div className="absolute inset-0">
+          {rects.map((r, i) => {
+            const cell = cells[i]
+            const isLong = cell.szi > 0
+            const isHovered = hoveredCoin === cell.coin
+            const gradient = getPnlGradient(cell.pnl, cell.roe)
+            const showFull = r.w > 18 && r.h > 16
+            const showMedium = r.w > 10 && r.h > 10
+            const showMini = r.w > 5 && r.h > 5
 
-          return (
-            <g key={cell.coin}>
-              <rect
-                x={r.x + 0.3}
-                y={r.y + 0.3}
-                width={Math.max(r.w - 0.6, 0)}
-                height={Math.max(r.h - 0.6, 0)}
-                fill={bgColor}
-                rx={1}
-                opacity={0.85}
-                className="transition-opacity hover:opacity-100"
-              />
-              {showLabels && (
-                <>
-                  <text
-                    x={r.x + r.w / 2}
-                    y={r.y + r.h / 2 - 3}
-                    textAnchor="middle"
-                    fill="white"
-                    fontSize={r.w > 25 ? 4.5 : 3.2}
-                    fontWeight="bold"
-                  >
-                    {cell.coin}
-                  </text>
-                  <text
-                    x={r.x + r.w / 2}
-                    y={r.y + r.h / 2 + 1.5}
-                    textAnchor="middle"
-                    fill={textColor}
-                    fontSize={r.w > 25 ? 3 : 2.5}
-                  >
-                    {cell.pnl >= 0 ? '+' : ''}${cell.pnl.toFixed(0)}
-                  </text>
-                  <text
-                    x={r.x + r.w / 2}
-                    y={r.y + r.h / 2 + 5.5}
-                    textAnchor="middle"
-                    fill="#aaaaaa"
-                    fontSize={2.2}
-                  >
-                    {isLong ? 'LONG' : 'SHORT'} {cell.leverage}x
-                  </text>
-                </>
-              )}
-              {!showLabels && r.w > 5 && r.h > 5 && (
-                <text
-                  x={r.x + r.w / 2}
-                  y={r.y + r.h / 2 + 1}
-                  textAnchor="middle"
-                  fill="white"
-                  fontSize={2.5}
-                  fontWeight="bold"
+            return (
+              <motion.div
+                key={cell.coin}
+                onMouseEnter={() => setHoveredCoin(cell.coin)}
+                onMouseLeave={() => setHoveredCoin(null)}
+                className="absolute cursor-pointer transition-all duration-150"
+                style={{
+                  left: `${r.x}%`,
+                  top: `${r.y}%`,
+                  width: `${r.w}%`,
+                  height: `${r.h}%`,
+                  padding: '1.5px',
+                }}
+                animate={{
+                  scale: isHovered ? 1.02 : 1,
+                  zIndex: isHovered ? 10 : 1,
+                }}
+              >
+                <div
+                  className="w-full h-full rounded-md flex flex-col items-center justify-center overflow-hidden relative"
+                  style={{
+                    background: gradient,
+                    boxShadow: isHovered
+                      ? cell.pnl >= 0
+                        ? '0 0 20px rgba(0,255,136,0.3), inset 0 0 15px rgba(0,255,136,0.1)'
+                        : '0 0 20px rgba(255,59,59,0.3), inset 0 0 15px rgba(255,59,59,0.1)'
+                      : 'inset 0 1px 0 rgba(255,255,255,0.05)',
+                    border: isHovered
+                      ? cell.pnl >= 0 ? '1px solid rgba(0,255,136,0.4)' : '1px solid rgba(255,59,59,0.4)'
+                      : '1px solid rgba(255,255,255,0.05)',
+                  }}
                 >
-                  {cell.coin}
-                </text>
-              )}
-            </g>
-          )
-        })}
-      </svg>
+                  {/* Full label */}
+                  {showFull && (
+                    <div className="flex flex-col items-center gap-0.5 px-1">
+                      <span className="font-bold text-white drop-shadow-md" style={{ fontSize: r.w > 28 ? '13px' : '10px' }}>
+                        {cell.coin}
+                      </span>
+                      <span
+                        className="font-bold drop-shadow-md"
+                        style={{
+                          fontSize: r.w > 28 ? '11px' : '9px',
+                          color: cell.pnl >= 0 ? '#00ff88' : '#ff5555',
+                        }}
+                      >
+                        {cell.pnl >= 0 ? '+' : ''}{formatPnl(cell.pnl)}
+                      </span>
+                      <span className="text-white/60 drop-shadow-sm" style={{ fontSize: r.w > 28 ? '9px' : '7px' }}>
+                        {isLong ? 'LONG' : 'SHORT'} {cell.leverage}x
+                      </span>
+                      <span className="text-white/40" style={{ fontSize: '7px' }}>
+                        {cell.pctOfTotal.toFixed(0)}% of portfolio
+                      </span>
+                    </div>
+                  )}
+                  {/* Medium label */}
+                  {!showFull && showMedium && (
+                    <div className="flex flex-col items-center px-0.5">
+                      <span className="font-bold text-white drop-shadow-md text-[9px]">{cell.coin}</span>
+                      <span
+                        className="font-semibold drop-shadow-md text-[7px]"
+                        style={{ color: cell.pnl >= 0 ? '#00ff88' : '#ff5555' }}
+                      >
+                        {cell.pnl >= 0 ? '+' : ''}{formatPnl(cell.pnl)}
+                      </span>
+                    </div>
+                  )}
+                  {/* Mini label */}
+                  {!showFull && !showMedium && showMini && (
+                    <span className="font-bold text-white/80 drop-shadow-md text-[7px]">{cell.coin}</span>
+                  )}
+
+                  {/* Side indicator bar */}
+                  <div
+                    className="absolute bottom-0 left-0 right-0 h-[2px]"
+                    style={{ background: isLong ? '#00ff88' : '#ff3b3b', opacity: 0.6 }}
+                  />
+                </div>
+              </motion.div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Hover tooltip */}
+      <AnimatePresence>
+        {hoveredCell && (
+          <motion.div
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 4 }}
+            className="card p-3 grid grid-cols-6 gap-2 text-xs"
+          >
+            <div>
+              <p className="text-[10px] text-[#666666]">Coin</p>
+              <p className="font-bold">{hoveredCell.coin}</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-[#666666]">Side</p>
+              <p className={`font-semibold ${hoveredCell.szi > 0 ? 'text-[#00ff88]' : 'text-[#ff3b3b]'}`}>
+                {hoveredCell.szi > 0 ? 'Long' : 'Short'} {hoveredCell.leverage}x
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] text-[#666666]">Size</p>
+              <p className="font-semibold">{formatNotional(hoveredCell.size)}</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-[#666666]">Entry</p>
+              <p className="font-mono">${hoveredCell.entryPx.toLocaleString()}</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-[#666666]">uPnL</p>
+              <p className={`font-bold ${hoveredCell.pnl >= 0 ? 'text-[#00ff88]' : 'text-[#ff3b3b]'}`}>
+                {hoveredCell.pnl >= 0 ? '+' : ''}{formatPnl(hoveredCell.pnl)}
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] text-[#666666]">ROE</p>
+              <p className={`font-bold ${hoveredCell.roe >= 0 ? 'text-[#00ff88]' : 'text-[#ff3b3b]'}`}>
+                {hoveredCell.roe >= 0 ? '+' : ''}{hoveredCell.roe.toFixed(1)}%
+              </p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Legend */}
-      <div className="absolute bottom-0 left-0 right-0 flex items-center justify-center gap-4 py-1.5 text-[10px] text-[#888888]">
-        <span className="flex items-center gap-1">
-          <span className="inline-block w-2.5 h-2.5 rounded-sm bg-[#00ff88]" /> Profit
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="inline-block w-2.5 h-2.5 rounded-sm bg-[#ff3b3b]" /> Loss
-        </span>
-        <span>Size = notional value</span>
+      <div className="flex items-center justify-between text-[10px] text-[#666666] px-1">
+        <div className="flex items-center gap-3">
+          <span className="flex items-center gap-1">
+            <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: 'linear-gradient(135deg, rgba(0,255,136,0.9), rgba(0,180,100,0.7))' }} /> Profit
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: 'linear-gradient(135deg, rgba(255,59,59,0.9), rgba(180,15,15,0.7))' }} /> Loss
+          </span>
+        </div>
+        <span>Size = notional value &middot; Intensity = ROE%</span>
       </div>
     </div>
   )
@@ -158,28 +229,20 @@ export function PositionHeatmap({ positions }: { positions: AssetPosition[] }) {
 // Squarified treemap layout
 interface Rect { x: number; y: number; w: number; h: number }
 
-function computeTreemapLayout(
-  cells: HeatmapCell[],
-  x: number,
-  y: number,
-  w: number,
-  h: number
-): Rect[] {
+function computeTreemapLayout(cells: HeatmapCell[], x: number, y: number, w: number, h: number): Rect[] {
   if (cells.length === 0) return []
   if (cells.length === 1) return [{ x, y, w, h }]
 
   const total = cells.reduce((sum, c) => sum + c.size, 0)
   if (total === 0) return cells.map(() => ({ x, y, w: 0, h: 0 }))
 
-  // Split into two groups trying to balance area
   let bestSplit = 1
   let bestRatio = Infinity
   let runningSum = 0
 
   for (let i = 0; i < cells.length - 1; i++) {
     runningSum += cells[i].size
-    const ratio1 = runningSum / total
-    const aspectDiff = Math.abs(ratio1 - 0.5)
+    const aspectDiff = Math.abs(runningSum / total - 0.5)
     if (aspectDiff < bestRatio) {
       bestRatio = aspectDiff
       bestSplit = i + 1
@@ -188,18 +251,14 @@ function computeTreemapLayout(
 
   const group1 = cells.slice(0, bestSplit)
   const group2 = cells.slice(bestSplit)
-  const sum1 = group1.reduce((s, c) => s + c.size, 0)
-  const fraction = sum1 / total
-
+  const fraction = group1.reduce((s, c) => s + c.size, 0) / total
   const rects: Rect[] = []
 
   if (w >= h) {
-    // Split horizontally
     const w1 = w * fraction
     rects.push(...computeTreemapLayout(group1, x, y, w1, h))
     rects.push(...computeTreemapLayout(group2, x + w1, y, w - w1, h))
   } else {
-    // Split vertically
     const h1 = h * fraction
     rects.push(...computeTreemapLayout(group1, x, y, w, h1))
     rects.push(...computeTreemapLayout(group2, x, y + h1, w, h - h1))

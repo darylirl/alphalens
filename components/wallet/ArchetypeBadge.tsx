@@ -4,6 +4,8 @@ const ARCHETYPES: Record<string, { label: string; color: string; bg: string }> =
   momentum_trader: { label: 'Momentum', color: '#bf5af2', bg: '#bf5af220' },
   high_conviction: { label: 'High Conv.', color: '#00ff88', bg: '#00ff8820' },
   funding_arb: { label: 'Funding Arb', color: '#ffd60a', bg: '#ffd60a20' },
+  farmer: { label: 'Farmer', color: '#30d158', bg: '#30d15820' },
+  market_maker: { label: 'Market Maker', color: '#5ac8fa', bg: '#5ac8fa20' },
   unknown: { label: 'Unknown', color: '#888888', bg: '#88888820' },
 }
 

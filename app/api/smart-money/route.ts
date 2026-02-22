@@ -5,6 +5,50 @@ export const dynamic = 'force-dynamic'
 
 const HL_URL = 'https://api.hyperliquid.xyz/info'
 
+// ── Asset classification ──
+// Dynamically fetches universe from Hyperliquid and classifies each asset
+const CATEGORY_RULES: Record<string, string[]> = {
+  'Major': ['BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'ADA', 'AVAX', 'DOT', 'LINK', 'LTC', 'BCH', 'ETC'],
+  'AI & Compute': ['AI', 'AI16Z', 'AIXBT', 'FET', 'RENDER', 'RNDR', 'IO', 'TAO', 'GRASS', 'GRIFFAIN', 'VIRTUAL', 'GOAT'],
+  'Meme': ['DOGE', 'WIF', 'PNUT', 'FARTCOIN', 'TRUMP', 'MELANIA', 'BRETT', 'POPCAT', 'MEW', 'BOME',
+           'MOODENG', 'TURBO', 'CHILLGUY', 'MYRO', 'HPOS', 'SPX', 'VINE', 'TST', 'YZY',
+           'kBONK', 'kDOGS', 'kFLOKI', 'kLUNC', 'kNEIRO', 'kPEPE', 'kSHIB'],
+  'DeFi': ['AAVE', 'UNI', 'COMP', 'MKR', 'CRV', 'DYDX', 'GMX', 'LDO', 'PENDLE', 'SNX', 'SUSHI',
+           'STG', 'RSR', 'ENS', 'ONDO', 'ENA', 'EIGEN', 'ETHFI', 'MORPHO', 'USUAL', 'STABLE', 'SYRUP', 'RESOLV'],
+  'L1 & L2': ['ARB', 'OP', 'SUI', 'NEAR', 'APT', 'SEI', 'TIA', 'STRK', 'MANTA', 'ZK', 'ZETA',
+              'BLAST', 'LINEA', 'S', 'MOVE', 'INIT', 'BERA', 'HYPE', 'HYPER', 'LAYER', 'MON', 'SOPH'],
+  'Gaming & NFT': ['AXS', 'IMX', 'GALA', 'ILV', 'PIXEL', 'SUPER', 'YGG', 'BIGTIME', 'MAVIA', 'NFTI', 'DOOD',
+                   'ANIME', 'PENGU', 'SAND', 'MEGA', 'PURR'],
+  'Infrastructure': ['FIL', 'AR', 'PYTH', 'GAS', 'ORBS', 'RLB', 'W', 'ORDI', 'STX', 'KAS', 'ICP', 'IOTA',
+                     'HBAR', 'XLM', 'XMR', 'ZEC', 'TRX', 'ATOM', 'RUNE', 'TON', 'NEO'],
+  'Index & Commodity': ['PAXG'],
+  // Stock perps — auto-detected by checking if name matches known stock tickers
+  // When Hyperliquid adds stock perps, they'll appear here
+}
+
+// Known stock tickers for auto-detection (common US equities)
+const STOCK_TICKERS = new Set([
+  'AAPL', 'AMZN', 'GOOG', 'GOOGL', 'META', 'MSFT', 'NVDA', 'TSLA', 'AMD', 'INTC',
+  'NFLX', 'DIS', 'PYPL', 'SQ', 'SHOP', 'UBER', 'ABNB', 'COIN', 'HOOD', 'RBLX',
+  'GME', 'AMC', 'PLTR', 'SNAP', 'PINS', 'SPOT', 'ZM', 'ROKU', 'CRWD', 'NET',
+  'SNOW', 'DKNG', 'MSTR', 'SPY', 'QQQ', 'IWM', 'DIA', 'GLD', 'SLV', 'USO',
+])
+
+function classifyAsset(name: string): { category: string; isStock: boolean } {
+  // Check stock tickers first (including @ prefix Hyperliquid may use)
+  const cleanName = name.replace(/^@/, '')
+  if (STOCK_TICKERS.has(cleanName)) {
+    return { category: 'Stock Perps', isStock: true }
+  }
+
+  for (const [category, tickers] of Object.entries(CATEGORY_RULES)) {
+    if (tickers.includes(name)) return { category, isStock: false }
+  }
+
+  return { category: 'Other', isStock: false }
+}
+
+// ── Equity tiers ──
 const EQUITY_TIERS = [
   { name: 'Leviathan', emoji: '\u{1F409}', min: 5000000 },
   { name: 'Whale', emoji: '\u{1F40B}', min: 500000 },
@@ -21,10 +65,7 @@ function getTierName(accountValue: number): string {
   return 'Shrimp'
 }
 
-function getTierEmoji(name: string): string {
-  return EQUITY_TIERS.find(t => t.name === name)?.emoji || ''
-}
-
+// ── Types ──
 interface WalletPosition {
   coin: string
   size: number
@@ -48,37 +89,25 @@ interface SmartMoneyWallet {
   totalPnl: number
 }
 
-// Per-coin confidence scoring algorithm
-// Factors: directional consensus, capital commitment, wallet count, tier weight
+// ── Confidence scoring ──
 function computeConfidence(
   walletCount: number,
   longNotional: number,
   shortNotional: number,
-  tierWeights: Record<string, number>, // how many wallets from each tier
-  totalLiquidity: number
-): { score: number; factors: { consensus: number; liquidity: number; participation: number; whaleAlignment: number } } {
+  tierWeights: Record<string, number>,
+) {
   const totalNotional = longNotional + shortNotional
   if (totalNotional === 0 || walletCount === 0) {
     return { score: 0, factors: { consensus: 0, liquidity: 0, participation: 0, whaleAlignment: 0 } }
   }
 
-  // Factor 1: Directional consensus (0-10)
-  // How aligned are wallets? 100% one direction = 10, 50/50 = 0
   const dominantPct = Math.max(longNotional, shortNotional) / totalNotional
-  const consensus = Math.round(((dominantPct - 0.5) / 0.5) * 10 * 10) / 10 // 0-10 scale
+  const consensus = Math.round(((dominantPct - 0.5) / 0.5) * 10 * 10) / 10
 
-  // Factor 2: Liquidity depth (0-10)
-  // More capital behind the trade = higher confidence
-  // Scale: $100K = 3, $1M = 5, $10M = 7, $100M = 9, $1B = 10
   const liquidityScore = Math.min(10, Math.round(Math.log10(Math.max(totalNotional, 1)) * 1.5 * 10) / 10)
 
-  // Factor 3: Participation breadth (0-10)
-  // More wallets trading this coin = more signal
-  // Scale: 1 wallet = 1, 5 = 4, 10 = 6, 25 = 8, 50+ = 10
   const participationScore = Math.min(10, Math.round(Math.sqrt(walletCount) * 2 * 10) / 10)
 
-  // Factor 4: Whale/shark alignment (0-10)
-  // If big wallets agree with the direction, confidence goes up
   const bigTierCount = (tierWeights['Leviathan'] || 0) * 4 +
     (tierWeights['Whale'] || 0) * 3 +
     (tierWeights['Shark'] || 0) * 2 +
@@ -88,7 +117,6 @@ function computeConfidence(
     ? Math.min(10, Math.round((bigTierCount / totalWeighted) * 5 * 10) / 10)
     : 0
 
-  // Weighted composite: consensus 35%, liquidity 25%, participation 20%, whale alignment 20%
   const composite = consensus * 0.35 + liquidityScore * 0.25 + participationScore * 0.2 + whaleAlignment * 0.2
   const score = Math.round(Math.min(10, Math.max(0, composite)) * 10) / 10
 
@@ -103,6 +131,42 @@ function computeConfidence(
   }
 }
 
+// ── Narrative insight generator ──
+function generateInsight(
+  category: string,
+  tokens: Array<{ coin: string; direction: string; confidence: number; totalLiquidity: number; walletCount: number; longPct: number }>,
+): string {
+  if (tokens.length === 0) return ''
+
+  const totalLiquidity = tokens.reduce((s, t) => s + t.totalLiquidity, 0)
+  const totalWallets = tokens.reduce((s, t) => s + t.walletCount, 0)
+  const bullishCount = tokens.filter(t => t.direction === 'Long').length
+  const bearishCount = tokens.filter(t => t.direction === 'Short').length
+  const avgConfidence = tokens.reduce((s, t) => s + t.confidence, 0) / tokens.length
+
+  const topCoin = tokens[0]
+  const sectorBias = bullishCount > bearishCount ? 'bullish' : bearishCount > bullishCount ? 'bearish' : 'mixed'
+
+  const parts: string[] = []
+
+  // Sector sentiment
+  parts.push(`${category} sector is ${sectorBias} overall`)
+
+  // Liquidity
+  const liqStr = totalLiquidity >= 1e6 ? `$${(totalLiquidity / 1e6).toFixed(1)}M` : `$${(totalLiquidity / 1e3).toFixed(0)}K`
+  parts.push(`${liqStr} deployed across ${tokens.length} asset${tokens.length > 1 ? 's' : ''}`)
+
+  // Participation
+  parts.push(`${totalWallets} wallet${totalWallets > 1 ? 's' : ''} active`)
+
+  // Top conviction play
+  if (topCoin) {
+    parts.push(`Highest conviction: ${topCoin.coin} (${topCoin.longPct}% long, confidence ${topCoin.confidence}/10)`)
+  }
+
+  return parts.join('. ') + '.'
+}
+
 async function hlPost(payload: Record<string, unknown>) {
   const res = await fetch(HL_URL, {
     method: 'POST',
@@ -115,6 +179,29 @@ async function hlPost(payload: Record<string, unknown>) {
 
 export async function GET() {
   try {
+    // Step 0: Fetch full universe to get market data for all assets
+    const universeData = await hlPost({ type: 'metaAndAssetCtxs' })
+    const meta = Array.isArray(universeData) ? universeData[0] : universeData?.meta
+    const assetCtxs = Array.isArray(universeData) ? universeData[1] : universeData?.assetCtxs
+    const universe = meta?.universe || []
+
+    // Build asset info map (price, volume, 24h change)
+    const assetInfo: Record<string, { price: number; volume: number; change24h: number; category: string; isStock: boolean }> = {}
+    for (let i = 0; i < universe.length; i++) {
+      const name = universe[i]?.name
+      const ctx = assetCtxs?.[i]
+      if (!name) continue
+      const markPx = parseFloat(ctx?.markPx || '0')
+      const prevPx = parseFloat(ctx?.prevDayPx || '0')
+      const vol = parseFloat(ctx?.dayNtlVlm || '0')
+      const change = prevPx > 0 ? ((markPx - prevPx) / prevPx) * 100 : 0
+      const { category, isStock } = classifyAsset(name)
+      assetInfo[name] = { price: markPx, volume: vol, change24h: Math.round(change * 100) / 100, category, isStock }
+    }
+
+    // Count stock perps found
+    const stockPerpsFound = Object.values(assetInfo).filter(a => a.isStock).length
+
     // Step 1: Gather wallet addresses
     const addresses = new Set<string>()
 
@@ -125,39 +212,36 @@ export async function GET() {
       try {
         const { createClient } = await import('@supabase/supabase-js')
         const supabase = createClient(supabaseUrl, supabaseKey)
-        const { data: wallets } = await supabase
-          .from('wallets')
-          .select('address')
-          .limit(300)
-        if (wallets) {
-          for (const w of wallets) addresses.add(w.address)
-        }
+        const { data: wallets } = await supabase.from('wallets').select('address').limit(300)
+        if (wallets) for (const w of wallets) addresses.add(w.address)
       } catch {}
     }
 
-    const discoveryCoins = ['BTC', 'ETH', 'SOL', 'DOGE', 'XRP', 'SUI', 'WIF', 'ARB', 'OP', 'AVAX']
+    // Discover from recent trades — include more coins for broader coverage
+    const discoveryCoins = ['BTC', 'ETH', 'SOL', 'DOGE', 'XRP', 'SUI', 'WIF', 'ARB', 'OP', 'AVAX',
+      'HYPE', 'AI16Z', 'TRUMP', 'PENDLE', 'ONDO', 'TIA', 'RENDER', 'FET', 'LINK', 'AAVE']
+    // Also try any stock perps found in universe
+    for (const [name, info] of Object.entries(assetInfo)) {
+      if (info.isStock) discoveryCoins.push(name)
+    }
+    const uniqueDiscovery = [...new Set(discoveryCoins)]
+
     const tradeResults = await Promise.all(
-      discoveryCoins.map(coin =>
-        hlPost({ type: 'recentTrades', coin }).catch(() => null)
-      )
+      uniqueDiscovery.map(coin => hlPost({ type: 'recentTrades', coin }).catch(() => null))
     )
     for (const trades of tradeResults) {
       if (!Array.isArray(trades)) continue
       for (const trade of trades) {
         const users = trade.users as string[] | undefined
-        if (users) {
-          for (const addr of users) {
-            if (addr?.startsWith('0x')) addresses.add(addr)
-          }
-        }
+        if (users) for (const addr of users) if (addr?.startsWith('0x')) addresses.add(addr)
       }
     }
 
     if (addresses.size === 0) {
-      return NextResponse.json({ tokens: [], tiers: [], total: 0 })
+      return NextResponse.json({ tokens: [], sectorInsights: [], tierSummary: [], total: 0, stockPerpsAvailable: stockPerpsFound })
     }
 
-    // Step 2: Fetch clearinghouse state + fills for all wallets
+    // Step 2: Fetch wallet data
     const allAddrs = Array.from(addresses).slice(0, 250)
     const walletData: SmartMoneyWallet[] = []
 
@@ -165,14 +249,10 @@ export async function GET() {
       const batch = allAddrs.slice(i, i + 20)
 
       const stateResults = await Promise.all(
-        batch.map(addr =>
-          hlPost({ type: 'clearinghouseState', user: addr }).catch(() => null)
-        )
+        batch.map(addr => hlPost({ type: 'clearinghouseState', user: addr }).catch(() => null))
       )
       const fillResults = await Promise.all(
-        batch.map(addr =>
-          hlPost({ type: 'userFills', user: addr }).catch(() => null)
-        )
+        batch.map(addr => hlPost({ type: 'userFills', user: addr }).catch(() => null))
       )
 
       for (let j = 0; j < batch.length; j++) {
@@ -183,9 +263,7 @@ export async function GET() {
         if (accountValue <= 0) continue
 
         const positions: WalletPosition[] = []
-        let totalLong = 0
-        let totalShort = 0
-        let unrealizedPnl = 0
+        let totalLong = 0, totalShort = 0, unrealizedPnl = 0
 
         for (const ap of state.assetPositions || []) {
           const pos = ap?.position
@@ -208,20 +286,13 @@ export async function GET() {
 
         let cumulativePnl = 0
         const fills = Array.isArray(fillResults[j]) ? fillResults[j] : []
-        for (const fill of fills) {
-          cumulativePnl += parseFloat(fill.closedPnl || '0')
-        }
+        for (const fill of fills) cumulativePnl += parseFloat(fill.closedPnl || '0')
 
         positions.sort((a, b) => b.notional - a.notional)
 
         walletData.push({
-          address: batch[j],
-          accountValue,
-          tier: getTierName(accountValue),
-          positions,
-          totalLong,
-          totalShort,
-          positionCount: positions.length,
+          address: batch[j], accountValue, tier: getTierName(accountValue),
+          positions, totalLong, totalShort, positionCount: positions.length,
           cumulativePnl: Math.round(cumulativePnl * 100) / 100,
           unrealizedPnl: Math.round(unrealizedPnl * 100) / 100,
           totalPnl: Math.round((cumulativePnl + unrealizedPnl) * 100) / 100,
@@ -229,14 +300,11 @@ export async function GET() {
       }
     }
 
-    // Step 3: Build TOKEN-CENTRIC view with confidence scores
+    // Step 3: Build token-centric view with categories
     const tokenMap: Record<string, {
-      longNotional: number
-      shortNotional: number
-      longWallets: SmartMoneyWallet[]
-      shortWallets: SmartMoneyWallet[]
-      tierCounts: Record<string, number>
-      totalPnl: number
+      longNotional: number; shortNotional: number
+      longWallets: SmartMoneyWallet[]; shortWallets: SmartMoneyWallet[]
+      tierCounts: Record<string, number>; totalPnl: number
     }> = {}
 
     for (const wallet of walletData) {
@@ -260,25 +328,18 @@ export async function GET() {
     const tokens = Object.entries(tokenMap)
       .map(([coin, data]) => {
         const allWallets = [...data.longWallets, ...data.shortWallets]
-        // Deduplicate wallets that appear in both long and short
         const uniqueWallets = allWallets.filter((w, i) => allWallets.findIndex(x => x.address === w.address) === i)
         const walletCount = uniqueWallets.length
         const totalNotional = data.longNotional + data.shortNotional
         const longPct = totalNotional > 0 ? Math.round((data.longNotional / totalNotional) * 100) : 0
         const direction: 'Long' | 'Short' | 'Mixed' = longPct > 60 ? 'Long' : longPct < 40 ? 'Short' : 'Mixed'
 
-        const confidence = computeConfidence(walletCount, data.longNotional, data.shortNotional, data.tierCounts, totalNotional)
+        const confidence = computeConfidence(walletCount, data.longNotional, data.shortNotional, data.tierCounts)
 
-        // Build tier breakdown for this coin
         const tierBreakdown = EQUITY_TIERS
           .filter(t => data.tierCounts[t.name])
-          .map(t => ({
-            tier: t.name,
-            emoji: t.emoji,
-            count: data.tierCounts[t.name] || 0,
-          }))
+          .map(t => ({ tier: t.name, emoji: t.emoji, count: data.tierCounts[t.name] || 0 }))
 
-        // Top wallets for this coin (sorted by notional in this coin)
         const walletsForCoin = uniqueWallets
           .map(w => {
             const coinPositions = w.positions.filter(p => p.coin === coin)
@@ -287,23 +348,20 @@ export async function GET() {
             const coinPnl = coinPositions.reduce((s, p) => s + p.pnl, 0)
             const coinLeverage = coinPositions.length > 0 ? coinPositions[0].leverage : 0
             return {
-              address: w.address,
-              accountValue: w.accountValue,
-              tier: w.tier,
-              side: coinSide,
-              notional: coinNotional,
-              pnl: Math.round(coinPnl * 100) / 100,
-              leverage: coinLeverage,
-              totalPnl: w.totalPnl,
+              address: w.address, accountValue: w.accountValue, tier: w.tier,
+              side: coinSide, notional: coinNotional, pnl: Math.round(coinPnl * 100) / 100,
+              leverage: coinLeverage, totalPnl: w.totalPnl,
             }
           })
           .sort((a, b) => b.notional - a.notional)
           .slice(0, 20)
 
+        const info = assetInfo[coin]
+        const category = info?.category || 'Other'
+        const isStock = info?.isStock || false
+
         return {
-          coin,
-          direction,
-          longPct,
+          coin, direction, longPct,
           totalLiquidity: Math.round(totalNotional),
           longNotional: Math.round(data.longNotional),
           shortNotional: Math.round(data.shortNotional),
@@ -313,31 +371,71 @@ export async function GET() {
           tierBreakdown,
           wallets: walletsForCoin,
           aggregatePnl: Math.round(data.totalPnl * 100) / 100,
+          // New: category + market data
+          category,
+          isStock,
+          price: info?.price || 0,
+          change24h: info?.change24h || 0,
+          volume24h: Math.round(info?.volume || 0),
         }
       })
       .sort((a, b) => b.totalLiquidity - a.totalLiquidity)
 
-    // Also keep equity tier overview (lighter weight, for the summary)
+    // Step 4: Generate sector insights
+    const sectorMap: Record<string, typeof tokens> = {}
+    for (const token of tokens) {
+      const cat = token.category
+      if (!sectorMap[cat]) sectorMap[cat] = []
+      sectorMap[cat].push(token)
+    }
+
+    const sectorInsights = Object.entries(sectorMap)
+      .map(([category, sectorTokens]) => {
+        const totalLiquidity = sectorTokens.reduce((s, t) => s + t.totalLiquidity, 0)
+        const totalWallets = sectorTokens.reduce((s, t) => s + t.walletCount, 0)
+        const avgConfidence = sectorTokens.length > 0
+          ? Math.round((sectorTokens.reduce((s, t) => s + t.confidence, 0) / sectorTokens.length) * 10) / 10
+          : 0
+        const bullish = sectorTokens.filter(t => t.direction === 'Long').length
+        const bearish = sectorTokens.filter(t => t.direction === 'Short').length
+        const bias: 'Bullish' | 'Bearish' | 'Mixed' = bullish > bearish ? 'Bullish' : bearish > bullish ? 'Bearish' : 'Mixed'
+
+        const narrative = generateInsight(category, sectorTokens)
+        const isStock = sectorTokens.some(t => t.isStock)
+
+        return {
+          category,
+          isStock,
+          tokenCount: sectorTokens.length,
+          totalLiquidity: Math.round(totalLiquidity),
+          totalWallets,
+          avgConfidence,
+          bias,
+          narrative,
+          topToken: sectorTokens[0]?.coin || '',
+          topTokenConfidence: sectorTokens[0]?.confidence || 0,
+        }
+      })
+      .sort((a, b) => b.totalLiquidity - a.totalLiquidity)
+
+    // Tier summary
     const tierSummary = EQUITY_TIERS.map(tier => {
       const tierWallets = walletData.filter(w => w.tier === tier.name)
       const totalLong = tierWallets.reduce((s, w) => s + w.totalLong, 0)
       const totalShort = tierWallets.reduce((s, w) => s + w.totalShort, 0)
       const totalNotional = totalLong + totalShort
       const longRatio = totalNotional > 0 ? Math.round((totalLong / totalNotional) * 100) : 0
-      return {
-        name: tier.name,
-        emoji: tier.emoji,
-        count: tierWallets.length,
-        longRatio,
-        totalNotional: Math.round(totalNotional),
-      }
+      return { name: tier.name, emoji: tier.emoji, count: tierWallets.length, longRatio, totalNotional: Math.round(totalNotional) }
     }).filter(t => t.count > 0)
 
     return NextResponse.json({
       tokens,
+      sectorInsights,
       tierSummary,
       total: walletData.length,
       scanned: allAddrs.length,
+      stockPerpsAvailable: stockPerpsFound,
+      categories: [...new Set(tokens.map(t => t.category))].sort(),
     })
   } catch (error) {
     console.error('Smart money API error:', error)

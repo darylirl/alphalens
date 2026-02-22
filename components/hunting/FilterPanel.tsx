@@ -10,6 +10,8 @@ const ARCHETYPES = [
   { value: 'momentum_trader', label: 'Momentum' },
   { value: 'high_conviction', label: 'High Conv.' },
   { value: 'funding_arb', label: 'Funding Arb' },
+  { value: 'farmer', label: 'Farmer' },
+  { value: 'market_maker', label: 'Market Maker' },
 ]
 
 const SORT_OPTIONS = [

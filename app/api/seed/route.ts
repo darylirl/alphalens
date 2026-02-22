@@ -81,7 +81,7 @@ async function runSeed() {
 
   // Step 2: For each discovered wallet, fetch account state and compute metrics
   const addresses = Array.from(discoveredAddresses).slice(0, 100)
-  const archetypes = ['scalper', 'swing_trader', 'momentum_trader', 'high_conviction', 'funding_arb']
+  const archetypes = ['scalper', 'swing_trader', 'momentum_trader', 'high_conviction', 'funding_arb', 'farmer', 'market_maker']
   let seeded = 0
   const errors: string[] = []
 
@@ -125,9 +125,25 @@ async function runSeed() {
       const isLargeAccount = accountValue > 50000
       const isActive = posCount > 0
 
+      // Detect delta-neutral (farmer) positions
+      let hasLong = false
+      let hasSht = false
+      let longNotional = 0
+      let shortNotional = 0
+      for (const ap of positions) {
+        const pos = ap?.position
+        const size = parseFloat(pos?.szi || '0')
+        const val = Math.abs(parseFloat(pos?.positionValue || '0'))
+        if (size > 0) { hasLong = true; longNotional += val }
+        else if (size < 0) { hasSht = true; shortNotional += val }
+      }
+      const netDelta = totalNotional > 0 ? Math.abs(longNotional - shortNotional) / totalNotional : 1
+
       // Classify archetype based on real metrics
       let archetype: string
-      if (avgLeverage > 10 && posCount > 0) {
+      if (hasLong && hasSht && netDelta < 0.25 && avgLeverage <= 5) {
+        archetype = 'farmer'
+      } else if (avgLeverage > 10 && posCount > 0) {
         archetype = 'scalper'
       } else if (avgLeverage <= 5 && accountValue > 100000) {
         archetype = 'high_conviction'
