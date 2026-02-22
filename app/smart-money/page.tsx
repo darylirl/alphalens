@@ -1,10 +1,10 @@
 'use client'
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import Link from 'next/link'
 import { TopBar } from '@/components/layout/TopBar'
 import { SkeletonCard } from '@/components/ui/SkeletonCard'
-import { ChevronDown, Eye, Shield, TrendingUp, TrendingDown, BarChart3, Zap } from 'lucide-react'
+import { ChevronDown, Eye, Shield, Zap, Users, Clock, ArrowUpRight, ArrowDownRight } from 'lucide-react'
 
 interface CoinWallet {
   address: string
@@ -15,6 +15,9 @@ interface CoinWallet {
   pnl: number
   leverage: number
   totalPnl: number
+  cumulativePnl: number
+  fundingPnl: number
+  firstTradeTime: number | null
 }
 
 interface TierBreakdown { tier: string; emoji: string; count: number }
@@ -40,6 +43,31 @@ interface TokenData {
   volume24h: number
 }
 
+interface TierWallet {
+  address: string
+  accountValue: number
+  positionCount: number
+  totalLong: number
+  totalShort: number
+  cumulativePnl: number
+  unrealizedPnl: number
+  totalPnl: number
+  fundingPnl: number
+  firstTradeTime: number | null
+  topPositions: Array<{ coin: string; side: string; notional: number; leverage: number; pnl: number }>
+}
+
+interface TierSummary {
+  name: string
+  emoji: string
+  count: number
+  longRatio: number
+  totalNotional: number
+  avgPnl: number
+  totalPnl: number
+  wallets: TierWallet[]
+}
+
 interface SectorInsight {
   category: string
   isStock: boolean
@@ -53,13 +81,11 @@ interface SectorInsight {
   topTokenConfidence: number
 }
 
-interface TierSummary { name: string; emoji: string; count: number; longRatio: number; totalNotional: number }
-
 const formatUsd = (n: number) => {
   if (Math.abs(n) >= 1e9) return `$${(n / 1e9).toFixed(2)}B`
   if (Math.abs(n) >= 1e6) return `$${(n / 1e6).toFixed(2)}M`
   if (Math.abs(n) >= 1e3) return `$${(n / 1e3).toFixed(1)}K`
-  return `$${n.toLocaleString()}`
+  return `$${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
 }
 
 const directionBg = (d: string) => {
@@ -78,6 +104,20 @@ const confidenceColor = (score: number) => {
   if (score >= 7) return '#00ff88'
   if (score >= 4) return '#ffaa00'
   return '#ff3b3b'
+}
+
+const pnlColor = (n: number) => n >= 0 ? 'text-[#00ff88]' : 'text-[#ff3b3b]'
+
+function timeAgo(ts: number | null): string {
+  if (!ts) return '—'
+  const diff = Date.now() - ts
+  const days = Math.floor(diff / 86400000)
+  if (days > 365) return `${Math.floor(days / 365)}y ago`
+  if (days > 30) return `${Math.floor(days / 30)}mo ago`
+  if (days > 0) return `${days}d ago`
+  const hours = Math.floor(diff / 3600000)
+  if (hours > 0) return `${hours}h ago`
+  return 'recent'
 }
 
 function ConfidenceGauge({ score, size = 'lg' }: { score: number; size?: 'sm' | 'lg' }) {
@@ -108,13 +148,15 @@ export default function SmartMoneyPage() {
   const [stockPerpsAvailable, setStockPerpsAvailable] = useState(0)
   const [loading, setLoading] = useState(true)
   const [expandedCoin, setExpandedCoin] = useState<string | null>(null)
+  const [expandedTier, setExpandedTier] = useState<string | null>(null)
   const [activeCategory, setActiveCategory] = useState('All')
 
   useEffect(() => {
+    let cancelled = false
     async function load() {
       try {
         const res = await fetch('/api/smart-money')
-        if (res.ok) {
+        if (res.ok && !cancelled) {
           const data = await res.json()
           setTokens(data.tokens || [])
           setSectorInsights(data.sectorInsights || [])
@@ -123,10 +165,11 @@ export default function SmartMoneyPage() {
           setTotal(data.total || 0)
           setStockPerpsAvailable(data.stockPerpsAvailable || 0)
         }
-      } catch {}
-      finally { setLoading(false) }
+      } catch { /* network error */ }
+      finally { if (!cancelled) setLoading(false) }
     }
     load()
+    return () => { cancelled = true }
   }, [])
 
   const filteredTokens = useMemo(() => {
@@ -140,10 +183,21 @@ export default function SmartMoneyPage() {
     return sectorInsights.find(s => s.category === activeCategory) || null
   }, [sectorInsights, activeCategory])
 
-  const allCategories = ['All', ...categories]
-  if (stockPerpsAvailable > 0 && !categories.includes('Stock Perps')) {
-    allCategories.splice(1, 0, 'Stock Perps')
-  }
+  const allCategories = useMemo(() => {
+    const cats = ['All', ...categories]
+    if (stockPerpsAvailable > 0 && !categories.includes('Stock Perps')) {
+      cats.splice(1, 0, 'Stock Perps')
+    }
+    return cats
+  }, [categories, stockPerpsAvailable])
+
+  const toggleTier = useCallback((name: string) => {
+    setExpandedTier(prev => prev === name ? null : name)
+  }, [])
+
+  const toggleCoin = useCallback((coin: string) => {
+    setExpandedCoin(prev => prev === coin ? null : coin)
+  }, [])
 
   return (
     <div>
@@ -157,27 +211,164 @@ export default function SmartMoneyPage() {
           </p>
         </div>
 
-        {/* Tier overview bar */}
+        {/* ═══ Clickable Tier Overview ═══ */}
         {!loading && tierSummary.length > 0 && (
-          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
-            {tierSummary.map(t => (
-              <div key={t.name} className="card px-3 py-2 min-w-[100px] flex-shrink-0">
-                <div className="flex items-center gap-1.5 mb-1">
-                  <span className="text-sm">{t.emoji}</span>
-                  <span className="text-xs font-semibold">{t.name}</span>
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[10px] text-[#888888]">{t.count}</span>
-                  <span className={`text-[10px] font-semibold ${t.longRatio > 55 ? 'text-[#00ff88]' : t.longRatio < 45 ? 'text-[#ff3b3b]' : 'text-[#888888]'}`}>
-                    {t.longRatio}%L
-                  </span>
-                </div>
-              </div>
-            ))}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-sm">Wallet Tiers</h3>
+              <span className="text-[10px] text-[#666666]">Click to view wallets</span>
+            </div>
+
+            <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+              {tierSummary.map(t => (
+                <button
+                  key={t.name}
+                  onClick={() => toggleTier(t.name)}
+                  className={`card px-3 py-2 min-w-[120px] flex-shrink-0 text-left transition-all ${
+                    expandedTier === t.name
+                      ? 'border-[#00ff88] bg-[#00ff8808]'
+                      : 'hover:border-[#333333]'
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <span className="text-sm">{t.emoji}</span>
+                    <span className="text-xs font-semibold">{t.name}</span>
+                    <ChevronDown
+                      size={10}
+                      className={`ml-auto text-[#888888] transition-transform ${expandedTier === t.name ? 'rotate-180' : ''}`}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[10px] text-[#888888]">{t.count} wallets</span>
+                    <span className={`text-[10px] font-semibold ${t.longRatio > 55 ? 'text-[#00ff88]' : t.longRatio < 45 ? 'text-[#ff3b3b]' : 'text-[#888888]'}`}>
+                      {t.longRatio}%L
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between mt-1">
+                    <span className="text-[9px] text-[#666666]">{formatUsd(t.totalNotional)}</span>
+                    <span className={`text-[9px] font-semibold ${pnlColor(t.totalPnl)}`}>
+                      {t.totalPnl >= 0 ? '+' : ''}{formatUsd(t.totalPnl)}
+                    </span>
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            {/* Expanded tier wallet list */}
+            <AnimatePresence>
+              {expandedTier && (() => {
+                const tier = tierSummary.find(t => t.name === expandedTier)
+                if (!tier || tier.wallets.length === 0) return null
+                return (
+                  <motion.div
+                    key={expandedTier}
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="card p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <Users size={14} className="text-[#00ff88]" />
+                          <h4 className="text-sm font-bold">{tier.emoji} {tier.name} Wallets</h4>
+                          <span className="text-[10px] text-[#888888]">{tier.count} total</span>
+                        </div>
+                        <div className="text-right text-[10px]">
+                          <span className="text-[#888888]">Avg PnL: </span>
+                          <span className={pnlColor(tier.avgPnl)}>
+                            {tier.avgPnl >= 0 ? '+' : ''}{formatUsd(tier.avgPnl)}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="overflow-x-auto -mx-4 px-4">
+                        <table className="w-full text-xs min-w-[700px]">
+                          <thead>
+                            <tr className="text-[#666666] text-[10px] border-b border-[#1a1a1a]">
+                              <th className="text-left py-2 font-medium">Wallet</th>
+                              <th className="text-right py-2 font-medium">Account Value</th>
+                              <th className="text-right py-2 font-medium">Positions</th>
+                              <th className="text-right py-2 font-medium">Long / Short</th>
+                              <th className="text-right py-2 font-medium">Realized PnL</th>
+                              <th className="text-right py-2 font-medium">Unrealized</th>
+                              <th className="text-right py-2 font-medium">Funding</th>
+                              <th className="text-right py-2 font-medium">Total PnL</th>
+                              <th className="text-right py-2 font-medium">
+                                <div className="flex items-center gap-0.5 justify-end">
+                                  <Clock size={9} />
+                                  <span>Since</span>
+                                </div>
+                              </th>
+                              <th className="text-left py-2 font-medium pl-3">Top Coins</th>
+                              <th className="py-2"></th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {tier.wallets.map(w => (
+                              <tr key={w.address} className="border-t border-[#111111] hover:bg-[#0d0d0d] transition-colors">
+                                <td className="py-2.5 font-mono text-[11px]">
+                                  {w.address.slice(0, 6)}...{w.address.slice(-4)}
+                                </td>
+                                <td className="py-2.5 text-right font-mono font-semibold">
+                                  {formatUsd(w.accountValue)}
+                                </td>
+                                <td className="py-2.5 text-right text-[#888888]">
+                                  {w.positionCount}
+                                </td>
+                                <td className="py-2.5 text-right">
+                                  <span className="text-[#00ff88]">{formatUsd(w.totalLong)}</span>
+                                  <span className="text-[#444444] mx-0.5">/</span>
+                                  <span className="text-[#ff3b3b]">{formatUsd(w.totalShort)}</span>
+                                </td>
+                                <td className={`py-2.5 text-right font-mono ${pnlColor(w.cumulativePnl)}`}>
+                                  {w.cumulativePnl >= 0 ? '+' : ''}{formatUsd(w.cumulativePnl)}
+                                </td>
+                                <td className={`py-2.5 text-right font-mono ${pnlColor(w.unrealizedPnl)}`}>
+                                  {w.unrealizedPnl >= 0 ? '+' : ''}{formatUsd(w.unrealizedPnl)}
+                                </td>
+                                <td className={`py-2.5 text-right font-mono ${pnlColor(w.fundingPnl)}`}>
+                                  {w.fundingPnl >= 0 ? '+' : ''}{formatUsd(w.fundingPnl)}
+                                </td>
+                                <td className={`py-2.5 text-right font-mono font-semibold ${pnlColor(w.totalPnl)}`}>
+                                  {w.totalPnl >= 0 ? '+' : ''}{formatUsd(w.totalPnl)}
+                                </td>
+                                <td className="py-2.5 text-right text-[10px] text-[#888888]">
+                                  {timeAgo(w.firstTradeTime)}
+                                </td>
+                                <td className="py-2.5 pl-3">
+                                  <div className="flex gap-1 flex-wrap">
+                                    {w.topPositions.map((p, idx) => (
+                                      <span
+                                        key={idx}
+                                        className={`text-[9px] px-1.5 py-0.5 rounded ${
+                                          p.side === 'Long' ? 'bg-[#00ff8815] text-[#00ff88]' : 'bg-[#ff3b3b15] text-[#ff3b3b]'
+                                        }`}
+                                      >
+                                        {p.coin} {p.side === 'Long' ? '↑' : '↓'}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </td>
+                                <td className="py-2.5 pl-2">
+                                  <Link href={`/wallet/${w.address}`} className="text-[#888888] hover:text-[#00ff88] transition-colors">
+                                    <Eye size={12} />
+                                  </Link>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </motion.div>
+                )
+              })()}
+            </AnimatePresence>
           </div>
         )}
 
-        {/* Category filter tabs */}
+        {/* ═══ Category filter tabs ═══ */}
         {!loading && categories.length > 0 && (
           <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
             {allCategories.map(cat => (
@@ -203,7 +394,7 @@ export default function SmartMoneyPage() {
           </div>
         )}
 
-        {/* Sector insight card */}
+        {/* ═══ Sector insight card ═══ */}
         {activeSectorInsight && (
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="card p-4 border-l-2 border-l-[#00ff88]">
             <div className="flex items-start gap-3 mb-3">
@@ -241,7 +432,7 @@ export default function SmartMoneyPage() {
           </motion.div>
         )}
 
-        {/* Sector overview cards (when All selected) */}
+        {/* ═══ Sector overview cards (All view) ═══ */}
         {activeCategory === 'All' && !loading && sectorInsights.length > 0 && (
           <div>
             <h3 className="font-semibold text-sm mb-2">Sector Overview</h3>
@@ -274,7 +465,7 @@ export default function SmartMoneyPage() {
           </div>
         )}
 
-        {/* Token list */}
+        {/* ═══ Token list ═══ */}
         {loading ? (
           <div className="space-y-3">
             {Array.from({ length: 5 }).map((_, i) => <SkeletonCard key={i} />)}
@@ -291,7 +482,7 @@ export default function SmartMoneyPage() {
                   transition={{ delay: i * 0.03 }}
                 >
                   <button
-                    onClick={() => setExpandedCoin(isExpanded ? null : token.coin)}
+                    onClick={() => toggleCoin(token.coin)}
                     className="card p-4 w-full text-left hover:border-[#333333] transition-colors"
                   >
                     <div className="flex items-center justify-between mb-3">
@@ -326,7 +517,7 @@ export default function SmartMoneyPage() {
                       </div>
                       <div className="flex items-center gap-2">
                         <div className="text-right">
-                          <p className={`text-sm font-bold ${token.aggregatePnl >= 0 ? 'text-[#00ff88]' : 'text-[#ff3b3b]'}`}>
+                          <p className={`text-sm font-bold ${pnlColor(token.aggregatePnl)}`}>
                             {token.aggregatePnl >= 0 ? '+' : ''}{formatUsd(token.aggregatePnl)}
                           </p>
                           <p className="text-[9px] text-[#666666]">Agg. uPnL</p>
@@ -397,11 +588,16 @@ export default function SmartMoneyPage() {
                             <p className="text-[10px] uppercase tracking-wider text-[#666666] mb-2">Who&apos;s Trading {token.coin}</p>
                             <div className="flex gap-2 flex-wrap">
                               {token.tierBreakdown.map(tb => (
-                                <div key={tb.tier} className="bg-[#111111] rounded-lg px-3 py-1.5 flex items-center gap-1.5">
+                                <button
+                                  key={tb.tier}
+                                  onClick={() => toggleTier(tb.tier)}
+                                  className="bg-[#111111] rounded-lg px-3 py-1.5 flex items-center gap-1.5 hover:bg-[#1a1a1a] transition-colors"
+                                >
                                   <span className="text-sm">{tb.emoji}</span>
                                   <span className="text-xs">{tb.tier}</span>
                                   <span className="text-[10px] text-[#888888]">&times;{tb.count}</span>
-                                </div>
+                                  <ArrowUpRight size={9} className="text-[#00ff88] ml-0.5" />
+                                </button>
                               ))}
                             </div>
                           </div>
@@ -409,9 +605,9 @@ export default function SmartMoneyPage() {
 
                         {token.wallets.length > 0 && (
                           <div className="mt-2 card p-3">
-                            <p className="text-[10px] uppercase tracking-wider text-[#666666] mb-2">Top Wallets</p>
+                            <p className="text-[10px] uppercase tracking-wider text-[#666666] mb-2">Top Wallets on {token.coin}</p>
                             <div className="overflow-x-auto -mx-3 px-3">
-                              <table className="w-full text-xs">
+                              <table className="w-full text-xs min-w-[600px]">
                                 <thead>
                                   <tr className="text-[#666666] text-[10px]">
                                     <th className="text-left py-1.5 font-medium">Wallet</th>
@@ -420,7 +616,14 @@ export default function SmartMoneyPage() {
                                     <th className="text-right py-1.5 font-medium">Notional</th>
                                     <th className="text-right py-1.5 font-medium">Lev</th>
                                     <th className="text-right py-1.5 font-medium">uPnL</th>
-                                    <th className="text-right py-1.5 font-medium">All-time</th>
+                                    <th className="text-right py-1.5 font-medium">All-time PnL</th>
+                                    <th className="text-right py-1.5 font-medium">Funding</th>
+                                    <th className="text-right py-1.5 font-medium">
+                                      <div className="flex items-center gap-0.5 justify-end">
+                                        <Clock size={8} />
+                                        Since
+                                      </div>
+                                    </th>
                                     <th className="py-1.5"></th>
                                   </tr>
                                 </thead>
@@ -429,17 +632,28 @@ export default function SmartMoneyPage() {
                                     <tr key={w.address} className="border-t border-[#1a1a1a]">
                                       <td className="py-2 font-mono text-[11px]">{w.address.slice(0, 6)}...{w.address.slice(-4)}</td>
                                       <td className="py-2 text-[10px] text-[#888888]">{w.tier}</td>
-                                      <td className={`py-2 font-semibold ${w.side === 'Long' ? 'text-[#00ff88]' : 'text-[#ff3b3b]'}`}>{w.side}</td>
+                                      <td className="py-2">
+                                        <span className={`inline-flex items-center gap-0.5 font-semibold ${w.side === 'Long' ? 'text-[#00ff88]' : 'text-[#ff3b3b]'}`}>
+                                          {w.side === 'Long' ? <ArrowUpRight size={10} /> : <ArrowDownRight size={10} />}
+                                          {w.side}
+                                        </span>
+                                      </td>
                                       <td className="py-2 text-right font-mono">{formatUsd(w.notional)}</td>
                                       <td className="py-2 text-right">{w.leverage}x</td>
-                                      <td className={`py-2 text-right font-mono ${w.pnl >= 0 ? 'text-[#00ff88]' : 'text-[#ff3b3b]'}`}>
+                                      <td className={`py-2 text-right font-mono ${pnlColor(w.pnl)}`}>
                                         {w.pnl >= 0 ? '+' : ''}{formatUsd(w.pnl)}
                                       </td>
-                                      <td className={`py-2 text-right font-mono ${w.totalPnl >= 0 ? 'text-[#00ff88]' : 'text-[#ff3b3b]'}`}>
+                                      <td className={`py-2 text-right font-mono font-semibold ${pnlColor(w.totalPnl)}`}>
                                         {w.totalPnl >= 0 ? '+' : ''}{formatUsd(w.totalPnl)}
                                       </td>
+                                      <td className={`py-2 text-right font-mono ${pnlColor(w.fundingPnl)}`}>
+                                        {w.fundingPnl >= 0 ? '+' : ''}{formatUsd(w.fundingPnl)}
+                                      </td>
+                                      <td className="py-2 text-right text-[10px] text-[#888888]">
+                                        {timeAgo(w.firstTradeTime)}
+                                      </td>
                                       <td className="py-2 pl-2">
-                                        <Link href={`/wallet/${w.address}`} className="text-[#888888] hover:text-[#00ff88]">
+                                        <Link href={`/wallet/${w.address}`} className="text-[#888888] hover:text-[#00ff88] transition-colors">
                                           <Eye size={11} />
                                         </Link>
                                       </td>

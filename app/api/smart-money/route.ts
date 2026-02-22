@@ -87,6 +87,52 @@ interface SmartMoneyWallet {
   cumulativePnl: number
   unrealizedPnl: number
   totalPnl: number
+  fundingPnl: number
+  firstTradeTime: number | null
+}
+
+// ── Fetch all-time fills with pagination ──
+async function fetchAllTimeFills(address: string): Promise<{ cumulativePnl: number; firstTradeTime: number | null }> {
+  let cumulativePnl = 0
+  let firstTradeTime: number | null = null
+
+  // Use userFillsByTime starting from epoch 0 (all-time)
+  // Hyperliquid returns max 2000 fills per call, so paginate
+  let startTime = 0
+  const MAX_PAGES = 5 // Up to 10,000 fills
+
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const data = await hlPost({ type: 'userFillsByTime', user: address, startTime, aggregateByTime: false })
+    if (!Array.isArray(data) || data.length === 0) break
+
+    for (const fill of data) {
+      cumulativePnl += parseFloat(fill.closedPnl || '0')
+      const t = fill.time
+      if (t && (firstTradeTime === null || t < firstTradeTime)) {
+        firstTradeTime = t
+      }
+    }
+
+    // If we got fewer than 2000, we have all fills
+    if (data.length < 2000) break
+
+    // Move startTime forward past the last fill for next page
+    const lastTime = data[data.length - 1].time
+    if (lastTime) startTime = lastTime + 1
+    else break
+  }
+
+  return { cumulativePnl, firstTradeTime }
+}
+
+// ── Fetch lifetime funding PnL ──
+async function fetchFundingPnl(address: string): Promise<number> {
+  let total = 0
+  const data = await hlPost({ type: 'userFundings', user: address, startTime: 0 }).catch(() => null)
+  if (Array.isArray(data)) {
+    for (const f of data) total += parseFloat(f.usdc || '0')
+  }
+  return total
 }
 
 // ── Confidence scoring ──
@@ -241,18 +287,22 @@ export async function GET() {
       return NextResponse.json({ tokens: [], sectorInsights: [], tierSummary: [], total: 0, stockPerpsAvailable: stockPerpsFound })
     }
 
-    // Step 2: Fetch wallet data
+    // Step 2: Fetch wallet data with all-time PnL
     const allAddrs = Array.from(addresses).slice(0, 250)
     const walletData: SmartMoneyWallet[] = []
 
     for (let i = 0; i < allAddrs.length; i += 20) {
       const batch = allAddrs.slice(i, i + 20)
 
+      // Fetch state, all-time fills, and funding in parallel per batch
       const stateResults = await Promise.all(
         batch.map(addr => hlPost({ type: 'clearinghouseState', user: addr }).catch(() => null))
       )
       const fillResults = await Promise.all(
-        batch.map(addr => hlPost({ type: 'userFills', user: addr }).catch(() => null))
+        batch.map(addr => fetchAllTimeFills(addr))
+      )
+      const fundingResults = await Promise.all(
+        batch.map(addr => fetchFundingPnl(addr))
       )
 
       for (let j = 0; j < batch.length; j++) {
@@ -284,9 +334,8 @@ export async function GET() {
           positions.push({ coin: pos.coin, size: Math.abs(size), side, notional, leverage, pnl, entryPx })
         }
 
-        let cumulativePnl = 0
-        const fills = Array.isArray(fillResults[j]) ? fillResults[j] : []
-        for (const fill of fills) cumulativePnl += parseFloat(fill.closedPnl || '0')
+        const { cumulativePnl, firstTradeTime } = fillResults[j]
+        const fundingPnl = fundingResults[j]
 
         positions.sort((a, b) => b.notional - a.notional)
 
@@ -295,7 +344,9 @@ export async function GET() {
           positions, totalLong, totalShort, positionCount: positions.length,
           cumulativePnl: Math.round(cumulativePnl * 100) / 100,
           unrealizedPnl: Math.round(unrealizedPnl * 100) / 100,
-          totalPnl: Math.round((cumulativePnl + unrealizedPnl) * 100) / 100,
+          totalPnl: Math.round((cumulativePnl + unrealizedPnl + fundingPnl) * 100) / 100,
+          fundingPnl: Math.round(fundingPnl * 100) / 100,
+          firstTradeTime,
         })
       }
     }
@@ -351,6 +402,8 @@ export async function GET() {
               address: w.address, accountValue: w.accountValue, tier: w.tier,
               side: coinSide, notional: coinNotional, pnl: Math.round(coinPnl * 100) / 100,
               leverage: coinLeverage, totalPnl: w.totalPnl,
+              cumulativePnl: w.cumulativePnl, fundingPnl: w.fundingPnl,
+              firstTradeTime: w.firstTradeTime,
             }
           })
           .sort((a, b) => b.notional - a.notional)
@@ -418,14 +471,43 @@ export async function GET() {
       })
       .sort((a, b) => b.totalLiquidity - a.totalLiquidity)
 
-    // Tier summary
+    // Tier summary with wallet details for clickable tiers
     const tierSummary = EQUITY_TIERS.map(tier => {
       const tierWallets = walletData.filter(w => w.tier === tier.name)
       const totalLong = tierWallets.reduce((s, w) => s + w.totalLong, 0)
       const totalShort = tierWallets.reduce((s, w) => s + w.totalShort, 0)
       const totalNotional = totalLong + totalShort
       const longRatio = totalNotional > 0 ? Math.round((totalLong / totalNotional) * 100) : 0
-      return { name: tier.name, emoji: tier.emoji, count: tierWallets.length, longRatio, totalNotional: Math.round(totalNotional) }
+      const avgPnl = tierWallets.length > 0 ? tierWallets.reduce((s, w) => s + w.totalPnl, 0) / tierWallets.length : 0
+
+      // Include top wallets for this tier (sorted by account value)
+      const wallets = tierWallets
+        .sort((a, b) => b.accountValue - a.accountValue)
+        .slice(0, 50)
+        .map(w => ({
+          address: w.address,
+          accountValue: Math.round(w.accountValue * 100) / 100,
+          positionCount: w.positionCount,
+          totalLong: Math.round(w.totalLong),
+          totalShort: Math.round(w.totalShort),
+          cumulativePnl: w.cumulativePnl,
+          unrealizedPnl: w.unrealizedPnl,
+          totalPnl: w.totalPnl,
+          fundingPnl: w.fundingPnl,
+          firstTradeTime: w.firstTradeTime,
+          topPositions: w.positions.slice(0, 3).map(p => ({
+            coin: p.coin, side: p.side, notional: Math.round(p.notional),
+            leverage: p.leverage, pnl: Math.round(p.pnl * 100) / 100,
+          })),
+        }))
+
+      return {
+        name: tier.name, emoji: tier.emoji, count: tierWallets.length,
+        longRatio, totalNotional: Math.round(totalNotional),
+        avgPnl: Math.round(avgPnl * 100) / 100,
+        totalPnl: Math.round(tierWallets.reduce((s, w) => s + w.totalPnl, 0) * 100) / 100,
+        wallets,
+      }
     }).filter(t => t.count > 0)
 
     return NextResponse.json({

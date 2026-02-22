@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { validateAddress } from '@/lib/validation'
 
 const HL_URL = 'https://api.hyperliquid.xyz/info'
 
@@ -26,7 +27,10 @@ async function fetchFills(address: string, startTime: number) {
 }
 
 export async function GET(req: Request, { params }: { params: { address: string } }) {
-  const { address } = params
+  const address = validateAddress(params.address)
+  if (!address) {
+    return NextResponse.json({ error: 'Invalid Ethereum address format' }, { status: 400 })
+  }
 
   try {
     const startTime = Date.now() - 90 * 24 * 60 * 60 * 1000

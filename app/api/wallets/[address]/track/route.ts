@@ -1,7 +1,12 @@
 import { NextResponse } from 'next/server'
+import { validateAddress } from '@/lib/validation'
 
 export async function POST(req: Request, { params }: { params: { address: string } }) {
-  const { address } = params
+  const address = validateAddress(params.address)
+  if (!address) {
+    return NextResponse.json({ error: 'Invalid address' }, { status: 400 })
+  }
+
   const body = await req.json()
 
   try {

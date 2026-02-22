@@ -2,9 +2,12 @@ import { NextRequest } from 'next/server'
 
 export const runtime = 'edge'
 
+const ETH_RE = /^0x[a-fA-F0-9]{40}$/
+
 export async function GET(req: NextRequest) {
-  const address = req.nextUrl.searchParams.get('address')
-  if (!address) return new Response('Missing address', { status: 400 })
+  const raw = req.nextUrl.searchParams.get('address')
+  if (!raw || !ETH_RE.test(raw)) return new Response('Valid Ethereum address required', { status: 400 })
+  const address = raw.toLowerCase()
 
   const encoder = new TextEncoder()
   const stream = new ReadableStream({

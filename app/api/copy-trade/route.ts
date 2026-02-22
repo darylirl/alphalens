@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server'
+import { validateAddress, safeParseFloat } from '@/lib/validation'
 
 // GET: Retrieve copy trade configurations for a user
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
-  const user = searchParams.get('user')
+  const user = validateAddress(searchParams.get('user'))
 
   if (!user) {
-    return NextResponse.json({ error: 'User address required' }, { status: 400 })
+    return NextResponse.json({ error: 'Valid Ethereum address required (0x + 40 hex chars)' }, { status: 400 })
   }
 
   const supabaseUrl = process.env.SUPABASE_URL
@@ -23,7 +24,7 @@ export async function GET(req: Request) {
     const { data } = await supabase
       .from('copy_trade_configs')
       .select('*')
-      .eq('user_address', user.toLowerCase())
+      .eq('user_address', user)
 
     return NextResponse.json({ configs: data || [] })
   } catch {
@@ -35,11 +36,21 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const body = await req.json()
-    const { userAddress, targetAddress, ratio, maxPositionSize, enabled } = body
+    const userAddr = validateAddress(body.userAddress)
+    const targetAddr = validateAddress(body.targetAddress)
 
-    if (!userAddress || !targetAddress) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+    if (!userAddr || !targetAddr) {
+      return NextResponse.json({ error: 'Valid Ethereum addresses required (0x + 40 hex chars)' }, { status: 400 })
     }
+
+    if (userAddr === targetAddr) {
+      return NextResponse.json({ error: 'Cannot copy trade yourself' }, { status: 400 })
+    }
+
+    // Validate numeric params with bounds
+    const ratio = safeParseFloat(String(body.ratio ?? ''), 100, 1, 1000)
+    const maxPositionSize = safeParseFloat(String(body.maxPositionSize ?? ''), 10000, 1, 10000000)
+    const enabled = typeof body.enabled === 'boolean' ? body.enabled : true
 
     const supabaseUrl = process.env.SUPABASE_URL
     const supabaseKey = process.env.SUPABASE_ANON_KEY
@@ -54,16 +65,16 @@ export async function POST(req: Request) {
     const { data, error } = await supabase
       .from('copy_trade_configs')
       .upsert({
-        user_address: userAddress.toLowerCase(),
-        target_address: targetAddress.toLowerCase(),
-        ratio: ratio || 100,
-        max_position_size: maxPositionSize || 10000,
-        enabled: enabled ?? true,
+        user_address: userAddr,
+        target_address: targetAddr,
+        ratio,
+        max_position_size: maxPositionSize,
+        enabled,
         updated_at: new Date().toISOString(),
       }, { onConflict: 'user_address,target_address' })
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: 'Failed to save configuration' }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, data })
