@@ -22,7 +22,7 @@ export default function AlertsPage() {
       <div className="px-4 py-4 lg:px-6 space-y-4">
         <div>
           <h2 className="text-lg font-bold mb-1">Alert Center</h2>
-          <p className="text-[#888888] text-xs">Real-time alerts when tracked wallets make moves</p>
+          <p className="text-[#8AADA9] text-xs">Real-time alerts when tracked wallets make moves</p>
         </div>
 
         <div className="flex gap-2">
@@ -31,7 +31,7 @@ export default function AlertsPage() {
               key={t}
               onClick={() => setTab(t)}
               className={`text-xs font-medium px-3 py-1.5 rounded-full transition-colors ${
-                tab === t ? 'bg-[#00ff88] text-black' : 'bg-[#161616] text-[#888888]'
+                tab === t ? 'bg-[#34EAB9] text-[#010E0C]' : 'bg-[#0C302C] text-[#8AADA9]'
               }`}
             >
               {t === 'feed' ? 'Live Feed' : 'Settings'}

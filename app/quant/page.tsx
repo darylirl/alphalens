@@ -92,7 +92,7 @@ export default function QuantPage() {
       <div className="px-4 py-4 lg:px-6 space-y-4">
         <div>
           <h2 className="text-lg font-bold mb-1">Pocket Quant Builder</h2>
-          <p className="text-[#888888] text-xs">Build rules that watch wallets and alert you. No code needed.</p>
+          <p className="text-[#8AADA9] text-xs">Build rules that watch wallets and alert you. No code needed.</p>
         </div>
 
         <div className="flex gap-2">
@@ -101,7 +101,7 @@ export default function QuantPage() {
               key={t}
               onClick={() => setTab(t)}
               className={`text-xs font-medium px-3 py-1.5 rounded-full transition-colors ${
-                tab === t ? 'bg-[#00ff88] text-black' : 'bg-[#161616] text-[#888888]'
+                tab === t ? 'bg-[#34EAB9] text-[#010E0C]' : 'bg-[#0C302C] text-[#8AADA9]'
               }`}
             >
               {t === 'templates' ? 'Templates' : t === 'builder' ? 'Custom' : `Active (${activeCount})`}
@@ -127,23 +127,23 @@ export default function QuantPage() {
           <div className="space-y-3">
             {savedRules.length === 0 ? (
               <div className="text-center py-12">
-                <p className="text-[#888888] text-sm mb-3">No active rules yet</p>
-                <p className="text-[#666666] text-xs mb-4">Create a rule from a template or build your own custom strategy</p>
+                <p className="text-[#8AADA9] text-sm mb-3">No active rules yet</p>
+                <p className="text-[#4A706C] text-xs mb-4">Create a rule from a template or build your own custom strategy</p>
                 <div className="flex gap-3 justify-center">
-                  <button onClick={() => setTab('templates')} className="text-sm font-medium bg-[#00ff88] text-black px-4 py-2 rounded-xl">
+                  <button onClick={() => setTab('templates')} className="text-sm font-medium bg-[#34EAB9] text-[#010E0C] px-4 py-2 rounded">
                     Browse Templates
                   </button>
-                  <button onClick={() => setTab('builder')} className="text-sm font-medium bg-[#161616] text-[#888888] px-4 py-2 rounded-xl border border-[#333]">
+                  <button onClick={() => setTab('builder')} className="text-sm font-medium bg-[#0C302C] text-[#8AADA9] px-4 py-2 rounded border border-[#0F3D38]">
                     Build Custom
                   </button>
                 </div>
               </div>
             ) : (
               <>
-                <div className="card p-3 bg-[#111111]">
-                  <div className="flex items-center justify-between text-xs text-[#888888]">
+                <div className="card p-3 bg-[#072724]">
+                  <div className="flex items-center justify-between text-xs text-[#8AADA9]">
                     <span>{activeCount} active / {savedRules.length} total rules</span>
-                    <span>Paper Portfolio: <span className={savedRules.reduce((s, r) => s + r.paperPnl, 0) >= 0 ? 'text-[#00ff88]' : 'text-[#ff3b3b]'}>
+                    <span>Paper Portfolio: <span className={savedRules.reduce((s, r) => s + r.paperPnl, 0) >= 0 ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}>
                       ${savedRules.reduce((s, r) => s + r.paperPnl, 0).toLocaleString()}
                     </span></span>
                   </div>
@@ -157,34 +157,34 @@ export default function QuantPage() {
                   >
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
-                        <div className={`w-2 h-2 rounded-full ${rule.isActive ? 'bg-[#00ff88] pulse-green' : 'bg-[#555]'}`} />
+                        <div className={`w-2 h-2 rounded-full ${rule.isActive ? 'bg-[#34EAB9] pulse-accent' : 'bg-[#4A706C]'}`} />
                         <p className="font-semibold text-sm">{rule.name}</p>
                       </div>
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => toggleRule(rule.id)}
-                          className="p-1.5 rounded-lg hover:bg-[#222] transition-colors text-[#888888] hover:text-white"
+                          className="p-1.5 rounded-lg hover:bg-[#0D2E2A] transition-colors text-[#8AADA9] hover:text-[#F0FAF8]"
                           title={rule.isActive ? 'Pause' : 'Resume'}
                         >
                           {rule.isActive ? <Pause size={14} /> : <Play size={14} />}
                         </button>
                         <button
                           onClick={() => deleteRule(rule.id)}
-                          className="p-1.5 rounded-lg hover:bg-[#222] transition-colors text-[#888888] hover:text-[#ff3b3b]"
+                          className="p-1.5 rounded-lg hover:bg-[#0D2E2A] transition-colors text-[#8AADA9] hover:text-[#FF3B5C]"
                           title="Delete"
                         >
                           <Trash2 size={14} />
                         </button>
                       </div>
                     </div>
-                    <div className="flex gap-4 text-xs text-[#888888]">
-                      <span>Paper PnL: <span className={rule.paperPnl >= 0 ? 'text-[#00ff88]' : 'text-[#ff3b3b]'}>
+                    <div className="flex gap-4 text-xs text-[#8AADA9]">
+                      <span>Paper PnL: <span className={rule.paperPnl >= 0 ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}>
                         {rule.paperPnl >= 0 ? '+' : ''}${rule.paperPnl.toLocaleString()}
                       </span></span>
                       <span>Triggers: {rule.triggerCount}</span>
                       <span>{rule.isActive ? 'Running' : 'Paused'}</span>
                     </div>
-                    <div className="mt-2 text-xs text-[#555]">
+                    <div className="mt-2 text-xs text-[#4A706C]">
                       Created {new Date(rule.createdAt).toLocaleDateString()}
                     </div>
                   </motion.div>

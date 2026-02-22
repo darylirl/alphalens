@@ -14,14 +14,14 @@ interface SectionProps {
 function Section({ id, icon, title, children, defaultOpen = false }: SectionProps) {
   const [open, setOpen] = useState(defaultOpen)
   return (
-    <div className="border border-[#222222] rounded-2xl overflow-hidden">
+    <div className="border border-[#0D2E2A] rounded-lg overflow-hidden">
       <button
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center gap-3 px-5 py-4 text-left hover:bg-[#161616] transition-colors"
+        className="w-full flex items-center gap-3 px-5 py-4 text-left hover:bg-[#0C302C] transition-colors"
       >
-        <span className="text-[#00ff88]">{icon}</span>
+        <span className="text-[#34EAB9]">{icon}</span>
         <span className="text-sm font-semibold flex-1">{title}</span>
-        <ChevronDown size={16} className={`text-[#888888] transition-transform ${open ? 'rotate-180' : ''}`} />
+        <ChevronDown size={16} className={`text-[#8AADA9] transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       <AnimatePresence>
         {open && (
@@ -32,7 +32,7 @@ function Section({ id, icon, title, children, defaultOpen = false }: SectionProp
             transition={{ duration: 0.2 }}
             className="overflow-hidden"
           >
-            <div className="px-5 pb-5 space-y-4 text-sm text-[#cccccc] leading-relaxed">
+            <div className="px-5 pb-5 space-y-4 text-sm text-[#F0FAF8] leading-relaxed">
               {children}
             </div>
           </motion.div>
@@ -44,9 +44,9 @@ function Section({ id, icon, title, children, defaultOpen = false }: SectionProp
 
 function Term({ name, children }: { name: string; children: React.ReactNode }) {
   return (
-    <div className="bg-[#111111] rounded-xl p-4 border border-[#1a1a1a]">
-      <p className="text-white font-medium mb-1.5">{name}</p>
-      <p className="text-[#999999] text-xs leading-relaxed">{children}</p>
+    <div className="bg-[#072724] rounded p-4 border border-[#0D2E2A]">
+      <p className="text-[#F0FAF8] font-medium mb-1.5">{name}</p>
+      <p className="text-[#8AADA9] text-xs leading-relaxed">{children}</p>
     </div>
   )
 }
@@ -67,9 +67,9 @@ export default function LearnPage() {
     <div className="max-w-3xl mx-auto space-y-6">
       <div className="mb-8">
         <h1 className="text-2xl font-bold mb-2">
-          Learn <span className="text-[#00ff88]">AlphaLens</span>
+          Learn <span className="text-[#34EAB9]">AlphaLens</span>
         </h1>
-        <p className="text-[#888888] text-sm">
+        <p className="text-[#8AADA9] text-sm">
           Everything you need to understand the platform — trader archetypes, smart money signals,
           confidence scoring, and more.
         </p>
@@ -87,35 +87,35 @@ export default function LearnPage() {
             High-frequency traders who open and close positions rapidly, typically within minutes.
             They use high leverage ({'>'}10x) and trade very frequently ({'>'}50 trades in a window).
             Scalpers profit from small price movements and rely on volume.
-            <div className="mt-2"><Badge color="#ff9500" label="Scalper" /></div>
+            <div className="mt-2"><Badge color="#34EAB9" label="Scalper" /></div>
           </Term>
 
           <Term name="Swing Trader">
             Medium-term traders who hold positions for hours to days, using moderate leverage (3-10x).
             They aim to capture larger price swings and typically make 10-50 trades per window.
             Swing traders often time entries around key support/resistance levels.
-            <div className="mt-2"><Badge color="#007aff" label="Swing" /></div>
+            <div className="mt-2"><Badge color="#8AADA9" label="Swing" /></div>
           </Term>
 
           <Term name="Momentum Trader">
             Traders who follow strong price trends. They enter when momentum is building and ride
             the wave. Typically hold for less than a day with above-average leverage. They are
             characterized by positive average PnL per trade.
-            <div className="mt-2"><Badge color="#bf5af2" label="Momentum" /></div>
+            <div className="mt-2"><Badge color="#34EAB9" label="Momentum" /></div>
           </Term>
 
           <Term name="High Conviction">
             Traders who place fewer but larger bets. They make under 20 trades with average
             position sizes above $10,000 and low leverage (under 5x). These traders do deep
             research and put significant capital behind their ideas.
-            <div className="mt-2"><Badge color="#00ff88" label="High Conv." /></div>
+            <div className="mt-2"><Badge color="#34EAB9" label="High Conv." /></div>
           </Term>
 
           <Term name="Funding Arb">
             Traders who exploit funding rate differences. They keep positions open with low
             leverage and low PnL variance, steadily collecting funding payments.
             Typically low trade frequency with consistent small gains.
-            <div className="mt-2"><Badge color="#ffd60a" label="Funding Arb" /></div>
+            <div className="mt-2"><Badge color="#8AADA9" label="Funding Arb" /></div>
           </Term>
 
           <Term name="Farmer (Delta-Neutral)">
@@ -173,7 +173,7 @@ export default function LearnPage() {
       <Section id="smart-money" icon={<DollarSign size={18} />} title="Smart Money & Confidence Score">
         <p>
           The Smart Money page provides a token-centric view of what the smartest wallets on
-          Hyperliquid are trading. Each token is assigned a <strong className="text-white">Confidence Score</strong> from
+          Hyperliquid are trading. Each token is assigned a <strong className="text-[#F0FAF8]">Confidence Score</strong> from
           0-10 based on four weighted factors.
         </p>
 
@@ -203,20 +203,20 @@ export default function LearnPage() {
           </Term>
         </div>
 
-        <div className="bg-[#111111] rounded-xl p-4 border border-[#00ff8820]">
-          <p className="text-white font-medium mb-2">Reading the Score</p>
+        <div className="bg-[#072724] rounded p-4 border border-[#34EAB920]">
+          <p className="text-[#F0FAF8] font-medium mb-2">Reading the Score</p>
           <div className="grid grid-cols-3 gap-3 text-xs">
             <div>
-              <span className="text-[#00ff88] font-bold text-lg">8-10</span>
-              <p className="text-[#999999] mt-1">Very high conviction. Strong agreement across large and small wallets with significant capital deployed.</p>
+              <span className="text-[#34EAB9] font-bold text-lg">8-10</span>
+              <p className="text-[#8AADA9] mt-1">Very high conviction. Strong agreement across large and small wallets with significant capital deployed.</p>
             </div>
             <div>
-              <span className="text-[#ffd60a] font-bold text-lg">5-7</span>
-              <p className="text-[#999999] mt-1">Moderate conviction. Mixed signals or limited participation. Worth monitoring but not a strong signal alone.</p>
+              <span className="text-[#8AADA9] font-bold text-lg">5-7</span>
+              <p className="text-[#8AADA9] mt-1">Moderate conviction. Mixed signals or limited participation. Worth monitoring but not a strong signal alone.</p>
             </div>
             <div>
-              <span className="text-[#ff3b3b] font-bold text-lg">0-4</span>
-              <p className="text-[#999999] mt-1">Low conviction. Disagreement among wallets, thin liquidity, or limited whale participation.</p>
+              <span className="text-[#FF3B5C] font-bold text-lg">0-4</span>
+              <p className="text-[#8AADA9] mt-1">Low conviction. Disagreement among wallets, thin liquidity, or limited whale participation.</p>
             </div>
           </div>
         </div>
@@ -263,7 +263,7 @@ export default function LearnPage() {
         </div>
 
         <p>
-          Each sector gets a <strong className="text-white">narrative insight</strong> — an AI-generated summary
+          Each sector gets a <strong className="text-[#F0FAF8]">narrative insight</strong> — an AI-generated summary
           of what smart money is doing in that sector, including directional bias and top tokens by confidence.
         </p>
       </Section>
@@ -351,9 +351,9 @@ export default function LearnPage() {
           </Term>
         </div>
 
-        <div className="bg-[#111111] rounded-xl p-4 border border-[#ff3b3b20]">
-          <p className="text-[#ff3b3b] font-medium text-xs mb-1.5">Risk Warning</p>
-          <p className="text-[#999999] text-xs">
+        <div className="bg-[#072724] rounded p-4 border border-[#FF3B5C20]">
+          <p className="text-[#FF3B5C] font-medium text-xs mb-1.5">Risk Warning</p>
+          <p className="text-[#8AADA9] text-xs">
             Copy trading involves significant risk. Past performance does not guarantee future results.
             Always set conservative max positions and never copy trade with funds you cannot afford to lose.
             Slippage and timing differences mean your results will differ from the target trader.
@@ -439,35 +439,35 @@ export default function LearnPage() {
 
       {/* Platform Tips */}
       <Section id="tips" icon={<Shield size={18} />} title="Tips & Best Practices">
-        <div className="space-y-3 text-xs text-[#999999]">
+        <div className="space-y-3 text-xs text-[#8AADA9]">
           <div className="flex gap-3 items-start">
-            <span className="text-[#00ff88] font-bold text-sm mt-0.5">1</span>
-            <p><strong className="text-white">Don&apos;t blindly follow whales.</strong> Large wallets can absorb losses you can&apos;t. Always consider position sizing relative to your own account.</p>
+            <span className="text-[#34EAB9] font-bold text-sm mt-0.5">1</span>
+            <p><strong className="text-[#F0FAF8]">Don&apos;t blindly follow whales.</strong> Large wallets can absorb losses you can&apos;t. Always consider position sizing relative to your own account.</p>
           </div>
           <div className="flex gap-3 items-start">
-            <span className="text-[#00ff88] font-bold text-sm mt-0.5">2</span>
-            <p><strong className="text-white">Look for confluence.</strong> A token with high confidence, multiple whale positions, AND strong momentum is a much better signal than any one factor alone.</p>
+            <span className="text-[#34EAB9] font-bold text-sm mt-0.5">2</span>
+            <p><strong className="text-[#F0FAF8]">Look for confluence.</strong> A token with high confidence, multiple whale positions, AND strong momentum is a much better signal than any one factor alone.</p>
           </div>
           <div className="flex gap-3 items-start">
-            <span className="text-[#00ff88] font-bold text-sm mt-0.5">3</span>
-            <p><strong className="text-white">Watch for farmer signals.</strong> If many delta-neutral farmers are active on a coin, it usually means funding rates are elevated — this can indicate overcrowded positioning.</p>
+            <span className="text-[#34EAB9] font-bold text-sm mt-0.5">3</span>
+            <p><strong className="text-[#F0FAF8]">Watch for farmer signals.</strong> If many delta-neutral farmers are active on a coin, it usually means funding rates are elevated — this can indicate overcrowded positioning.</p>
           </div>
           <div className="flex gap-3 items-start">
-            <span className="text-[#00ff88] font-bold text-sm mt-0.5">4</span>
-            <p><strong className="text-white">Check alpha decay.</strong> A trader with a high Sharpe but high alpha decay may have had one lucky streak. Prefer consistent performers with low decay scores.</p>
+            <span className="text-[#34EAB9] font-bold text-sm mt-0.5">4</span>
+            <p><strong className="text-[#F0FAF8]">Check alpha decay.</strong> A trader with a high Sharpe but high alpha decay may have had one lucky streak. Prefer consistent performers with low decay scores.</p>
           </div>
           <div className="flex gap-3 items-start">
-            <span className="text-[#00ff88] font-bold text-sm mt-0.5">5</span>
-            <p><strong className="text-white">Use copy trade conservatively.</strong> Start with low copy ratios (10-25%) and tight max position limits. Increase only after observing the target&apos;s performance over time.</p>
+            <span className="text-[#34EAB9] font-bold text-sm mt-0.5">5</span>
+            <p><strong className="text-[#F0FAF8]">Use copy trade conservatively.</strong> Start with low copy ratios (10-25%) and tight max position limits. Increase only after observing the target&apos;s performance over time.</p>
           </div>
           <div className="flex gap-3 items-start">
-            <span className="text-[#00ff88] font-bold text-sm mt-0.5">6</span>
-            <p><strong className="text-white">Sector narratives matter.</strong> If smart money is rotating into AI tokens across many wallets, that&apos;s a thematic signal worth paying attention to beyond individual tokens.</p>
+            <span className="text-[#34EAB9] font-bold text-sm mt-0.5">6</span>
+            <p><strong className="text-[#F0FAF8]">Sector narratives matter.</strong> If smart money is rotating into AI tokens across many wallets, that&apos;s a thematic signal worth paying attention to beyond individual tokens.</p>
           </div>
         </div>
       </Section>
 
-      <div className="text-center py-6 text-[#444444] text-xs">
+      <div className="text-center py-6 text-[#4A706C] text-xs">
         AlphaLens — Hyperliquid Trader Intelligence
       </div>
     </div>

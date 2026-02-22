@@ -58,14 +58,14 @@ export function TokenMetrics({ fills }: { fills: Fill[] }) {
   const metrics = computeTokenMetrics(fills)
 
   if (!metrics.length) {
-    return <p className="text-[#888888] text-sm text-center py-4">No trade history</p>
+    return <p className="text-[#8AADA9] text-sm text-center py-4">No trade history</p>
   }
 
   return (
     <div className="overflow-x-auto -mx-4 px-4">
       <table className="w-full text-sm">
         <thead>
-          <tr className="text-[#888888] text-xs">
+          <tr className="text-[#8AADA9] text-xs">
             <th className="text-left py-2 font-medium">Token</th>
             <th className="text-right py-2 font-medium">ROI %</th>
             <th className="text-right py-2 font-medium">Net PnL</th>
@@ -80,12 +80,12 @@ export function TokenMetrics({ fills }: { fills: Fill[] }) {
         </thead>
         <tbody>
           {metrics.map(m => (
-            <tr key={m.token} className="border-t border-[#222222]">
+            <tr key={m.token} className="border-t border-[#0D2E2A]">
               <td className="py-2.5 font-medium">{m.token}</td>
-              <td className={`py-2.5 text-right font-mono ${m.roi >= 0 ? 'text-[#00ff88]' : 'text-[#ff3b3b]'}`}>
+              <td className={`py-2.5 text-right font-mono ${m.roi >= 0 ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>
                 {m.roi.toFixed(2)}%
               </td>
-              <td className={`py-2.5 text-right font-mono ${m.netPnl >= 0 ? 'text-[#00ff88]' : 'text-[#ff3b3b]'}`}>
+              <td className={`py-2.5 text-right font-mono ${m.netPnl >= 0 ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>
                 ${m.netPnl.toLocaleString(undefined, { maximumFractionDigits: 2 })}
               </td>
               <td className="py-2.5 text-right font-mono">
@@ -95,12 +95,12 @@ export function TokenMetrics({ fills }: { fills: Fill[] }) {
               <td className="py-2.5 text-right">
                 {(m.winRate * 100).toFixed(1)}%
               </td>
-              <td className="py-2.5 text-right text-[#00ff88]">{m.wins}</td>
-              <td className="py-2.5 text-right text-[#ff3b3b]">{m.losses}</td>
-              <td className="py-2.5 text-right font-mono text-[#00ff88]">
+              <td className="py-2.5 text-right text-[#34EAB9]">{m.wins}</td>
+              <td className="py-2.5 text-right text-[#FF3B5C]">{m.losses}</td>
+              <td className="py-2.5 text-right font-mono text-[#34EAB9]">
                 ${m.avgWin.toFixed(2)}
               </td>
-              <td className="py-2.5 text-right font-mono text-[#ff3b3b]">
+              <td className="py-2.5 text-right font-mono text-[#FF3B5C]">
                 ${m.avgLoss.toFixed(2)}
               </td>
             </tr>

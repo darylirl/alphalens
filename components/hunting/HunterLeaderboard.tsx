@@ -22,7 +22,7 @@ export function HunterLeaderboard({ wallets, loading }: HunterLeaderboardProps) 
   if (!wallets.length) {
     return (
       <div className="text-center py-12">
-        <p className="text-[#888888] text-sm">No wallets match your filters</p>
+        <p className="text-[#8AADA9] text-sm">No wallets match your filters</p>
       </div>
     )
   }

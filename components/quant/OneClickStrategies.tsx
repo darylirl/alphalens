@@ -99,7 +99,7 @@ export function OneClickStrategies({ onSelect, onActivate }: OneClickStrategiesP
 
   return (
     <div className="space-y-3">
-      <p className="text-sm text-[#888888]">Select a strategy, customize parameters, backtest, then activate</p>
+      <p className="text-sm text-[#8AADA9]">Select a strategy, customize parameters, backtest, then activate</p>
       {TEMPLATES.map((t, i) => {
         const isExpanded = expandedId === t.id
         return (
@@ -108,7 +108,7 @@ export function OneClickStrategies({ onSelect, onActivate }: OneClickStrategiesP
             initial={{ opacity: 0, x: -12 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: i * 0.08 }}
-            className={`card transition-all ${isExpanded ? 'border-[#00ff88]/40' : 'hover:border-[#333333]'}`}
+            className={`card transition-all ${isExpanded ? 'border-[#34EAB9]/40' : 'hover:border-[#0F3D38]'}`}
           >
             <button
               onClick={() => setExpandedId(isExpanded ? null : t.id)}
@@ -118,9 +118,9 @@ export function OneClickStrategies({ onSelect, onActivate }: OneClickStrategiesP
                 <span className="text-2xl">{t.emoji}</span>
                 <div className="flex-1">
                   <p className="font-semibold text-sm mb-1">{t.name}</p>
-                  <p className="text-[#888888] text-xs leading-relaxed">{t.description}</p>
+                  <p className="text-[#8AADA9] text-xs leading-relaxed">{t.description}</p>
                 </div>
-                <ChevronDown size={16} className={`text-[#888888] transition-transform mt-1 ${isExpanded ? 'rotate-180' : ''}`} />
+                <ChevronDown size={16} className={`text-[#8AADA9] transition-transform mt-1 ${isExpanded ? 'rotate-180' : ''}`} />
               </div>
             </button>
 
@@ -133,15 +133,15 @@ export function OneClickStrategies({ onSelect, onActivate }: OneClickStrategiesP
                   className="overflow-hidden"
                 >
                   <div className="px-4 pb-4 space-y-3">
-                    <div className="border-t border-[#222222] pt-3" />
-                    <p className="text-xs text-[#888888] uppercase tracking-wider">Parameters</p>
+                    <div className="border-t border-[#0D2E2A] pt-3" />
+                    <p className="text-xs text-[#8AADA9] uppercase tracking-wider">Parameters</p>
                     <div className="grid grid-cols-2 gap-2">
                       {t.params.map(p => (
                         <div key={p.id}>
-                          <label className="text-xs text-[#666666] block mb-1">{p.label}</label>
+                          <label className="text-xs text-[#4A706C] block mb-1">{p.label}</label>
                           {p.type === 'select' && p.options ? (
                             <select
-                              className="w-full bg-[#0a0a0a] border border-[#333] rounded-lg px-3 py-2 text-sm outline-none focus:border-[#00ff88]"
+                              className="w-full bg-[#010E0C] border border-[#0F3D38] rounded-lg px-3 py-2 text-sm outline-none focus:border-[#34EAB9]"
                               value={getParamValue(t.id, p.id, p.value)}
                               onChange={e => setParamValue(t.id, p.id, e.target.value)}
                             >
@@ -151,7 +151,7 @@ export function OneClickStrategies({ onSelect, onActivate }: OneClickStrategiesP
                             <input
                               type="number"
                               step="any"
-                              className="w-full bg-[#0a0a0a] border border-[#333] rounded-lg px-3 py-2 text-sm outline-none focus:border-[#00ff88]"
+                              className="w-full bg-[#010E0C] border border-[#0F3D38] rounded-lg px-3 py-2 text-sm outline-none focus:border-[#34EAB9]"
                               value={getParamValue(t.id, p.id, p.value)}
                               onChange={e => setParamValue(t.id, p.id, e.target.value)}
                             />
@@ -163,14 +163,14 @@ export function OneClickStrategies({ onSelect, onActivate }: OneClickStrategiesP
                       <button
                         onClick={() => handleBacktest(t)}
                         disabled={backtesting === t.id}
-                        className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium bg-[#111111] border border-[#333] hover:border-[#00ff88] transition-colors disabled:opacity-50"
+                        className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded text-sm font-medium bg-[#072724] border border-[#0F3D38] hover:border-[#34EAB9] transition-colors disabled:opacity-50"
                       >
                         <Play size={14} />
                         {backtesting === t.id ? 'Running...' : 'Backtest'}
                       </button>
                       <button
                         onClick={() => handleActivate(t)}
-                        className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold bg-[#00ff88] text-black"
+                        className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded text-sm font-semibold bg-[#34EAB9] text-[#010E0C]"
                       >
                         <Zap size={14} />
                         Activate

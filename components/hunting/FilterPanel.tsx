@@ -67,8 +67,8 @@ export function FilterPanel({ archetype, sort, onArchetypeChange, onSortChange, 
             onClick={() => onArchetypeChange(a.value)}
             className={`whitespace-nowrap text-xs font-medium px-3 py-1.5 rounded-full transition-colors ${
               archetype === a.value
-                ? 'bg-[#00ff88] text-black'
-                : 'bg-[#161616] text-[#888888] hover:text-white'
+                ? 'bg-[#34EAB9] text-[#010E0C]'
+                : 'bg-[#0C302C] text-[#8AADA9] hover:text-[#F0FAF8]'
             }`}
           >
             {a.label}
@@ -78,13 +78,13 @@ export function FilterPanel({ archetype, sort, onArchetypeChange, onSortChange, 
         <button
           onClick={() => setExpanded(!expanded)}
           className={`ml-auto flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full transition-colors ${
-            expanded ? 'bg-[#00ff8820] text-[#00ff88]' : 'bg-[#161616] text-[#888888]'
+            expanded ? 'bg-[#34EAB920] text-[#34EAB9]' : 'bg-[#0C302C] text-[#8AADA9]'
           }`}
         >
           {expanded ? <X size={12} /> : <SlidersHorizontal size={12} />}
           {expanded ? 'Close' : 'Filters'}
           {activeFilterCount > 0 && !expanded && (
-            <span className="bg-[#00ff88] text-black text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+            <span className="bg-[#34EAB9] text-[#010E0C] text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
               {activeFilterCount}
             </span>
           )}
@@ -100,7 +100,7 @@ export function FilterPanel({ archetype, sort, onArchetypeChange, onSortChange, 
         >
           {/* Sort options */}
           <div>
-            <p className="text-[10px] uppercase tracking-wider text-[#666666] mb-2">Sort By</p>
+            <p className="text-[10px] uppercase tracking-wider text-[#4A706C] mb-2">Sort By</p>
             <div className="flex gap-2 flex-wrap">
               {SORT_OPTIONS.map(s => (
                 <button
@@ -108,8 +108,8 @@ export function FilterPanel({ archetype, sort, onArchetypeChange, onSortChange, 
                   onClick={() => onSortChange(s.value)}
                   className={`text-xs px-3 py-1.5 rounded-full transition-colors ${
                     sort === s.value
-                      ? 'bg-[#00ff8820] text-[#00ff88] border border-[#00ff8840]'
-                      : 'bg-[#161616] text-[#888888] border border-transparent hover:text-white'
+                      ? 'bg-[#34EAB920] text-[#34EAB9] border border-[#34EAB940]'
+                      : 'bg-[#0C302C] text-[#8AADA9] border border-transparent hover:text-[#F0FAF8]'
                   }`}
                 >
                   {s.label}
@@ -121,7 +121,7 @@ export function FilterPanel({ archetype, sort, onArchetypeChange, onSortChange, 
           {/* Advanced filters toggle */}
           <button
             onClick={() => setShowAdvanced(!showAdvanced)}
-            className="flex items-center gap-1.5 text-xs text-[#888888] hover:text-white transition-colors"
+            className="flex items-center gap-1.5 text-xs text-[#8AADA9] hover:text-[#F0FAF8] transition-colors"
           >
             <ChevronDown size={12} className={`transition-transform ${showAdvanced ? 'rotate-180' : ''}`} />
             Advanced Filters
@@ -135,11 +135,11 @@ export function FilterPanel({ archetype, sort, onArchetypeChange, onSortChange, 
             >
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                 <div>
-                  <label className="text-[10px] uppercase tracking-wider text-[#666666] mb-1 block">Time Window</label>
+                  <label className="text-[10px] uppercase tracking-wider text-[#4A706C] mb-1 block">Time Window</label>
                   <select
                     value={filters.timeWindow}
                     onChange={e => updateFilter('timeWindow', e.target.value)}
-                    className="w-full bg-[#111111] border border-[#222222] rounded-lg px-2.5 py-2 text-xs outline-none focus:border-[#00ff88]"
+                    className="w-full bg-[#072724] border border-[#0D2E2A] rounded-lg px-2.5 py-2 text-xs outline-none focus:border-[#34EAB9]"
                   >
                     {TIME_WINDOWS.map(t => (
                       <option key={t.value} value={t.value}>{t.label}</option>
@@ -147,50 +147,50 @@ export function FilterPanel({ archetype, sort, onArchetypeChange, onSortChange, 
                   </select>
                 </div>
                 <div>
-                  <label className="text-[10px] uppercase tracking-wider text-[#666666] mb-1 block">Min Trades</label>
+                  <label className="text-[10px] uppercase tracking-wider text-[#4A706C] mb-1 block">Min Trades</label>
                   <input
                     type="number"
                     value={filters.minTrades}
                     onChange={e => updateFilter('minTrades', e.target.value)}
                     placeholder="e.g. 10"
-                    className="w-full bg-[#111111] border border-[#222222] rounded-lg px-2.5 py-2 text-xs outline-none focus:border-[#00ff88] placeholder:text-[#444444]"
+                    className="w-full bg-[#072724] border border-[#0D2E2A] rounded-lg px-2.5 py-2 text-xs outline-none focus:border-[#34EAB9] placeholder:text-[#4A706C]"
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] uppercase tracking-wider text-[#666666] mb-1 block">Min Win Rate (%)</label>
+                  <label className="text-[10px] uppercase tracking-wider text-[#4A706C] mb-1 block">Min Win Rate (%)</label>
                   <input
                     type="number"
                     value={filters.minWinRate}
                     onChange={e => updateFilter('minWinRate', e.target.value)}
                     placeholder="e.g. 50"
-                    className="w-full bg-[#111111] border border-[#222222] rounded-lg px-2.5 py-2 text-xs outline-none focus:border-[#00ff88] placeholder:text-[#444444]"
+                    className="w-full bg-[#072724] border border-[#0D2E2A] rounded-lg px-2.5 py-2 text-xs outline-none focus:border-[#34EAB9] placeholder:text-[#4A706C]"
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] uppercase tracking-wider text-[#666666] mb-1 block">Min PnL (USD)</label>
+                  <label className="text-[10px] uppercase tracking-wider text-[#4A706C] mb-1 block">Min PnL (USD)</label>
                   <input
                     type="number"
                     value={filters.minPnl}
                     onChange={e => updateFilter('minPnl', e.target.value)}
                     placeholder="e.g. 1000"
-                    className="w-full bg-[#111111] border border-[#222222] rounded-lg px-2.5 py-2 text-xs outline-none focus:border-[#00ff88] placeholder:text-[#444444]"
+                    className="w-full bg-[#072724] border border-[#0D2E2A] rounded-lg px-2.5 py-2 text-xs outline-none focus:border-[#34EAB9] placeholder:text-[#4A706C]"
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] uppercase tracking-wider text-[#666666] mb-1 block">Max Leverage</label>
+                  <label className="text-[10px] uppercase tracking-wider text-[#4A706C] mb-1 block">Max Leverage</label>
                   <input
                     type="number"
                     value={filters.maxLeverage}
                     onChange={e => updateFilter('maxLeverage', e.target.value)}
                     placeholder="e.g. 20"
-                    className="w-full bg-[#111111] border border-[#222222] rounded-lg px-2.5 py-2 text-xs outline-none focus:border-[#00ff88] placeholder:text-[#444444]"
+                    className="w-full bg-[#072724] border border-[#0D2E2A] rounded-lg px-2.5 py-2 text-xs outline-none focus:border-[#34EAB9] placeholder:text-[#4A706C]"
                   />
                 </div>
               </div>
               {activeFilterCount > 0 && (
                 <button
                   onClick={() => onAdvancedFiltersChange?.({ minTrades: '', minWinRate: '', minPnl: '', maxLeverage: '', timeWindow: '30' })}
-                  className="text-xs text-[#ff3b3b] hover:underline"
+                  className="text-xs text-[#FF3B5C] hover:underline"
                 >
                   Clear all filters
                 </button>

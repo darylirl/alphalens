@@ -57,9 +57,9 @@ export default function WalletPage() {
       <div>
         <TopBar title="Wallet" />
         <div className="px-4 py-12 text-center">
-          <p className="text-[#888888] mb-2">{error || 'Wallet not found or API error'}</p>
-          <p className="text-[#666666] text-xs font-mono mb-4">{address}</p>
-          <button onClick={loadWallet} className="text-sm bg-[#00ff88] text-black font-semibold px-4 py-2 rounded-xl">
+          <p className="text-[#8AADA9] mb-2">{error || 'Wallet not found or API error'}</p>
+          <p className="text-[#4A706C] text-xs font-mono mb-4">{address}</p>
+          <button onClick={loadWallet} className="text-sm bg-[#34EAB9] text-[#010E0C] font-semibold px-4 py-2 rounded">
             Retry
           </button>
         </div>
@@ -92,7 +92,7 @@ export default function WalletPage() {
       <TopBar title="Wallet Profile" />
       <div className="px-4 py-4 lg:px-6">
         <div className="flex justify-end mb-3">
-          <button className="flex items-center gap-1.5 text-xs text-[#888888] hover:text-[#00ff88] transition-colors">
+          <button className="flex items-center gap-1.5 text-xs text-[#8AADA9] hover:text-[#34EAB9] transition-colors">
             <Star size={14} />
             Add to Watchlist
           </button>

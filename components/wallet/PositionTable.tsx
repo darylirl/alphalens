@@ -8,14 +8,14 @@ export function PositionTable({ positions }: PositionTableProps) {
   const active = positions.filter(p => parseFloat(p.position.szi) !== 0)
 
   if (!active.length) {
-    return <p className="text-[#888888] text-sm text-center py-4">No open positions</p>
+    return <p className="text-[#8AADA9] text-sm text-center py-4">No open positions</p>
   }
 
   return (
     <div className="overflow-x-auto -mx-4 px-4">
       <table className="w-full text-sm">
         <thead>
-          <tr className="text-[#888888] text-xs">
+          <tr className="text-[#8AADA9] text-xs">
             <th className="text-left py-2 font-medium">Asset</th>
             <th className="text-left py-2 font-medium">Side</th>
             <th className="text-right py-2 font-medium">Size</th>
@@ -34,14 +34,14 @@ export function PositionTable({ positions }: PositionTableProps) {
             const leverage = pos.leverage?.value || 0
 
             return (
-              <tr key={i} className="border-t border-[#222222]">
+              <tr key={i} className="border-t border-[#0D2E2A]">
                 <td className="py-2.5 font-medium">{pos.coin}</td>
-                <td className={`py-2.5 ${isLong ? 'text-[#00ff88]' : 'text-[#ff3b3b]'}`}>
+                <td className={`py-2.5 ${isLong ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>
                   {isLong ? 'Long' : 'Short'}
                 </td>
                 <td className="py-2.5 text-right font-mono">{Math.abs(size).toFixed(4)}</td>
                 <td className="py-2.5 text-right font-mono">${entry.toLocaleString()}</td>
-                <td className={`py-2.5 text-right font-mono ${upnl >= 0 ? 'text-[#00ff88]' : 'text-[#ff3b3b]'}`}>
+                <td className={`py-2.5 text-right font-mono ${upnl >= 0 ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>
                   {upnl >= 0 ? '+' : ''}${upnl.toFixed(2)}
                 </td>
                 <td className="py-2.5 text-right">{leverage}x</td>

@@ -24,8 +24,8 @@ export function AlertFeed({ alerts, loading }: AlertFeedProps) {
       <div className="space-y-3">
         {Array.from({ length: 5 }).map((_, i) => (
           <div key={i} className="card p-4 animate-pulse">
-            <div className="w-32 h-4 bg-[#222222] rounded mb-2" />
-            <div className="w-48 h-3 bg-[#222222] rounded" />
+            <div className="w-32 h-4 bg-[#0D2E2A] rounded mb-2" />
+            <div className="w-48 h-3 bg-[#0D2E2A] rounded" />
           </div>
         ))}
       </div>
@@ -35,7 +35,7 @@ export function AlertFeed({ alerts, loading }: AlertFeedProps) {
   if (!alerts.length) {
     return (
       <div className="text-center py-12">
-        <p className="text-[#888888] text-sm">No alerts yet. Set up tracking to get started.</p>
+        <p className="text-[#8AADA9] text-sm">No alerts yet. Set up tracking to get started.</p>
       </div>
     )
   }
@@ -58,20 +58,20 @@ export function AlertFeed({ alerts, loading }: AlertFeedProps) {
           >
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-2">
-                <div className={`w-2 h-2 rounded-full ${isLong ? 'bg-[#00ff88]' : 'bg-[#ff3b3b]'}`} />
+                <div className={`w-2 h-2 rounded-full ${isLong ? 'bg-[#34EAB9]' : 'bg-[#FF3B5C]'}`} />
                 <div>
                   <p className="text-sm font-medium">
-                    <span className="font-mono text-[#888888]">{shortAddr}</span>
+                    <span className="font-mono text-[#8AADA9]">{shortAddr}</span>
                     {' '}opened{' '}
-                    <span className={isLong ? 'text-[#00ff88]' : 'text-[#ff3b3b]'}>{isLong ? 'Long' : 'Short'}</span>
+                    <span className={isLong ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}>{isLong ? 'Long' : 'Short'}</span>
                     {' '}{alert.asset}
                   </p>
-                  <p className="text-xs text-[#888888] mt-0.5">
+                  <p className="text-xs text-[#8AADA9] mt-0.5">
                     ${alert.size.toLocaleString()} @ ${alert.price.toLocaleString()} ({alert.leverage}x)
                   </p>
                 </div>
               </div>
-              <span className="text-xs text-[#888888]">{timeStr}</span>
+              <span className="text-xs text-[#8AADA9]">{timeStr}</span>
             </div>
           </motion.div>
         )

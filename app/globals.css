@@ -2,14 +2,19 @@
 @tailwind components;
 @tailwind utilities;
 
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
 :root {
-  --bg: #0a0a0a;
-  --surface: #111111;
-  --card: #161616;
-  --border: #222222;
-  --accent: #00ff88;
-  --danger: #ff3b3b;
-  --muted: #888888;
+  --bg: #010E0C;
+  --surface: #072724;
+  --elevated: #0C302C;
+  --hover: #0F3D38;
+  --border: #0D2E2A;
+  --accent: #34EAB9;
+  --danger: #FF3B5C;
+  --text: #F0FAF8;
+  --text-secondary: #8AADA9;
+  --text-muted: #4A706C;
 }
 
 * {
@@ -18,7 +23,12 @@
 
 body {
   background: var(--bg);
-  color: white;
+  color: var(--text);
+  font-family: 'Inter', 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+.font-mono {
+  font-family: 'JetBrains Mono', 'IBM Plex Mono', 'Fira Code', monospace !important;
 }
 
 ::-webkit-scrollbar {
@@ -34,23 +44,55 @@ body {
   border-radius: 4px;
 }
 
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
 .card {
-  @apply bg-[#161616] border border-[#222222] rounded-2xl;
+  @apply bg-[#072724] border border-[#0D2E2A] rounded-lg;
+}
+
+.card-elevated {
+  @apply bg-[#0C302C] border border-[#0D2E2A] rounded-lg;
 }
 
 .metric-up {
-  color: #00ff88;
+  color: #34EAB9;
 }
 
 .metric-down {
-  color: #ff3b3b;
+  color: #FF3B5C;
 }
 
-.pulse-green {
-  animation: pulse-green 2s ease-in-out infinite;
+.pulse-accent {
+  animation: pulse-accent 2s ease-in-out infinite;
 }
 
-@keyframes pulse-green {
+@keyframes pulse-accent {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.4; }
+}
+
+.skeleton {
+  @apply bg-[#0C302C] rounded;
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 0.3; }
+}
+
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--accent) !important;
+}
+
+::selection {
+  background: rgba(52, 234, 185, 0.2);
+  color: var(--text);
 }

@@ -6,20 +6,24 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'Helvetica Neue', 'Arial', 'sans-serif'],
+        sans: ['Inter', 'DM Sans', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
+        mono: ['JetBrains Mono', 'IBM Plex Mono', 'Fira Code', 'monospace'],
       },
       colors: {
-        bg: '#0a0a0a',
-        surface: '#111111',
-        card: '#161616',
-        border: '#222222',
-        accent: '#00ff88',
-        danger: '#ff3b3b',
-        muted: '#888888',
+        bg: '#010E0C',
+        surface: '#072724',
+        elevated: '#0C302C',
+        hover: '#0F3D38',
+        border: '#0D2E2A',
+        accent: '#34EAB9',
+        danger: '#FF3B5C',
+        'text-primary': '#F0FAF8',
+        'text-secondary': '#8AADA9',
+        'text-muted': '#4A706C',
       },
       animation: {
-        'fade-in': 'fadeIn 0.3s ease-in-out',
-        'slide-up': 'slideUp 0.3s ease-out',
+        'fade-in': 'fadeIn 0.2s ease-out',
+        'slide-up': 'slideUp 0.2s ease-out',
       },
       keyframes: {
         fadeIn: { from: { opacity: '0' }, to: { opacity: '1' } },

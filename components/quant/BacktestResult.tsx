@@ -15,22 +15,22 @@ export function BacktestResult({ data, totalPnl, winRate, tradeCount, sharpe }: 
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="bg-[#111111] rounded-xl p-3">
-          <p className="text-[#888888] text-xs mb-1">Paper PnL</p>
-          <p className={`font-semibold text-sm ${isPositive ? 'text-[#00ff88]' : 'text-[#ff3b3b]'}`}>
+        <div className="bg-[#072724] rounded p-3">
+          <p className="text-[#8AADA9] text-xs mb-1">Paper PnL</p>
+          <p className={`font-semibold text-sm ${isPositive ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>
             {isPositive ? '+' : ''}${totalPnl.toLocaleString()}
           </p>
         </div>
-        <div className="bg-[#111111] rounded-xl p-3">
-          <p className="text-[#888888] text-xs mb-1">Win Rate</p>
+        <div className="bg-[#072724] rounded p-3">
+          <p className="text-[#8AADA9] text-xs mb-1">Win Rate</p>
           <p className="font-semibold text-sm">{(winRate * 100).toFixed(0)}%</p>
         </div>
-        <div className="bg-[#111111] rounded-xl p-3">
-          <p className="text-[#888888] text-xs mb-1">Trades</p>
+        <div className="bg-[#072724] rounded p-3">
+          <p className="text-[#8AADA9] text-xs mb-1">Trades</p>
           <p className="font-semibold text-sm">{tradeCount}</p>
         </div>
-        <div className="bg-[#111111] rounded-xl p-3">
-          <p className="text-[#888888] text-xs mb-1">Sharpe</p>
+        <div className="bg-[#072724] rounded p-3">
+          <p className="text-[#8AADA9] text-xs mb-1">Sharpe</p>
           <p className="font-semibold text-sm">{sharpe.toFixed(2)}</p>
         </div>
       </div>
@@ -41,17 +41,17 @@ export function BacktestResult({ data, totalPnl, winRate, tradeCount, sharpe }: 
           <AreaChart data={data} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
             <defs>
               <linearGradient id="btGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={isPositive ? '#00ff88' : '#ff3b3b'} stopOpacity={0.3} />
-                <stop offset="100%" stopColor={isPositive ? '#00ff88' : '#ff3b3b'} stopOpacity={0} />
+                <stop offset="0%" stopColor={isPositive ? '#34EAB9' : '#FF3B5C'} stopOpacity={0.3} />
+                <stop offset="100%" stopColor={isPositive ? '#34EAB9' : '#FF3B5C'} stopOpacity={0} />
               </linearGradient>
             </defs>
-            <XAxis dataKey="date" tick={{ fill: '#888888', fontSize: 10 }} axisLine={false} tickLine={false} />
-            <YAxis tick={{ fill: '#888888', fontSize: 10 }} axisLine={false} tickLine={false} />
+            <XAxis dataKey="date" tick={{ fill: '#8AADA9', fontSize: 10 }} axisLine={false} tickLine={false} />
+            <YAxis tick={{ fill: '#8AADA9', fontSize: 10 }} axisLine={false} tickLine={false} />
             <Tooltip
-              contentStyle={{ backgroundColor: '#161616', border: '1px solid #222222', borderRadius: '12px', fontSize: '12px' }}
-              labelStyle={{ color: '#888888' }}
+              contentStyle={{ backgroundColor: '#0C302C', border: '1px solid #0D2E2A', borderRadius: '12px', fontSize: '12px' }}
+              labelStyle={{ color: '#8AADA9' }}
             />
-            <Area type="monotone" dataKey="pnl" stroke={isPositive ? '#00ff88' : '#ff3b3b'} strokeWidth={2} fill="url(#btGradient)" />
+            <Area type="monotone" dataKey="pnl" stroke={isPositive ? '#34EAB9' : '#FF3B5C'} strokeWidth={2} fill="url(#btGradient)" />
           </AreaChart>
         </ResponsiveContainer>
       </div>
