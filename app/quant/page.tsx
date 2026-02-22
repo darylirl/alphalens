@@ -143,7 +143,7 @@ export default function QuantPage() {
                 <div className="card p-3 bg-[#072724]">
                   <div className="flex items-center justify-between text-xs text-[#8AADA9]">
                     <span>{activeCount} active / {savedRules.length} total rules</span>
-                    <span>Paper Portfolio: <span className={savedRules.reduce((s, r) => s + r.paperPnl, 0) >= 0 ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}>
+                    <span>Paper Portfolio: <span className={`font-mono ${savedRules.reduce((s, r) => s + r.paperPnl, 0) >= 0 ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>
                       ${savedRules.reduce((s, r) => s + r.paperPnl, 0).toLocaleString()}
                     </span></span>
                   </div>
@@ -178,10 +178,10 @@ export default function QuantPage() {
                       </div>
                     </div>
                     <div className="flex gap-4 text-xs text-[#8AADA9]">
-                      <span>Paper PnL: <span className={rule.paperPnl >= 0 ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}>
+                      <span>Paper PnL: <span className={`font-mono ${rule.paperPnl >= 0 ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>
                         {rule.paperPnl >= 0 ? '+' : ''}${rule.paperPnl.toLocaleString()}
                       </span></span>
-                      <span>Triggers: {rule.triggerCount}</span>
+                      <span>Triggers: <span className="font-mono">{rule.triggerCount}</span></span>
                       <span>{rule.isActive ? 'Running' : 'Paused'}</span>
                     </div>
                     <div className="mt-2 text-xs text-[#4A706C]">

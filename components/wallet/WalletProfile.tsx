@@ -36,7 +36,7 @@ export function WalletProfile({ detail, analytics, dailyPnl }: WalletProfileProp
         <div className="flex items-start justify-between mb-4">
           <div>
             <p className="font-mono text-sm text-[#8AADA9] mb-1">{shortAddr}</p>
-            <p className="text-2xl font-bold">${accountValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+            <p className="font-mono text-2xl font-bold">${accountValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
             <p className="text-xs text-[#8AADA9] mt-1">Account Value</p>
           </div>
           <ArchetypeBadge type={analytics.archetype} />
@@ -53,15 +53,15 @@ export function WalletProfile({ detail, analytics, dailyPnl }: WalletProfileProp
       <div className="grid grid-cols-3 gap-3">
         <div className="card p-3 text-center">
           <p className="text-xs text-[#8AADA9] mb-1">Sharpe 7d</p>
-          <p className="font-semibold">{analytics.sharpe7d.toFixed(2)}</p>
+          <p className="font-mono font-semibold">{analytics.sharpe7d.toFixed(2)}</p>
         </div>
         <div className="card p-3 text-center">
           <p className="text-xs text-[#8AADA9] mb-1">Sharpe 90d</p>
-          <p className="font-semibold">{analytics.sharpe90d.toFixed(2)}</p>
+          <p className="font-mono font-semibold">{analytics.sharpe90d.toFixed(2)}</p>
         </div>
         <div className="card p-3 text-center">
           <p className="text-xs text-[#8AADA9] mb-1">Trades</p>
-          <p className="font-semibold">{analytics.tradeCount}</p>
+          <p className="font-mono font-semibold">{analytics.tradeCount}</p>
         </div>
       </div>
 
@@ -98,7 +98,7 @@ function MetricBox({ label, value, positive }: { label: string; value: string; p
   return (
     <div className="bg-[#072724] rounded p-3">
       <p className="text-[#8AADA9] text-xs mb-1">{label}</p>
-      <p className={`font-semibold text-sm ${colorClass}`}>{value}</p>
+      <p className={`font-mono font-semibold text-sm ${colorClass}`}>{value}</p>
     </div>
   )
 }

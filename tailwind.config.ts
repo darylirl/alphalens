@@ -6,8 +6,9 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Inter', 'DM Sans', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
-        mono: ['JetBrains Mono', 'IBM Plex Mono', 'Fira Code', 'monospace'],
+        sans: ['Inter', 'system-ui', 'Segoe UI', 'Roboto', 'Ubuntu', 'Helvetica Neue', 'sans-serif'],
+        display: ['Teodor', 'Georgia', 'Garamond', 'serif'],
+        mono: ['JetBrains Mono', 'IBM Plex Mono', 'monospace'],
       },
       colors: {
         bg: '#010E0C',

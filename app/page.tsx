@@ -68,7 +68,7 @@ export default function LandingPage() {
             initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, ease: [0.25, 0.4, 0.25, 1] }}
-            className="text-4xl md:text-6xl lg:text-7xl font-bold tracking-tight leading-[1.1] mb-6"
+            className="font-display text-4xl md:text-6xl lg:text-7xl font-bold tracking-tight leading-[1.1] mb-6"
           >
             <span className="text-[#F0FAF8]">Intelligence layer for</span>
             <br />
@@ -192,7 +192,7 @@ export default function LandingPage() {
                 variants={fadeUp}
                 className={i % 2 !== 0 ? 'lg:col-start-2' : ''}
               >
-                <h2 className="text-2xl md:text-3xl font-bold tracking-tight mb-4 text-[#F0FAF8]">
+                <h2 className="font-display text-2xl md:text-3xl font-bold tracking-tight mb-4 text-[#F0FAF8]">
                   {f.title}
                 </h2>
                 <p className="text-[#8AADA9] leading-relaxed text-sm md:text-base">
@@ -335,7 +335,7 @@ export default function LandingPage() {
                 className="bg-[#0C302C] border border-[#0D2E2A] rounded-lg p-6"
               >
                 <p className="font-mono text-[11px] text-[#34EAB9] mb-3">{s.num}</p>
-                <h3 className="font-bold text-[#F0FAF8] mb-2">{s.title}</h3>
+                <h3 className="font-display font-bold text-[#F0FAF8] mb-2">{s.title}</h3>
                 <p className="text-sm text-[#8AADA9] leading-relaxed">{s.desc}</p>
               </motion.div>
             ))}
@@ -352,7 +352,7 @@ export default function LandingPage() {
             viewport={{ once: true }}
             variants={fadeUp}
             custom={0}
-            className="text-3xl md:text-4xl font-bold tracking-tight text-[#F0FAF8] mb-8"
+            className="font-display text-3xl md:text-4xl font-bold tracking-tight text-[#F0FAF8] mb-8"
           >
             Stop guessing. Start seeing.
           </motion.h2>

@@ -17,21 +17,21 @@ export function BacktestResult({ data, totalPnl, winRate, tradeCount, sharpe }: 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div className="bg-[#072724] rounded p-3">
           <p className="text-[#8AADA9] text-xs mb-1">Paper PnL</p>
-          <p className={`font-semibold text-sm ${isPositive ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>
+          <p className={`font-mono font-semibold text-sm ${isPositive ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>
             {isPositive ? '+' : ''}${totalPnl.toLocaleString()}
           </p>
         </div>
         <div className="bg-[#072724] rounded p-3">
           <p className="text-[#8AADA9] text-xs mb-1">Win Rate</p>
-          <p className="font-semibold text-sm">{(winRate * 100).toFixed(0)}%</p>
+          <p className="font-mono font-semibold text-sm">{(winRate * 100).toFixed(0)}%</p>
         </div>
         <div className="bg-[#072724] rounded p-3">
           <p className="text-[#8AADA9] text-xs mb-1">Trades</p>
-          <p className="font-semibold text-sm">{tradeCount}</p>
+          <p className="font-mono font-semibold text-sm">{tradeCount}</p>
         </div>
         <div className="bg-[#072724] rounded p-3">
           <p className="text-[#8AADA9] text-xs mb-1">Sharpe</p>
-          <p className="font-semibold text-sm">{sharpe.toFixed(2)}</p>
+          <p className="font-mono font-semibold text-sm">{sharpe.toFixed(2)}</p>
         </div>
       </div>
 

@@ -130,10 +130,10 @@ export function PositionHeatmap({ positions }: { positions: AssetPosition[] }) {
                       >
                         {cell.pnl >= 0 ? '+' : ''}{formatPnl(cell.pnl)}
                       </span>
-                      <span className="text-[#F0FAF8]/60 drop-shadow-sm" style={{ fontSize: r.w > 28 ? '9px' : '7px' }}>
+                      <span className="font-mono text-[#F0FAF8]/60 drop-shadow-sm" style={{ fontSize: r.w > 28 ? '9px' : '7px' }}>
                         {isLong ? 'LONG' : 'SHORT'} {cell.leverage}x
                       </span>
-                      <span className="text-[#F0FAF8]/40" style={{ fontSize: '7px' }}>
+                      <span className="font-mono text-[#F0FAF8]/40" style={{ fontSize: '7px' }}>
                         {cell.pctOfTotal.toFixed(0)}% of portfolio
                       </span>
                     </div>
@@ -183,12 +183,12 @@ export function PositionHeatmap({ positions }: { positions: AssetPosition[] }) {
             <div>
               <p className="text-[10px] text-[#4A706C]">Side</p>
               <p className={`font-semibold ${hoveredCell.szi > 0 ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>
-                {hoveredCell.szi > 0 ? 'Long' : 'Short'} {hoveredCell.leverage}x
+                {hoveredCell.szi > 0 ? 'Long' : 'Short'} <span className="font-mono">{hoveredCell.leverage}x</span>
               </p>
             </div>
             <div>
               <p className="text-[10px] text-[#4A706C]">Size</p>
-              <p className="font-semibold">{formatNotional(hoveredCell.size)}</p>
+              <p className="font-mono font-semibold">{formatNotional(hoveredCell.size)}</p>
             </div>
             <div>
               <p className="text-[10px] text-[#4A706C]">Entry</p>
@@ -196,13 +196,13 @@ export function PositionHeatmap({ positions }: { positions: AssetPosition[] }) {
             </div>
             <div>
               <p className="text-[10px] text-[#4A706C]">uPnL</p>
-              <p className={`font-bold ${hoveredCell.pnl >= 0 ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>
+              <p className={`font-mono font-bold ${hoveredCell.pnl >= 0 ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>
                 {hoveredCell.pnl >= 0 ? '+' : ''}{formatPnl(hoveredCell.pnl)}
               </p>
             </div>
             <div>
               <p className="text-[10px] text-[#4A706C]">ROE</p>
-              <p className={`font-bold ${hoveredCell.roe >= 0 ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>
+              <p className={`font-mono font-bold ${hoveredCell.roe >= 0 ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>
                 {hoveredCell.roe >= 0 ? '+' : ''}{hoveredCell.roe.toFixed(1)}%
               </p>
             </div>

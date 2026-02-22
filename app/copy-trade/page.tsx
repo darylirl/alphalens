@@ -200,8 +200,8 @@ export default function CopyTradePage() {
                   </button>
                 </div>
                 <div className="flex gap-4 text-xs text-[#8AADA9]">
-                  <span>Ratio: <span className="text-[#F0FAF8]">{c.ratio}%</span></span>
-                  <span>Max: <span className="text-[#F0FAF8]">${c.max_position_size.toLocaleString()}</span></span>
+                  <span>Ratio: <span className="font-mono text-[#F0FAF8]">{c.ratio}%</span></span>
+                  <span>Max: <span className="font-mono text-[#F0FAF8]">${c.max_position_size.toLocaleString()}</span></span>
                   <span>Status: <span className={c.enabled ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}>{c.enabled ? 'Active' : 'Paused'}</span></span>
                 </div>
               </motion.div>

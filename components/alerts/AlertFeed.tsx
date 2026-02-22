@@ -66,12 +66,12 @@ export function AlertFeed({ alerts, loading }: AlertFeedProps) {
                     <span className={isLong ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}>{isLong ? 'Long' : 'Short'}</span>
                     {' '}{alert.asset}
                   </p>
-                  <p className="text-xs text-[#8AADA9] mt-0.5">
+                  <p className="font-mono text-xs text-[#8AADA9] mt-0.5">
                     ${alert.size.toLocaleString()} @ ${alert.price.toLocaleString()} ({alert.leverage}x)
                   </p>
                 </div>
               </div>
-              <span className="text-xs text-[#8AADA9]">{timeStr}</span>
+              <span className="font-mono text-xs text-[#8AADA9]">{timeStr}</span>
             </div>
           </motion.div>
         )

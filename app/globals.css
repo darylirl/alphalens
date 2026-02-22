@@ -2,7 +2,32 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+/* Teodor — self-hosted serif display typeface (Displaay Type Foundry) */
+/* Place font files in /public/fonts/ and uncomment:
+@font-face {
+  font-family: 'Teodor';
+  src: url('/fonts/Teodor-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Teodor';
+  src: url('/fonts/Teodor-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Teodor';
+  src: url('/fonts/Teodor-Light.woff2') format('woff2');
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+*/
 
 :root {
   --bg: #010E0C;
@@ -24,11 +49,15 @@
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: 'Inter', 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: 'Inter', system-ui, 'Segoe UI', Roboto, Ubuntu, 'Helvetica Neue', sans-serif;
 }
 
 .font-mono {
-  font-family: 'JetBrains Mono', 'IBM Plex Mono', 'Fira Code', monospace !important;
+  font-family: 'JetBrains Mono', 'IBM Plex Mono', monospace !important;
+}
+
+.font-display {
+  font-family: 'Teodor', Georgia, Garamond, serif;
 }
 
 ::-webkit-scrollbar {

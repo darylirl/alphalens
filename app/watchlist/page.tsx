@@ -153,19 +153,19 @@ export default function WatchlistPage() {
             <div className="grid grid-cols-3 gap-3">
               <div>
                 <p className="text-[#8AADA9] text-xs mb-1">Total PnL</p>
-                <p className="font-semibold text-sm text-[#34EAB9]">
+                <p className="font-mono font-semibold text-sm text-[#34EAB9]">
                   ${currentList.wallets.reduce((s, w) => s + w.totalPnl, 0).toLocaleString()}
                 </p>
               </div>
               <div>
                 <p className="text-[#8AADA9] text-xs mb-1">Avg Win Rate</p>
-                <p className="font-semibold text-sm">
+                <p className="font-mono font-semibold text-sm">
                   {(currentList.wallets.reduce((s, w) => s + w.winRate, 0) / currentList.wallets.length * 100).toFixed(0)}%
                 </p>
               </div>
               <div>
                 <p className="text-[#8AADA9] text-xs mb-1">Wallets</p>
-                <p className="font-semibold text-sm">{currentList.wallets.length}</p>
+                <p className="font-mono font-semibold text-sm">{currentList.wallets.length}</p>
               </div>
             </div>
           </div>

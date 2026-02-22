@@ -32,7 +32,7 @@ function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="bg-[#072724] rounded p-2.5">
       <p className="text-[#8AADA9] text-xs mb-0.5">{label}</p>
-      <p className="font-semibold text-sm">{value}</p>
+      <p className="font-mono font-semibold text-sm">{value}</p>
     </div>
   )
 }

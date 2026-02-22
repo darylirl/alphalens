@@ -127,14 +127,14 @@ export default function DashboardPage() {
               <Activity size={14} className="text-[#34EAB9]" />
               <span className="text-xs text-[#8AADA9]">24h Volume</span>
             </div>
-            <p className="font-semibold text-sm">${(marketStats.totalVolume / 1e9).toFixed(2)}B</p>
+            <p className="font-mono font-semibold text-sm">${(marketStats.totalVolume / 1e9).toFixed(2)}B</p>
           </motion.div>
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="card p-3">
             <div className="flex items-center gap-2 mb-2">
               <TrendingUp size={14} className="text-[#34EAB9]" />
               <span className="text-xs text-[#8AADA9]">Open Interest</span>
             </div>
-            <p className="font-semibold text-sm">${(marketStats.openInterest / 1e9).toFixed(2)}B</p>
+            <p className="font-mono font-semibold text-sm">${(marketStats.openInterest / 1e9).toFixed(2)}B</p>
           </motion.div>
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="card p-3">
             <div className="flex items-center gap-2 mb-2">
@@ -143,7 +143,7 @@ export default function DashboardPage() {
             </div>
             <p className="font-semibold text-sm">{marketStats.topGainer || '—'}</p>
             {marketStats.topGainerPct > 0 && (
-              <p className="text-[#34EAB9] text-xs">+{marketStats.topGainerPct}%</p>
+              <p className="font-mono text-[#34EAB9] text-xs">+{marketStats.topGainerPct}%</p>
             )}
           </motion.div>
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="card p-3">
@@ -162,7 +162,7 @@ export default function DashboardPage() {
               {marketStats.topGainers.slice(0, 8).map((g: { name: string; change: number }) => (
                 <div key={g.name} className="card p-3 min-w-[100px] flex-shrink-0">
                   <p className="font-semibold text-sm">{g.name}</p>
-                  <p className={`text-xs font-medium ${g.change >= 0 ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>
+                  <p className={`font-mono text-xs font-medium ${g.change >= 0 ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>
                     {g.change >= 0 ? '+' : ''}{g.change}%
                   </p>
                 </div>

@@ -206,7 +206,7 @@ export default function SmartMoneyPage() {
         <div>
           <h2 className="text-lg font-bold mb-1">Smart Money Flow</h2>
           <p className="text-[#8AADA9] text-xs">
-            Live scan of {total > 0 ? total.toLocaleString() : '—'} wallets across {tokens.length} assets.
+            Live scan of <span className="font-mono">{total > 0 ? total.toLocaleString() : '—'}</span> wallets across <span className="font-mono">{tokens.length}</span> assets.
             Confidence scoring powered by consensus, liquidity, participation, and whale alignment.
           </p>
         </div>
@@ -505,8 +505,8 @@ export default function SmartMoneyPage() {
                             {token.price > 0 && (
                               <>
                                 <span>&middot;</span>
-                                <span>${token.price.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
-                                <span className={token.change24h >= 0 ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}>
+                                <span className="font-mono">${token.price.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                                <span className={`font-mono ${token.change24h >= 0 ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>
                                   {token.change24h >= 0 ? '+' : ''}{token.change24h}%
                                 </span>
                               </>
@@ -517,7 +517,7 @@ export default function SmartMoneyPage() {
                       </div>
                       <div className="flex items-center gap-2">
                         <div className="text-right">
-                          <p className={`text-sm font-bold ${pnlColor(token.aggregatePnl)}`}>
+                          <p className={`font-mono text-sm font-bold ${pnlColor(token.aggregatePnl)}`}>
                             {token.aggregatePnl >= 0 ? '+' : ''}{formatUsd(token.aggregatePnl)}
                           </p>
                           <p className="text-[9px] text-[#4A706C]">Agg. uPnL</p>
@@ -529,19 +529,19 @@ export default function SmartMoneyPage() {
                     <div className="grid grid-cols-4 gap-2 text-xs">
                       <div className="bg-[#072724] rounded-lg p-2">
                         <p className="text-[#4A706C] text-[10px] mb-0.5">Long</p>
-                        <p className="text-[#34EAB9] font-semibold">{formatUsd(token.longNotional)}</p>
+                        <p className="font-mono text-[#34EAB9] font-semibold">{formatUsd(token.longNotional)}</p>
                       </div>
                       <div className="bg-[#072724] rounded-lg p-2">
                         <p className="text-[#4A706C] text-[10px] mb-0.5">Short</p>
-                        <p className="text-[#FF3B5C] font-semibold">{formatUsd(token.shortNotional)}</p>
+                        <p className="font-mono text-[#FF3B5C] font-semibold">{formatUsd(token.shortNotional)}</p>
                       </div>
                       <div className="bg-[#072724] rounded-lg p-2">
                         <p className="text-[#4A706C] text-[10px] mb-0.5">L/S Split</p>
-                        <p className="font-semibold">{token.longPct}% / {100 - token.longPct}%</p>
+                        <p className="font-mono font-semibold">{token.longPct}% / {100 - token.longPct}%</p>
                       </div>
                       <div className="bg-[#072724] rounded-lg p-2">
                         <p className="text-[#4A706C] text-[10px] mb-0.5">24h Vol</p>
-                        <p className="font-semibold">{formatUsd(token.volume24h)}</p>
+                        <p className="font-mono font-semibold">{formatUsd(token.volume24h)}</p>
                       </div>
                     </div>
 
@@ -639,7 +639,7 @@ export default function SmartMoneyPage() {
                                         </span>
                                       </td>
                                       <td className="py-2 text-right font-mono">{formatUsd(w.notional)}</td>
-                                      <td className="py-2 text-right">{w.leverage}x</td>
+                                      <td className="py-2 text-right font-mono">{w.leverage}x</td>
                                       <td className={`py-2 text-right font-mono ${pnlColor(w.pnl)}`}>
                                         {w.pnl >= 0 ? '+' : ''}{formatUsd(w.pnl)}
                                       </td>

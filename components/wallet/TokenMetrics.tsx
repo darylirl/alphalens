@@ -91,12 +91,12 @@ export function TokenMetrics({ fills }: { fills: Fill[] }) {
               <td className="py-2.5 text-right font-mono">
                 ${m.volume.toLocaleString(undefined, { maximumFractionDigits: 0 })}
               </td>
-              <td className="py-2.5 text-right">{m.trades.toLocaleString()}</td>
-              <td className="py-2.5 text-right">
+              <td className="py-2.5 text-right font-mono">{m.trades.toLocaleString()}</td>
+              <td className="py-2.5 text-right font-mono">
                 {(m.winRate * 100).toFixed(1)}%
               </td>
-              <td className="py-2.5 text-right text-[#34EAB9]">{m.wins}</td>
-              <td className="py-2.5 text-right text-[#FF3B5C]">{m.losses}</td>
+              <td className="py-2.5 text-right font-mono text-[#34EAB9]">{m.wins}</td>
+              <td className="py-2.5 text-right font-mono text-[#FF3B5C]">{m.losses}</td>
               <td className="py-2.5 text-right font-mono text-[#34EAB9]">
                 ${m.avgWin.toFixed(2)}
               </td>
