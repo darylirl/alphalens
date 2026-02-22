@@ -2,7 +2,7 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useState } from 'react'
-import { Home, Crosshair, Star, Zap, Bell, Search, DollarSign, Copy, Wallet } from 'lucide-react'
+import { Home, Crosshair, Star, Zap, Bell, Search, DollarSign, Copy, Wallet, HelpCircle } from 'lucide-react'
 import { useWallet } from '@/lib/wallet/WalletContext'
 
 const navItems = [
@@ -13,6 +13,7 @@ const navItems = [
   { href: '/watchlist', icon: Star, label: 'Watchlist' },
   { href: '/quant', icon: Zap, label: 'Pocket Quant' },
   { href: '/alerts', icon: Bell, label: 'Alerts' },
+  { href: '/learn', icon: HelpCircle, label: 'Learn' },
 ]
 
 export function Sidebar({ className = '' }: { className?: string }) {
