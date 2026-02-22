@@ -1,14 +1,14 @@
 'use client'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Home, Crosshair, Star, Zap, Bell } from 'lucide-react'
+import { Home, Crosshair, DollarSign, Copy, Zap } from 'lucide-react'
 
 const tabs = [
   { href: '/dashboard', icon: Home, label: 'Home' },
   { href: '/hunters', icon: Crosshair, label: 'Hunt' },
-  { href: '/watchlist', icon: Star, label: 'Watch' },
+  { href: '/smart-money', icon: DollarSign, label: 'Smart $' },
+  { href: '/copy-trade', icon: Copy, label: 'Copy' },
   { href: '/quant', icon: Zap, label: 'Quant' },
-  { href: '/alerts', icon: Bell, label: 'Alerts' },
 ]
 
 export function BottomNav({ className = '' }: { className?: string }) {

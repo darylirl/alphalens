@@ -1,9 +1,11 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { TopBar } from '@/components/layout/TopBar'
-import { FilterPanel } from '@/components/hunting/FilterPanel'
+import { FilterPanel, type AdvancedFilters } from '@/components/hunting/FilterPanel'
 import { HunterLeaderboard } from '@/components/hunting/HunterLeaderboard'
 import type { WalletAnalytics } from '@/lib/hyperliquid/types'
+
+const DEFAULT_FILTERS: AdvancedFilters = { minTrades: '', minWinRate: '', minPnl: '', maxLeverage: '', timeWindow: '30' }
 
 export default function HuntersPage() {
   const [wallets, setWallets] = useState<WalletAnalytics[]>([])
@@ -11,20 +13,23 @@ export default function HuntersPage() {
   const [seeding, setSeeding] = useState(false)
   const [archetype, setArchetype] = useState('all')
   const [sort, setSort] = useState('sharpe_30d')
+  const [advancedFilters, setAdvancedFilters] = useState<AdvancedFilters>(DEFAULT_FILTERS)
 
   useEffect(() => {
     async function load() {
       setLoading(true)
       try {
         const params = new URLSearchParams({ archetype, sort, limit: '50' })
+        if (advancedFilters.minTrades) params.set('minTrades', advancedFilters.minTrades)
+        if (advancedFilters.minWinRate) params.set('minWinRate', advancedFilters.minWinRate)
+        if (advancedFilters.minPnl) params.set('minPnl', advancedFilters.minPnl)
+        if (advancedFilters.maxLeverage) params.set('maxLeverage', advancedFilters.maxLeverage)
         const res = await fetch(`/api/hunters?${params}`)
         if (res.ok) {
           const data = await res.json()
-          // Handle auto-seed response
           if (data.seeding) {
             setSeeding(true)
             setWallets([])
-            // Retry after 30 seconds
             setTimeout(() => { setSeeding(false); load() }, 30000)
             return
           }
@@ -53,15 +58,15 @@ export default function HuntersPage() {
       }
     }
     load()
-  }, [archetype, sort])
+  }, [archetype, sort, advancedFilters])
 
   return (
     <div>
-      <TopBar title="Alpha Hunters" />
+      <TopBar title="Alpha Hunting" />
       <div className="px-4 py-4 lg:px-6 space-y-4">
         <div>
           <h2 className="text-lg font-bold mb-1">Alpha Hunting Engine</h2>
-          <p className="text-[#888888] text-xs">Discover top-performing wallets ranked by behavior, not just PnL</p>
+          <p className="text-[#888888] text-xs">Discover high-performing wallets with advanced filtering including drawdown analysis, trade size metrics, and current account balances</p>
         </div>
 
         <FilterPanel
@@ -69,6 +74,8 @@ export default function HuntersPage() {
           sort={sort}
           onArchetypeChange={setArchetype}
           onSortChange={setSort}
+          advancedFilters={advancedFilters}
+          onAdvancedFiltersChange={setAdvancedFilters}
         />
 
         {seeding ? (

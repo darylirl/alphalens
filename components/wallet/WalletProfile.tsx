@@ -4,6 +4,7 @@ import { ArchetypeBadge } from './ArchetypeBadge'
 import { AlphaDecayMeter } from './AlphaDecayMeter'
 import { PositionTable } from './PositionTable'
 import { PnLChart } from './PnLChart'
+import { TokenMetrics } from './TokenMetrics'
 import type { WalletDetail } from '@/lib/hyperliquid/types'
 import type { DailyPnl } from '@/lib/analytics/pnl'
 
@@ -76,6 +77,11 @@ export function WalletProfile({ detail, analytics, dailyPnl }: WalletProfileProp
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="card p-4">
         <h3 className="text-sm font-semibold mb-3">Open Positions</h3>
         <PositionTable positions={detail.state.assetPositions} />
+      </motion.div>
+
+      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }} className="card p-4">
+        <h3 className="text-sm font-semibold mb-3">Token Metrics</h3>
+        <TokenMetrics fills={detail.fills} />
       </motion.div>
     </div>
   )

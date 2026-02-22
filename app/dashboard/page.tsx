@@ -2,16 +2,19 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { TopBar } from '@/components/layout/TopBar'
 import { WalletCard } from '@/components/wallet/WalletCard'
 import { SkeletonCard } from '@/components/ui/SkeletonCard'
 import { PulseIndicator } from '@/components/ui/PulseIndicator'
-import { Crosshair, TrendingUp, Activity, Zap } from 'lucide-react'
+import { Crosshair, TrendingUp, Activity, Zap, Search, Copy, DollarSign } from 'lucide-react'
 import type { WalletAnalytics } from '@/lib/hyperliquid/types'
 
 export default function DashboardPage() {
+  const router = useRouter()
   const [topWallets, setTopWallets] = useState<WalletAnalytics[]>([])
   const [loading, setLoading] = useState(true)
+  const [walletQuery, setWalletQuery] = useState('')
   const [marketStats, setMarketStats] = useState({ totalVolume: 0, openInterest: 0, topGainer: '', topGainerPct: 0, topGainers: [] as Array<{ name: string; change: number }> })
 
   useEffect(() => {
@@ -80,6 +83,27 @@ export default function DashboardPage() {
             </div>
             <PulseIndicator />
           </div>
+        </motion.div>
+
+        {/* Wallet Search Bar */}
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.02 }}>
+          <form onSubmit={e => { e.preventDefault(); if (walletQuery.startsWith('0x') && walletQuery.length >= 10) { router.push(`/wallet/${walletQuery}`); setWalletQuery('') } }} className="flex gap-2">
+            <div className="flex-1 flex items-center gap-2 bg-[#111111] border border-[#222222] rounded-xl px-3 py-2.5">
+              <Search size={16} className="text-[#888888] flex-shrink-0" />
+              <input
+                value={walletQuery}
+                onChange={e => setWalletQuery(e.target.value)}
+                placeholder="Enter Hyperliquid Wallet Address"
+                className="bg-transparent text-sm outline-none flex-1 placeholder:text-[#888888]"
+              />
+            </div>
+            <button
+              type="submit"
+              className="bg-[#00ff88] text-black text-sm font-semibold px-4 rounded-xl hover:bg-[#00dd77] transition-colors"
+            >
+              Analyse
+            </button>
+          </form>
         </motion.div>
 
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -169,14 +193,22 @@ export default function DashboardPage() {
 
         <div className="card p-4">
           <h3 className="font-semibold text-sm mb-2">Quick Actions</h3>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <Link href="/hunters" className="bg-[#111111] rounded-xl p-3 text-center hover:bg-[#1a1a1a] transition-colors">
               <Crosshair size={18} className="mx-auto mb-1 text-[#00ff88]" />
               <span className="text-xs">Hunt Alpha</span>
             </Link>
+            <Link href="/smart-money" className="bg-[#111111] rounded-xl p-3 text-center hover:bg-[#1a1a1a] transition-colors">
+              <DollarSign size={18} className="mx-auto mb-1 text-[#00ff88]" />
+              <span className="text-xs">Smart Money</span>
+            </Link>
+            <Link href="/copy-trade" className="bg-[#111111] rounded-xl p-3 text-center hover:bg-[#1a1a1a] transition-colors">
+              <Copy size={18} className="mx-auto mb-1 text-[#00ff88]" />
+              <span className="text-xs">Copy Trade</span>
+            </Link>
             <Link href="/quant" className="bg-[#111111] rounded-xl p-3 text-center hover:bg-[#1a1a1a] transition-colors">
               <Zap size={18} className="mx-auto mb-1 text-[#00ff88]" />
-              <span className="text-xs">Build Strategy</span>
+              <span className="text-xs">Pocket Quant</span>
             </Link>
           </div>
         </div>

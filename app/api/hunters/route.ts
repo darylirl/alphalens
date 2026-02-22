@@ -9,6 +9,12 @@ export async function GET(req: Request) {
   const archetype = searchParams.get('archetype')
   const sort = searchParams.get('sort') || 'sharpe_30d'
 
+  // Advanced filters
+  const minTrades = searchParams.get('minTrades')
+  const minWinRate = searchParams.get('minWinRate')
+  const minPnl = searchParams.get('minPnl')
+  const maxLeverage = searchParams.get('maxLeverage')
+
   try {
     const supabaseUrl = process.env.SUPABASE_URL
     const supabaseKey = process.env.SUPABASE_ANON_KEY
@@ -27,6 +33,20 @@ export async function GET(req: Request) {
         query = query.eq('archetype', archetype)
       }
 
+      // Apply advanced filters
+      if (minTrades) {
+        query = query.gte('trade_count_30d', parseInt(minTrades))
+      }
+      if (minWinRate) {
+        query = query.gte('win_rate', parseFloat(minWinRate) / 100)
+      }
+      if (minPnl) {
+        query = query.gte('total_pnl_usd', parseFloat(minPnl))
+      }
+      if (maxLeverage) {
+        query = query.lte('avg_leverage', parseFloat(maxLeverage))
+      }
+
       const { data, error } = await query
 
       if (error) {
@@ -34,7 +54,7 @@ export async function GET(req: Request) {
       }
 
       // Auto-seed: if table is empty, trigger seed in the background
-      if ((!data || data.length === 0) && !seedTriggered) {
+      if ((!data || data.length === 0) && !seedTriggered && !minTrades && !minWinRate && !minPnl && !maxLeverage) {
         seedTriggered = true
         const baseUrl = process.env.NEXT_PUBLIC_APP_URL || new URL(req.url).origin
         fetch(`${baseUrl}/api/seed`, { method: 'POST' }).catch(() => {})
