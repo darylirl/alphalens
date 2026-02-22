@@ -46,37 +46,14 @@ export default function DashboardPage() {
 
     async function loadMarket() {
       try {
-        const res = await fetch('https://api.hyperliquid.xyz/info', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ type: 'metaAndAssetCtxs' })
-        })
+        const res = await fetch('/api/market')
         if (res.ok) {
           const data = await res.json()
-          const ctxs = data[1] || data?.assetCtxs || []
-          const universe = data[0]?.universe || data?.meta?.universe || []
-          let totalVol = 0
-          let totalOI = 0
-          let topPct = 0
-          let topName = ''
-          ctxs.forEach((ctx: Record<string, string>, i: number) => {
-            totalVol += parseFloat(ctx.dayNtlVlm || '0')
-            totalOI += parseFloat(ctx.openInterest || '0') * parseFloat(ctx.markPx || '0')
-            const prevPx = parseFloat(ctx.prevDayPx || '0')
-            const markPx = parseFloat(ctx.markPx || '0')
-            if (prevPx > 0) {
-              const change = ((markPx - prevPx) / prevPx) * 100
-              if (change > topPct) {
-                topPct = change
-                topName = universe[i]?.name || `Asset ${i}`
-              }
-            }
-          })
           setMarketStats({
-            totalVolume: Math.round(totalVol),
-            openInterest: Math.round(totalOI),
-            topGainer: topName,
-            topGainerPct: Math.round(topPct * 100) / 100
+            totalVolume: data.totalVolume || 0,
+            openInterest: data.openInterest || 0,
+            topGainer: data.topGainer || '',
+            topGainerPct: data.topGainerPct || 0
           })
         }
       } catch {

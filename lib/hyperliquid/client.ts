@@ -30,12 +30,19 @@ export async function getClearinghouseState(address: string): Promise<Clearingho
   return post({ type: 'clearinghouseState', user: address })
 }
 
-export async function getUserFills(address: string): Promise<Fill[]> {
-  return post({ type: 'userFills', user: address })
+export async function getUserFills(address: string, startTime?: number): Promise<Fill[]> {
+  const st = startTime || Date.now() - 90 * 24 * 60 * 60 * 1000
+  try {
+    return await post({ type: 'userFillsByTime', user: address, startTime: st, aggregateByTime: false })
+  } catch {
+    // Fallback to legacy endpoint
+    return post({ type: 'userFills', user: address })
+  }
 }
 
-export async function getUserFundings(address: string): Promise<UserFunding[]> {
-  return post({ type: 'userFundings', user: address })
+export async function getUserFundings(address: string, startTime?: number): Promise<UserFunding[]> {
+  const st = startTime || Date.now() - 90 * 24 * 60 * 60 * 1000
+  return post({ type: 'userFundings', user: address, startTime: st })
 }
 
 export async function getOpenOrders(address: string): Promise<OpenOrder[]> {
