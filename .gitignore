@@ -33,6 +33,10 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# temp files
+*.pdf
+deck-page-*.jpg
+
 # python
 __pycache__/
 *.py[cod]
