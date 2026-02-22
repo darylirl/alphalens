@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server'
 
+// Track if we've already triggered a seed in this instance
+let seedTriggered = false
+
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
   const limit = parseInt(searchParams.get('limit') || '50')
@@ -7,7 +10,6 @@ export async function GET(req: Request) {
   const sort = searchParams.get('sort') || 'sharpe_30d'
 
   try {
-    // Query Supabase for seeded wallets
     const supabaseUrl = process.env.SUPABASE_URL
     const supabaseKey = process.env.SUPABASE_ANON_KEY
 
@@ -29,6 +31,14 @@ export async function GET(req: Request) {
 
       if (error) {
         return NextResponse.json({ error: error.message, hint: 'Check RLS policies' }, { status: 500 })
+      }
+
+      // Auto-seed: if table is empty, trigger seed in the background
+      if ((!data || data.length === 0) && !seedTriggered) {
+        seedTriggered = true
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || new URL(req.url).origin
+        fetch(`${baseUrl}/api/seed`, { method: 'POST' }).catch(() => {})
+        return NextResponse.json({ seeding: true, message: 'Discovering wallets from Hyperliquid... Refresh in ~30 seconds.' })
       }
 
       return NextResponse.json(data || [])

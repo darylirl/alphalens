@@ -17,7 +17,22 @@ async function hlPost(payload: Record<string, unknown>) {
   return res.json()
 }
 
+// Also support GET for Vercel cron jobs
+export async function GET(req: Request) {
+  // Verify cron secret if set (optional security)
+  const authHeader = req.headers.get('authorization')
+  const cronSecret = process.env.CRON_SECRET
+  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+  return runSeed()
+}
+
 export async function POST() {
+  return runSeed()
+}
+
+async function runSeed() {
   const supabaseUrl = process.env.SUPABASE_URL
   const supabaseKey = process.env.SUPABASE_ANON_KEY
 

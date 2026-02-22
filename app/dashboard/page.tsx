@@ -12,7 +12,7 @@ import type { WalletAnalytics } from '@/lib/hyperliquid/types'
 export default function DashboardPage() {
   const [topWallets, setTopWallets] = useState<WalletAnalytics[]>([])
   const [loading, setLoading] = useState(true)
-  const [marketStats, setMarketStats] = useState({ totalVolume: 0, openInterest: 0, topGainer: '', topGainerPct: 0 })
+  const [marketStats, setMarketStats] = useState({ totalVolume: 0, openInterest: 0, topGainer: '', topGainerPct: 0, topGainers: [] as Array<{ name: string; change: number }> })
 
   useEffect(() => {
     async function load() {
@@ -53,7 +53,8 @@ export default function DashboardPage() {
             totalVolume: data.totalVolume || 0,
             openInterest: data.openInterest || 0,
             topGainer: data.topGainer || '',
-            topGainerPct: data.topGainerPct || 0
+            topGainerPct: data.topGainerPct || 0,
+            topGainers: data.topGainers || []
           })
         }
       } catch {
@@ -114,6 +115,22 @@ export default function DashboardPage() {
             <p className="font-semibold text-sm">{topWallets.length > 0 ? `${topWallets.length}+` : '—'} wallets</p>
           </motion.div>
         </div>
+
+        {marketStats.topGainers.length > 0 && (
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
+            <h3 className="font-semibold text-sm mb-3">Top Movers (24h)</h3>
+            <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1">
+              {marketStats.topGainers.slice(0, 8).map((g: { name: string; change: number }) => (
+                <div key={g.name} className="card p-3 min-w-[100px] flex-shrink-0">
+                  <p className="font-semibold text-sm">{g.name}</p>
+                  <p className={`text-xs font-medium ${g.change >= 0 ? 'text-[#00ff88]' : 'text-[#ff3b3b]'}`}>
+                    {g.change >= 0 ? '+' : ''}{g.change}%
+                  </p>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        )}
 
         <div>
           <div className="flex items-center justify-between mb-3">

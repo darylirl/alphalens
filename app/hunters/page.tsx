@@ -8,6 +8,7 @@ import type { WalletAnalytics } from '@/lib/hyperliquid/types'
 export default function HuntersPage() {
   const [wallets, setWallets] = useState<WalletAnalytics[]>([])
   const [loading, setLoading] = useState(true)
+  const [seeding, setSeeding] = useState(false)
   const [archetype, setArchetype] = useState('all')
   const [sort, setSort] = useState('sharpe_30d')
 
@@ -19,6 +20,15 @@ export default function HuntersPage() {
         const res = await fetch(`/api/hunters?${params}`)
         if (res.ok) {
           const data = await res.json()
+          // Handle auto-seed response
+          if (data.seeding) {
+            setSeeding(true)
+            setWallets([])
+            // Retry after 30 seconds
+            setTimeout(() => { setSeeding(false); load() }, 30000)
+            return
+          }
+          setSeeding(false)
           setWallets(Array.isArray(data) ? data.map((w: Record<string, unknown>) => ({
             address: w.address as string,
             label: w.label as string | undefined,
@@ -61,7 +71,15 @@ export default function HuntersPage() {
           onSortChange={setSort}
         />
 
-        <HunterLeaderboard wallets={wallets} loading={loading} />
+        {seeding ? (
+          <div className="text-center py-12">
+            <div className="inline-block w-8 h-8 border-2 border-[#00ff88] border-t-transparent rounded-full animate-spin mb-4" />
+            <p className="text-[#888888] text-sm">Discovering wallets from Hyperliquid...</p>
+            <p className="text-[#666666] text-xs mt-1">This takes ~30 seconds on first load</p>
+          </div>
+        ) : (
+          <HunterLeaderboard wallets={wallets} loading={loading} />
+        )}
       </div>
     </div>
   )
