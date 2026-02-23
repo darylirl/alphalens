@@ -6,6 +6,7 @@ import { PositionTable } from './PositionTable'
 import { PositionHeatmap } from './PositionHeatmap'
 import { PnLChart } from './PnLChart'
 import { TokenMetrics } from './TokenMetrics'
+import { StrategySummary } from './StrategySummary'
 import type { WalletDetail } from '@/lib/hyperliquid/types'
 import type { DailyPnl } from '@/lib/analytics/pnl'
 
@@ -64,6 +65,13 @@ export function WalletProfile({ detail, analytics, dailyPnl }: WalletProfileProp
           <p className="font-mono font-semibold">{analytics.tradeCount}</p>
         </div>
       </div>
+
+      <StrategySummary
+        fills={detail.fills}
+        state={detail.state}
+        address={detail.address}
+        analytics={analytics}
+      />
 
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="card p-4">
         <h3 className="text-sm font-semibold mb-1">Alpha Decay</h3>

@@ -3,7 +3,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useState } from 'react'
-import { Home, Crosshair, Star, Zap, Bell, Search, DollarSign, Copy, Wallet, HelpCircle, Settings } from 'lucide-react'
+import { Home, Crosshair, Star, Zap, Bell, Search, DollarSign, Copy, Wallet, HelpCircle, BarChart3 } from 'lucide-react'
 import { useWallet } from '@/lib/wallet/WalletContext'
 
 const navItems = [
@@ -13,6 +13,7 @@ const navItems = [
   { href: '/copy-trade', icon: Copy, label: 'Copy Trade' },
   { href: '/watchlist', icon: Star, label: 'Watchlist' },
   { href: '/quant', icon: Zap, label: 'My Strategies' },
+  { href: '/performance', icon: BarChart3, label: 'Performance' },
   { href: '/alerts', icon: Bell, label: 'Alerts' },
   { href: '/learn', icon: HelpCircle, label: 'Learn' },
 ]

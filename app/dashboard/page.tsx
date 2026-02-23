@@ -6,7 +6,10 @@ import { useRouter } from 'next/navigation'
 import { WalletCard } from '@/components/wallet/WalletCard'
 import { SkeletonCard } from '@/components/ui/SkeletonCard'
 import { PulseIndicator } from '@/components/ui/PulseIndicator'
-import { Crosshair, TrendingUp, Activity, Zap, Search, Copy, DollarSign } from 'lucide-react'
+import { ActiveSignalsFeed, type Signal } from '@/components/signals/ActiveSignalsFeed'
+import { ConsensusAlerts, type ConsensusAlert } from '@/components/signals/ConsensusAlerts'
+import { OnboardingModal } from '@/components/onboarding/OnboardingModal'
+import { Crosshair, TrendingUp, Activity, Zap, Search, Copy, DollarSign, BarChart3, Bell, Users } from 'lucide-react'
 import { MarketHeatmap } from '@/components/market/MarketHeatmap'
 import type { WalletAnalytics } from '@/lib/hyperliquid/types'
 
@@ -16,6 +19,8 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [walletQuery, setWalletQuery] = useState('')
   const [searchError, setSearchError] = useState('')
+  const [signals, setSignals] = useState<Signal[]>([])
+  const [consensusAlerts, setConsensusAlerts] = useState<ConsensusAlert[]>([])
   const [marketStats, setMarketStats] = useState({ totalVolume: 0, openInterest: 0, topGainer: '', topGainerPct: 0, topGainers: [] as Array<{ name: string; change: number }>, heatmapAssets: [] as Array<{ name: string; change: number; volume: number; price: number; oi: number }> })
 
   useEffect(() => {
@@ -67,12 +72,27 @@ export default function DashboardPage() {
       }
     }
 
+    async function loadSignals() {
+      try {
+        const res = await fetch('/api/signals')
+        if (res.ok) {
+          const data = await res.json()
+          setSignals(data.signals || [])
+          setConsensusAlerts(data.consensus || [])
+        }
+      } catch {
+        // Signals not yet available
+      }
+    }
+
     load()
     loadMarket()
+    loadSignals()
   }, [])
 
   return (
     <div>
+      <OnboardingModal />
       <div className="px-4 py-4 lg:px-6 space-y-6">
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
           <div className="flex items-center justify-between mb-4">
@@ -88,7 +108,6 @@ export default function DashboardPage() {
             setSearchError('')
             const q = walletQuery.trim()
             if (!q) { setSearchError('Enter a wallet address'); return }
-            // Auto-prepend 0x if missing
             const addr = q.startsWith('0x') ? q : `0x${q}`
             if (addr.length < 10) { setSearchError('Address too short'); return }
             if (!/^0x[a-fA-F0-9]+$/.test(addr)) { setSearchError('Invalid address format'); return }
@@ -150,15 +169,39 @@ export default function DashboardPage() {
           </motion.div>
         </div>
 
+        {/* Active Signals Feed */}
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.22 }}>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Activity size={14} className="text-[#34EAB9]" />
+              <h3 className="font-semibold text-sm">Active Signals</h3>
+            </div>
+            <Link href="/alerts" className="text-[#34EAB9] text-xs font-medium">View All</Link>
+          </div>
+          <ActiveSignalsFeed signals={signals} compact />
+        </motion.div>
+
+        {/* Consensus Alerts */}
+        {consensusAlerts.length > 0 && (
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.24 }}>
+            <div className="flex items-center gap-2 mb-3">
+              <Users size={14} className="text-[#34EAB9]" />
+              <h3 className="font-semibold text-sm">Consensus Alerts</h3>
+              <span className="text-[10px] text-white/40">3+ wallets aligned</span>
+            </div>
+            <ConsensusAlerts alerts={consensusAlerts} />
+          </motion.div>
+        )}
+
         {marketStats.heatmapAssets.length > 0 && (
-          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.22 }}>
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.26 }}>
             <h3 className="font-semibold text-sm mb-3">Market Heatmap</h3>
             <MarketHeatmap assets={marketStats.heatmapAssets} />
           </motion.div>
         )}
 
         {marketStats.topGainers.length > 0 && (
-          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.28 }}>
             <h3 className="font-semibold text-sm mb-3">Top Movers (24h)</h3>
             <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1">
               {marketStats.topGainers.slice(0, 8).map((g: { name: string; change: number }) => (
@@ -210,7 +253,7 @@ export default function DashboardPage() {
 
         <div className="card p-4">
           <h3 className="font-semibold text-sm mb-2">Quick Actions</h3>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
             <Link href="/hunters" className="bg-[#0F1A1E] rounded p-3 text-center hover:bg-white/[0.06] transition-colors">
               <Crosshair size={18} className="mx-auto mb-1 text-[#34EAB9]" />
               <span className="text-xs">Hunt Alpha</span>
@@ -226,6 +269,10 @@ export default function DashboardPage() {
             <Link href="/quant" className="bg-[#0F1A1E] rounded p-3 text-center hover:bg-white/[0.06] transition-colors">
               <Zap size={18} className="mx-auto mb-1 text-[#34EAB9]" />
               <span className="text-xs">Pocket Quant</span>
+            </Link>
+            <Link href="/performance" className="bg-[#0F1A1E] rounded p-3 text-center hover:bg-white/[0.06] transition-colors">
+              <BarChart3 size={18} className="mx-auto mb-1 text-[#34EAB9]" />
+              <span className="text-xs">Performance</span>
             </Link>
           </div>
         </div>
