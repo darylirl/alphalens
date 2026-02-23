@@ -1,7 +1,8 @@
 'use client'
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ChevronDown, Crosshair, DollarSign, Copy, Zap, BarChart3, Users, TrendingUp, Shield, Target, Activity, Layers } from 'lucide-react'
+import Link from 'next/link'
+import { ChevronDown, Crosshair, DollarSign, Copy, Zap, BarChart3, Users, TrendingUp, Shield, Target, Activity, Layers, ArrowRight } from 'lucide-react'
 
 interface SectionProps {
   id: string
@@ -42,11 +43,19 @@ function Section({ id, icon, title, children, defaultOpen = false }: SectionProp
   )
 }
 
-function Term({ name, children }: { name: string; children: React.ReactNode }) {
+function Term({ name, children, explorerType }: { name: string; children: React.ReactNode; explorerType?: string }) {
   return (
     <div className="bg-[#0F1A1E] rounded p-4 border border-white/[0.08]">
       <p className="text-[#F0FAF8] font-medium mb-1.5">{name}</p>
       <p className="text-white/55 text-xs leading-relaxed">{children}</p>
+      {explorerType && (
+        <Link
+          href={`/hunters?type=${encodeURIComponent(explorerType)}`}
+          className="inline-flex items-center gap-1 mt-2 text-[11px] text-[#34EAB9] font-medium hover:underline"
+        >
+          See top {name}s <ArrowRight size={10} />
+        </Link>
+      )}
     </div>
   )
 }
@@ -83,42 +92,42 @@ export default function LearnPage() {
         </p>
 
         <div className="grid gap-3">
-          <Term name="Scalper">
+          <Term name="Scalper" explorerType="Scalper">
             High-frequency traders who open and close positions rapidly, typically within minutes.
             They use high leverage ({'>'}10x) and trade very frequently ({'>'}50 trades in a window).
             Scalpers profit from small price movements and rely on volume.
             <div className="mt-2"><Badge color="#34EAB9" label="Scalper" /></div>
           </Term>
 
-          <Term name="Swing Trader">
+          <Term name="Swing Trader" explorerType="Swing Trader">
             Medium-term traders who hold positions for hours to days, using moderate leverage (3-10x).
             They aim to capture larger price swings and typically make 10-50 trades per window.
             Swing traders often time entries around key support/resistance levels.
             <div className="mt-2"><Badge color="rgba(255,255,255,0.55)" label="Swing" /></div>
           </Term>
 
-          <Term name="Momentum Trader">
+          <Term name="Momentum Trader" explorerType="Momentum Trader">
             Traders who follow strong price trends. They enter when momentum is building and ride
             the wave. Typically hold for less than a day with above-average leverage. They are
             characterized by positive average PnL per trade.
             <div className="mt-2"><Badge color="#34EAB9" label="Momentum" /></div>
           </Term>
 
-          <Term name="High Conviction">
+          <Term name="High Conviction" explorerType="High Conviction">
             Traders who place fewer but larger bets. They make under 20 trades with average
             position sizes above $10,000 and low leverage (under 5x). These traders do deep
             research and put significant capital behind their ideas.
             <div className="mt-2"><Badge color="#34EAB9" label="High Conv." /></div>
           </Term>
 
-          <Term name="Funding Arb">
+          <Term name="Funding Arb" explorerType="Funding Arb">
             Traders who exploit funding rate differences. They keep positions open with low
             leverage and low PnL variance, steadily collecting funding payments.
             Typically low trade frequency with consistent small gains.
             <div className="mt-2"><Badge color="rgba(255,255,255,0.55)" label="Funding Arb" /></div>
           </Term>
 
-          <Term name="Farmer (Delta-Neutral)">
+          <Term name="Farmer" explorerType="Farmer (Delta-Neutral)">
             Sophisticated traders who hold simultaneous long AND short positions across different
             assets to stay market-neutral (net exposure under 20% of total notional). They farm
             funding rates by being on the paying side of high-funding markets. Key signals: both-side
@@ -126,7 +135,7 @@ export default function LearnPage() {
             <div className="mt-2"><Badge color="#30d158" label="Farmer" /></div>
           </Term>
 
-          <Term name="Market Maker">
+          <Term name="Market Maker" explorerType="Market Maker">
             High-frequency traders who provide liquidity by placing both buy and sell orders on
             the same coins. They profit from the bid-ask spread. Key signals: two-sided trading
             on 2+ coins, 100+ trades, hold times under 5 minutes, and very tight PnL distribution.

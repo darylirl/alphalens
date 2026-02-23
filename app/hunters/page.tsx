@@ -1,16 +1,42 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { FilterPanel, type AdvancedFilters } from '@/components/hunting/FilterPanel'
 import { HunterLeaderboard } from '@/components/hunting/HunterLeaderboard'
 import type { WalletAnalytics } from '@/lib/hyperliquid/types'
 
 const DEFAULT_FILTERS: AdvancedFilters = { minTrades: '', minWinRate: '', minPnl: '', maxLeverage: '', timeWindow: '30' }
 
+// Map query param values to archetype filter values
+const ARCHETYPE_MAP: Record<string, string> = {
+  'scalper': 'scalper',
+  'swing trader': 'swing_trader',
+  'momentum trader': 'momentum_trader',
+  'momentum': 'momentum_trader',
+  'high conviction': 'high_conviction',
+  'funding arb': 'funding_arb',
+  'farmer (delta-neutral)': 'farmer',
+  'farmer': 'farmer',
+  'market maker': 'market_maker',
+}
+
 export default function HuntersPage() {
+  return (
+    <Suspense fallback={<div className="px-4 py-8 text-center text-white/55 text-sm">Loading...</div>}>
+      <HuntersContent />
+    </Suspense>
+  )
+}
+
+function HuntersContent() {
+  const searchParams = useSearchParams()
+  const typeParam = searchParams.get('type') || ''
+  const initialArchetype = typeParam ? (ARCHETYPE_MAP[typeParam.toLowerCase()] || 'all') : 'all'
+
   const [wallets, setWallets] = useState<WalletAnalytics[]>([])
   const [loading, setLoading] = useState(true)
   const [seeding, setSeeding] = useState(false)
-  const [archetype, setArchetype] = useState('all')
+  const [archetype, setArchetype] = useState(initialArchetype)
   const [sort, setSort] = useState('sharpe_30d')
   const [advancedFilters, setAdvancedFilters] = useState<AdvancedFilters>(DEFAULT_FILTERS)
 
