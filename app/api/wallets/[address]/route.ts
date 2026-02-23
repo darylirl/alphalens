@@ -18,9 +18,28 @@ async function hlPost(payload: Record<string, unknown>) {
 }
 
 async function fetchFills(address: string, startTime: number) {
-  // Try new endpoint first, fall back to legacy
-  const data = await hlPost({ type: 'userFillsByTime', user: address, startTime, aggregateByTime: false })
-  if (Array.isArray(data)) return data
+  const allFills: Array<Record<string, unknown>> = []
+  let cursor = startTime
+  const MAX_PAGES = 50 // safety limit
+
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const data = await hlPost({ type: 'userFillsByTime', user: address, startTime: cursor, aggregateByTime: false })
+    if (!Array.isArray(data) || data.length === 0) break
+
+    allFills.push(...data)
+
+    // If fewer than ~2000 results, we've reached the end
+    if (data.length < 2000) break
+
+    // Paginate: use the last fill's timestamp + 1ms as next startTime
+    const lastTime = (data[data.length - 1] as { time: number }).time
+    if (lastTime <= cursor) break // no progress, avoid infinite loop
+    cursor = lastTime + 1
+  }
+
+  if (allFills.length > 0) return allFills
+
+  // Fallback to legacy endpoint if new endpoint returned nothing
   const legacy = await hlPost({ type: 'userFills', user: address })
   if (Array.isArray(legacy)) return legacy
   return []
@@ -33,7 +52,8 @@ export async function GET(req: Request, { params }: { params: { address: string 
   }
 
   try {
-    const startTime = Date.now() - 90 * 24 * 60 * 60 * 1000
+    // Fetch all-time data from wallet creation (Hyperliquid launched late 2023)
+    const startTime = new Date('2023-01-01').getTime()
 
     const [state, fills, fundings] = await Promise.all([
       hlPost({ type: 'clearinghouseState', user: address }),

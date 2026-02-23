@@ -31,7 +31,7 @@ export async function getClearinghouseState(address: string): Promise<Clearingho
 }
 
 export async function getUserFills(address: string, startTime?: number): Promise<Fill[]> {
-  const st = startTime || Date.now() - 90 * 24 * 60 * 60 * 1000
+  const st = startTime || new Date('2023-01-01').getTime()
   try {
     return await post({ type: 'userFillsByTime', user: address, startTime: st, aggregateByTime: false })
   } catch {
@@ -41,7 +41,7 @@ export async function getUserFills(address: string, startTime?: number): Promise
 }
 
 export async function getUserFundings(address: string, startTime?: number): Promise<UserFunding[]> {
-  const st = startTime || Date.now() - 90 * 24 * 60 * 60 * 1000
+  const st = startTime || new Date('2023-01-01').getTime()
   return post({ type: 'userFundings', user: address, startTime: st })
 }
 
