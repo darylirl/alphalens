@@ -7,7 +7,9 @@ import { TopBar } from '@/components/layout/TopBar'
 import { WalletCard } from '@/components/wallet/WalletCard'
 import { SkeletonCard } from '@/components/ui/SkeletonCard'
 import { PulseIndicator } from '@/components/ui/PulseIndicator'
+import Image from 'next/image'
 import { Crosshair, TrendingUp, Activity, Zap, Search, Copy, DollarSign } from 'lucide-react'
+import { MarketHeatmap } from '@/components/market/MarketHeatmap'
 import type { WalletAnalytics } from '@/lib/hyperliquid/types'
 
 export default function DashboardPage() {
@@ -16,7 +18,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [walletQuery, setWalletQuery] = useState('')
   const [searchError, setSearchError] = useState('')
-  const [marketStats, setMarketStats] = useState({ totalVolume: 0, openInterest: 0, topGainer: '', topGainerPct: 0, topGainers: [] as Array<{ name: string; change: number }> })
+  const [marketStats, setMarketStats] = useState({ totalVolume: 0, openInterest: 0, topGainer: '', topGainerPct: 0, topGainers: [] as Array<{ name: string; change: number }>, heatmapAssets: [] as Array<{ name: string; change: number; volume: number; price: number; oi: number }> })
 
   useEffect(() => {
     async function load() {
@@ -58,7 +60,8 @@ export default function DashboardPage() {
             openInterest: data.openInterest || 0,
             topGainer: data.topGainer || '',
             topGainerPct: data.topGainerPct || 0,
-            topGainers: data.topGainers || []
+            topGainers: data.topGainers || [],
+            heatmapAssets: data.heatmapAssets || [],
           })
         }
       } catch {
@@ -77,10 +80,8 @@ export default function DashboardPage() {
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="text-xl font-bold">
-                <span className="text-[#34EAB9]">Alpha</span> Lens
-              </h2>
-              <p className="text-white/55 text-xs mt-0.5">Hyperliquid Trader Intelligence</p>
+              <Image src="/logo.png" alt="AlphaLens" width={160} height={40} className="h-8 w-auto" />
+              <p className="text-white/55 text-xs mt-1">Hyperliquid Trader Intelligence</p>
             </div>
             <PulseIndicator />
           </div>
@@ -154,6 +155,13 @@ export default function DashboardPage() {
             <p className="font-semibold text-sm">{topWallets.length > 0 ? `${topWallets.length}+` : '—'} wallets</p>
           </motion.div>
         </div>
+
+        {marketStats.heatmapAssets.length > 0 && (
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.22 }}>
+            <h3 className="font-semibold text-sm mb-3">Market Heatmap</h3>
+            <MarketHeatmap assets={marketStats.heatmapAssets} />
+          </motion.div>
+        )}
 
         {marketStats.topGainers.length > 0 && (
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>

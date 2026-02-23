@@ -26,7 +26,7 @@ export async function GET() {
     let openInterest = 0
     let topGainer = ''
     let topGainerPct = 0
-    const gainers: Array<{ name: string; change: number; price: number; volume: number }> = []
+    const gainers: Array<{ name: string; change: number; price: number; volume: number; oi: number }> = []
 
     assetCtxs.forEach((ctx: Record<string, string>, i: number) => {
       const vol = parseFloat(ctx.dayNtlVlm || '0')
@@ -40,7 +40,7 @@ export async function GET() {
       if (prevPx > 0) {
         const change = ((markPx - prevPx) / prevPx) * 100
         const name = universe[i]?.name || `Asset ${i}`
-        gainers.push({ name, change: Math.round(change * 100) / 100, price: markPx, volume: vol })
+        gainers.push({ name, change: Math.round(change * 100) / 100, price: markPx, volume: vol, oi: Math.round(oi) })
         if (change > topGainerPct) {
           topGainerPct = change
           topGainer = name
@@ -50,12 +50,16 @@ export async function GET() {
 
     gainers.sort((a, b) => b.change - a.change)
 
+    // All assets sorted by volume for heatmap (volume = weighting metric)
+    const heatmapAssets = [...gainers].sort((a, b) => b.volume - a.volume)
+
     return NextResponse.json({
       totalVolume: Math.round(totalVolume),
       openInterest: Math.round(openInterest),
       topGainer,
       topGainerPct: Math.round(topGainerPct * 100) / 100,
       topGainers: gainers.slice(0, 10),
+      heatmapAssets,
       totalAssets: universe.length,
     })
   } catch {
