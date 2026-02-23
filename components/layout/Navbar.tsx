@@ -47,17 +47,37 @@ export function Navbar() {
         }}
       >
         <div className="flex items-center justify-between h-14 md:h-16">
-          {/* Desktop: full logo lockup */}
-          <Link href="/" className="hidden md:flex items-center" style={{ paddingLeft: '24px' }}>
-            <Image src="/logo.png" alt="Alpha Lens" width={220} height={44} className="h-11 w-auto" />
-          </Link>
+          {/* Left: logo + nav links together */}
+          <div className="hidden md:flex items-center gap-8" style={{ paddingLeft: '24px' }}>
+            <Link href="/" className="flex items-center shrink-0">
+              <Image src="/logo.png" alt="Alpha Lens" width={220} height={44} className="h-11 w-auto" />
+            </Link>
+            {!isLanding && navLinks.map(({ href, label }) => {
+              const active = path.startsWith(href)
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  className="text-sm transition-colors duration-150 ease-out whitespace-nowrap"
+                  style={{
+                    fontFamily: 'Inter, sans-serif',
+                    fontWeight: 400,
+                    color: active ? '#34EAB9' : '#8AADA9',
+                  }}
+                  onMouseEnter={e => { if (!active) (e.target as HTMLElement).style.color = '#F0FAF8' }}
+                  onMouseLeave={e => { if (!active) (e.target as HTMLElement).style.color = '#8AADA9' }}
+                >
+                  {label}
+                </Link>
+              )
+            })}
+          </div>
 
           {/* Mobile left side */}
           <div className="flex md:hidden items-center" style={{ paddingLeft: '16px' }}>
             <Link href="/">
               <Image src="/favicon.png" alt="AlphaLens" width={36} height={36} className="h-9 w-9" />
             </Link>
-            {/* Hamburger — only on app pages */}
             {!isLanding && (
               <button
                 onClick={toggleDrawer}
@@ -80,34 +100,8 @@ export function Navbar() {
             )}
           </div>
 
-          {/* Right side */}
+          {/* Right: CTA only */}
           <div className="flex items-center" style={{ paddingRight: '24px' }}>
-            {/* Desktop nav links — only on app pages */}
-            {!isLanding && (
-              <div className="hidden md:flex items-center gap-8 mr-8">
-                {navLinks.map(({ href, label }) => {
-                  const active = path.startsWith(href)
-                  return (
-                    <Link
-                      key={href}
-                      href={href}
-                      className="text-sm transition-colors duration-150 ease-out"
-                      style={{
-                        fontFamily: 'Inter, sans-serif',
-                        fontWeight: 400,
-                        color: active ? '#34EAB9' : '#8AADA9',
-                      }}
-                      onMouseEnter={e => { if (!active) (e.target as HTMLElement).style.color = '#F0FAF8' }}
-                      onMouseLeave={e => { if (!active) (e.target as HTMLElement).style.color = '#8AADA9' }}
-                    >
-                      {label}
-                    </Link>
-                  )
-                })}
-              </div>
-            )}
-
-            {/* CTA button — desktop */}
             <Link
               href="/dashboard"
               className="hidden md:inline-block text-sm font-medium transition-all duration-150 ease-out"
@@ -130,8 +124,6 @@ export function Navbar() {
             >
               Launch App
             </Link>
-
-            {/* CTA button — mobile (landing only, or always visible) */}
             {isLanding && (
               <Link
                 href="/dashboard"
