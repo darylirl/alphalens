@@ -55,9 +55,7 @@ export default function LandingPage() {
             transition={{ duration: 0.6, ease: [0.25, 0.4, 0.25, 1] }}
             className="font-display italic font-normal text-4xl md:text-6xl lg:text-[84px] lg:leading-[92px] tracking-tight mb-6 text-white"
           >
-            The smart money is already moving.
-            <br />
-            Are you watching?
+            Trading Intelligence for Hyperliquid Traders.
           </motion.h1>
 
           <motion.p
