@@ -165,12 +165,15 @@ export function MarketHeatmap({ assets, minThresholdPct = 2.5 }: Props) {
             const block = blocks[i]
             const color = block.type === 'others' ? COLOR_NEUTRAL : getBlockColor(block.change)
             const isHovered = hoveredIdx === i
-            // Size labels based on block dimensions
+            // Size labels based on block dimensions — enforce minimum readable sizes
             const blockW = r.w
             const blockH = r.h
-            const showTicker = blockW > 6 && blockH > 5
-            const showChange = blockW > 10 && blockH > 9
+            const showTicker = blockW > 4 && blockH > 4
+            const showChange = blockW > 8 && blockH > 8
             const showVolume = blockW > 16 && blockH > 14
+            // Minimum font sizes for readability
+            const tickerFontSize = blockW > 25 ? '14px' : blockW > 15 ? '12px' : '11px'
+            const changeFontSize = blockW > 25 ? '12px' : blockW > 15 ? '11px' : '10px'
 
             return (
               <div
@@ -198,7 +201,7 @@ export function MarketHeatmap({ assets, minThresholdPct = 2.5 }: Props) {
                   {showTicker && (
                     <span
                       className="font-bold text-white leading-none"
-                      style={{ fontSize: blockW > 20 ? '13px' : '10px' }}
+                      style={{ fontSize: tickerFontSize }}
                     >
                       {block.name}
                     </span>
@@ -207,7 +210,7 @@ export function MarketHeatmap({ assets, minThresholdPct = 2.5 }: Props) {
                     <span
                       className="font-mono font-semibold leading-none mt-0.5"
                       style={{
-                        fontSize: blockW > 20 ? '11px' : '9px',
+                        fontSize: changeFontSize,
                         color: '#fff',
                       }}
                     >
@@ -217,7 +220,7 @@ export function MarketHeatmap({ assets, minThresholdPct = 2.5 }: Props) {
                   {showVolume && (
                     <span
                       className="font-mono text-white/50 leading-none mt-0.5"
-                      style={{ fontSize: '8px' }}
+                      style={{ fontSize: '9px' }}
                     >
                       {formatVolume(block.volume)}
                     </span>
@@ -266,27 +269,36 @@ export function MarketHeatmap({ assets, minThresholdPct = 2.5 }: Props) {
               ))}
             </div>
           ) : (
-            /* Individual asset tooltip */
+            /* Individual asset tooltip — always shows name, 24h change, and 24h volume */
             <div
               className="px-3 py-2"
               style={{
                 background: BG,
                 border: '1px solid rgba(255,255,255,0.08)',
                 borderRadius: 0,
-                minWidth: '160px',
+                minWidth: '180px',
               }}
             >
               <p className="text-white text-xs font-semibold">{hoveredBlock.name}</p>
-              <p
-                className="font-mono text-[11px] font-semibold mt-0.5"
-                style={{ color: hoveredBlock.change > 0.5 ? COLOR_POS : hoveredBlock.change < -0.5 ? COLOR_NEG : 'rgba(255,255,255,0.55)' }}
-              >
-                {hoveredBlock.change >= 0 ? '+' : ''}{hoveredBlock.change.toFixed(2)}%
-              </p>
-              <div className="flex items-center gap-3 mt-1 text-white/50 font-mono text-[10px]">
-                <span>Vol {formatVolume(hoveredBlock.volume)}</span>
-                <span>{formatPrice(hoveredBlock.price)}</span>
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-[10px] text-white/40">24h Change</span>
+                <span
+                  className="font-mono text-[11px] font-semibold"
+                  style={{ color: hoveredBlock.change > 0.5 ? COLOR_POS : hoveredBlock.change < -0.5 ? COLOR_NEG : 'rgba(255,255,255,0.55)' }}
+                >
+                  {hoveredBlock.change >= 0 ? '+' : ''}{hoveredBlock.change.toFixed(2)}%
+                </span>
               </div>
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className="text-[10px] text-white/40">24h Volume</span>
+                <span className="font-mono text-[11px] text-white/70">{formatVolume(hoveredBlock.volume)}</span>
+              </div>
+              {hoveredBlock.price > 0 && (
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="text-[10px] text-white/40">Price</span>
+                  <span className="font-mono text-[11px] text-white/70">{formatPrice(hoveredBlock.price)}</span>
+                </div>
+              )}
             </div>
           )}
         </div>
