@@ -49,13 +49,13 @@ export function Navbar() {
         <div className="flex items-center justify-between h-14 md:h-16">
           {/* Desktop: full logo lockup */}
           <Link href="/" className="hidden md:flex items-center" style={{ paddingLeft: '24px' }}>
-            <Image src="/logo.png" alt="Alpha Lens" width={160} height={32} className="h-8 w-auto" />
+            <Image src="/logo.png" alt="Alpha Lens" width={220} height={44} className="h-11 w-auto" />
           </Link>
 
           {/* Mobile left side */}
           <div className="flex md:hidden items-center" style={{ paddingLeft: '16px' }}>
             <Link href="/">
-              <Image src="/favicon.png" alt="AlphaLens" width={28} height={28} className="h-7 w-7" />
+              <Image src="/favicon.png" alt="AlphaLens" width={36} height={36} className="h-9 w-9" />
             </Link>
             {/* Hamburger — only on app pages */}
             {!isLanding && (
@@ -187,7 +187,7 @@ export function Navbar() {
               style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}
             >
               <Link href="/" className="flex items-center" onClick={closeDrawer}>
-                <Image src="/logo.png" alt="Alpha Lens" width={160} height={32} className="h-8 w-auto" />
+                <Image src="/logo.png" alt="Alpha Lens" width={220} height={44} className="h-11 w-auto" />
               </Link>
               <button
                 onClick={closeDrawer}
