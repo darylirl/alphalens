@@ -44,7 +44,7 @@ export default function LandingPage() {
       {/* Nav */}
       <nav className="fixed top-0 left-0 right-0 z-50 bg-[#0F1A1E]/80 backdrop-blur-xl border-b border-white/[0.08]">
         <div className="max-w-6xl mx-auto flex items-center justify-between px-6 py-4">
-          <Image src="/logo.png" alt="AlphaLens" width={140} height={36} className="h-8 w-auto" />
+          <Image src="/logo.png" alt="AlphaLens" width={210} height={54} className="h-12 w-auto" />
           <Link
             href="/dashboard"
             className="text-sm font-medium px-5 py-2 rounded border border-[#34EAB9] text-[#34EAB9] hover:bg-[#34EAB9] hover:text-[#0F1A1E] transition-all duration-150"

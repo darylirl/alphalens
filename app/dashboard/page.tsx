@@ -7,7 +7,6 @@ import { TopBar } from '@/components/layout/TopBar'
 import { WalletCard } from '@/components/wallet/WalletCard'
 import { SkeletonCard } from '@/components/ui/SkeletonCard'
 import { PulseIndicator } from '@/components/ui/PulseIndicator'
-import Image from 'next/image'
 import { Crosshair, TrendingUp, Activity, Zap, Search, Copy, DollarSign } from 'lucide-react'
 import { MarketHeatmap } from '@/components/market/MarketHeatmap'
 import type { WalletAnalytics } from '@/lib/hyperliquid/types'
@@ -79,10 +78,7 @@ export default function DashboardPage() {
       <div className="px-4 py-4 lg:px-6 space-y-6">
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
           <div className="flex items-center justify-between mb-4">
-            <div>
-              <Image src="/logo.png" alt="AlphaLens" width={160} height={40} className="h-8 w-auto" />
-              <p className="text-white/55 text-xs mt-1">Hyperliquid Trader Intelligence</p>
-            </div>
+            <p className="text-white/55 text-xs">Hyperliquid Trader Intelligence</p>
             <PulseIndicator />
           </div>
         </motion.div>

@@ -37,7 +37,7 @@ export function Sidebar({ className = '' }: { className?: string }) {
     <aside className={`w-64 bg-[#0F1A1E] border-r border-white/[0.08] flex-col ${className}`}>
       <div className="px-5 pt-5 pb-4">
         <Link href="/" className="block">
-          <Image src="/logo.png" alt="AlphaLens" width={140} height={36} className="h-8 w-auto" />
+          <Image src="/logo.png" alt="AlphaLens" width={210} height={54} className="h-12 w-auto" />
         </Link>
       </div>
 
