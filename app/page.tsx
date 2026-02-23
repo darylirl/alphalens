@@ -68,11 +68,11 @@ export default function LandingPage() {
             initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, ease: [0.25, 0.4, 0.25, 1] }}
-            className="font-display text-4xl md:text-6xl lg:text-7xl font-medium tracking-tight leading-[1.1] mb-6"
+            className="font-display italic font-normal text-4xl md:text-6xl lg:text-[84px] lg:leading-[92px] tracking-tight mb-6 text-white"
           >
-            <span className="text-[#F0FAF8]">Intelligence layer for</span>
+            Intelligence layer for
             <br />
-            <span className="text-[#34EAB9]">Hyperliquid traders</span>
+            Hyperliquid traders
           </motion.h1>
 
           <motion.p
