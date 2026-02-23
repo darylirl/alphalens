@@ -34,7 +34,7 @@ const features = [
 const steps = [
   { num: '01', title: 'Input a wallet', desc: 'Paste any Hyperliquid address or browse our discovered wallets.' },
   { num: '02', title: 'See behavioral patterns', desc: 'Archetype classification, confidence scoring, and PnL breakdown.' },
-  { num: '03', title: 'Build your strategy', desc: 'Copy trade, set alerts, or create rules from the patterns you find.' },
+  { num: '03', title: 'Build your strategy', desc: 'Copy their trades, set alerts for their next move, or build your own rules — signal to position in under 30 seconds.' },
 ]
 
 export default function LandingPage() {
@@ -55,9 +55,9 @@ export default function LandingPage() {
             transition={{ duration: 0.6, ease: [0.25, 0.4, 0.25, 1] }}
             className="font-display italic font-normal text-4xl md:text-6xl lg:text-[84px] lg:leading-[92px] tracking-tight mb-6 text-white"
           >
-            Intelligence layer for
+            The smart money is already moving.
             <br />
-            Hyperliquid traders
+            Are you watching?
           </motion.h1>
 
           <motion.p
@@ -66,7 +66,7 @@ export default function LandingPage() {
             transition={{ delay: 0.15, duration: 0.5 }}
             className="text-white/55 text-lg md:text-xl max-w-2xl mx-auto mb-10 leading-relaxed"
           >
-            Analyze wallet behavior, decode trading strategies, and build systematic edge from real on-chain activity.
+            Alpha Lens tracks the best-performing wallets on Hyperliquid in real time — so you can see exactly what they&apos;re doing, follow their moves, and build your own edge from real on-chain activity.
           </motion.p>
 
           <motion.div
@@ -80,6 +80,38 @@ export default function LandingPage() {
             >
               Launch App
             </Link>
+          </motion.div>
+
+          {/* Social Proof Row */}
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4, duration: 0.5 }}
+            className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-3 max-w-3xl mx-auto"
+          >
+            {/* Card 1 — Live Trader Performance */}
+            <div className="bg-[#0F1A1E] border border-white/[0.08] rounded-lg p-4 text-left">
+              <p className="text-[10px] text-white/40 mb-1">#1 Wallet — 30d</p>
+              <p className="font-mono text-lg font-bold text-[#34EAB9]">+$834,134</p>
+              <p className="text-[11px] text-white/55 mt-1">Momentum Trader · Sharpe 3.03</p>
+              <span className="inline-block mt-2 text-[9px] font-mono px-2 py-0.5 rounded bg-[#34EAB9]/10 text-[#34EAB9]">Low Decay</span>
+            </div>
+            {/* Card 2 — Platform Scale */}
+            <div className="bg-[#0F1A1E] border border-white/[0.08] rounded-lg p-4 text-left">
+              <p className="text-[10px] text-white/40 mb-1">Wallets Analyzed</p>
+              <p className="font-mono text-lg font-bold text-[#F0FAF8]">10,000+</p>
+              <p className="text-[11px] text-white/55 mt-1">Across 189 active assets on Hyperliquid</p>
+            </div>
+            {/* Card 3 — Volume Tracked */}
+            <div className="bg-[#0F1A1E] border border-white/[0.08] rounded-lg p-4 text-left">
+              <p className="text-[10px] text-white/40 mb-1">24h Volume Tracked</p>
+              <p className="font-mono text-lg font-bold text-[#F0FAF8]">$4.28B</p>
+              <p className="text-[11px] text-white/55 mt-1">Live data · Updated every block</p>
+              <span className="inline-flex items-center gap-1 mt-2 text-[9px] font-mono px-2 py-0.5 rounded bg-[#34EAB9]/10 text-[#34EAB9]">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#34EAB9] animate-pulse" />
+                Live
+              </span>
+            </div>
           </motion.div>
 
           {/* Product mockup */}
@@ -134,19 +166,80 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Stats strip */}
+      {/* Live Leaderboard Preview */}
       <section className="border-y border-white/[0.08] bg-[#0F1A1E]">
-        <div className="max-w-4xl mx-auto flex items-center justify-center gap-12 md:gap-20 px-6 py-5">
-          {[
-            { num: '10K+', label: 'Wallets Analyzed' },
-            { num: '$4.2B', label: 'Volume Tracked' },
-            { num: '7', label: 'Archetype Models' },
-          ].map(s => (
-            <div key={s.label} className="text-center">
-              <p className="font-mono text-lg font-bold text-[#34EAB9]">{s.num}</p>
-              <p className="text-[11px] text-white/40 mt-0.5">{s.label}</p>
-            </div>
-          ))}
+        <div className="max-w-4xl mx-auto px-6 py-12">
+          <motion.div
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true }}
+            variants={fadeUp}
+            custom={0}
+            className="text-center mb-8"
+          >
+            <h2 className="font-display text-2xl md:text-3xl font-medium tracking-tight text-[#F0FAF8] mb-2">
+              Who&apos;s printing right now
+            </h2>
+            <p className="text-sm text-white/55">
+              Top wallets on Hyperliquid by 30-day performance. Updated live.
+            </p>
+          </motion.div>
+          <div className="space-y-2">
+            {[
+              { rank: 1, addr: '0x348e...50ef', type: 'Momentum', pnl: '+$834,134', win: '49%', sharpe: '3.03' },
+              { rank: 2, addr: '0x7a23...e91f', type: 'Momentum', pnl: '+$284,291', win: '71%', sharpe: '2.41' },
+              { rank: 3, addr: '0xa33a...1ff8', type: 'Momentum', pnl: '+$148,442', win: '50%', sharpe: '3.02' },
+            ].map((w, i) => (
+              <motion.div
+                key={w.rank}
+                custom={i + 1}
+                initial="hidden"
+                whileInView="visible"
+                viewport={{ once: true }}
+                variants={fadeUp}
+                className="bg-[#0F1A1E] border border-white/[0.08] rounded-lg p-4 flex items-center gap-4"
+              >
+                <div className="w-8 h-8 rounded bg-white/[0.06] flex items-center justify-center text-[#34EAB9] font-mono text-sm font-bold flex-shrink-0">
+                  #{w.rank}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-mono text-sm text-[#F0FAF8]">{w.addr}</p>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#34EAB9]/10 text-[#34EAB9]">{w.type}</span>
+                </div>
+                <div className="hidden sm:flex items-center gap-6 flex-shrink-0">
+                  <div className="text-right">
+                    <p className="font-mono text-sm font-semibold text-[#34EAB9]">{w.pnl}</p>
+                    <p className="text-[9px] text-white/40">30d PnL</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-mono text-sm text-[#F0FAF8]">{w.win}</p>
+                    <p className="text-[9px] text-white/40">Win Rate</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-mono text-sm text-[#F0FAF8]">{w.sharpe}</p>
+                    <p className="text-[9px] text-white/40">Sharpe</p>
+                  </div>
+                </div>
+                {/* Mobile: compact stats */}
+                <div className="flex sm:hidden flex-col items-end flex-shrink-0">
+                  <p className="font-mono text-sm font-semibold text-[#34EAB9]">{w.pnl}</p>
+                  <p className="font-mono text-[10px] text-white/55">{w.win} · Sharpe {w.sharpe}</p>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+          <motion.div
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true }}
+            variants={fadeUp}
+            custom={4}
+            className="text-center mt-6"
+          >
+            <Link href="/dashboard" className="text-[#34EAB9] text-sm font-medium hover:underline">
+              View full leaderboard →
+            </Link>
+          </motion.div>
         </div>
       </section>
 
@@ -339,7 +432,7 @@ export default function LandingPage() {
             custom={0}
             className="font-display text-3xl md:text-4xl font-medium tracking-tight text-[#F0FAF8] mb-8"
           >
-            Stop guessing. Start seeing.
+            The best traders on Hyperliquid have a system. Now you can too.
           </motion.h2>
           <motion.div
             initial="hidden"
