@@ -1,6 +1,5 @@
 'use client'
 import { useState } from 'react'
-import { TopBar } from '@/components/layout/TopBar'
 import { OneClickStrategies } from '@/components/quant/OneClickStrategies'
 import { RuleBuilder } from '@/components/quant/RuleBuilder'
 import { BacktestResult } from '@/components/quant/BacktestResult'
@@ -88,7 +87,6 @@ export default function QuantPage() {
 
   return (
     <div>
-      <TopBar title="Pocket Quant" />
       <div className="px-4 py-4 lg:px-6 space-y-4">
         <div>
           <h2 className="text-lg font-bold mb-1">Pocket Quant Builder</h2>

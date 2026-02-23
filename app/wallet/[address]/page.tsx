@@ -1,7 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
-import { TopBar } from '@/components/layout/TopBar'
 import { WalletProfile } from '@/components/wallet/WalletProfile'
 import { SkeletonCard } from '@/components/ui/SkeletonCard'
 import { computeDailyPnl, computeSharpe, computeWinRate, computeTotalPnl, computeMaxDrawdown } from '@/lib/analytics/pnl'
@@ -42,7 +41,6 @@ export default function WalletPage() {
   if (loading) {
     return (
       <div>
-        <TopBar title="Wallet" />
         <div className="px-4 py-4 lg:px-6 space-y-3">
           <SkeletonCard />
           <SkeletonCard />
@@ -55,7 +53,6 @@ export default function WalletPage() {
   if (!detail) {
     return (
       <div>
-        <TopBar title="Wallet" />
         <div className="px-4 py-12 text-center">
           <p className="text-white/55 mb-2">{error || 'Wallet not found or API error'}</p>
           <p className="text-white/40 text-xs font-mono mb-4">{address}</p>
@@ -89,7 +86,6 @@ export default function WalletPage() {
 
   return (
     <div>
-      <TopBar title="Wallet Profile" />
       <div className="px-4 py-4 lg:px-6">
         <div className="flex justify-end mb-3">
           <button className="flex items-center gap-1.5 text-xs text-white/55 hover:text-[#34EAB9] transition-colors">

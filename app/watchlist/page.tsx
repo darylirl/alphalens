@@ -1,6 +1,5 @@
 'use client'
 import { useState } from 'react'
-import { TopBar } from '@/components/layout/TopBar'
 import { WalletCard } from '@/components/wallet/WalletCard'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Star, Plus, X } from 'lucide-react'
@@ -45,7 +44,6 @@ export default function WatchlistPage() {
 
   return (
     <div>
-      <TopBar title="Watchlist" />
       <div className="px-4 py-4 lg:px-6 space-y-4">
         <div className="flex items-center justify-between">
           <div>

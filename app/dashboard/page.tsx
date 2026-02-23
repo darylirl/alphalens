@@ -3,7 +3,6 @@ import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { TopBar } from '@/components/layout/TopBar'
 import { WalletCard } from '@/components/wallet/WalletCard'
 import { SkeletonCard } from '@/components/ui/SkeletonCard'
 import { PulseIndicator } from '@/components/ui/PulseIndicator'
@@ -74,7 +73,6 @@ export default function DashboardPage() {
 
   return (
     <div>
-      <TopBar title="Dashboard" />
       <div className="px-4 py-4 lg:px-6 space-y-6">
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
           <div className="flex items-center justify-between mb-4">

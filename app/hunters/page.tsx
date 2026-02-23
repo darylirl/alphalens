@@ -1,6 +1,5 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { TopBar } from '@/components/layout/TopBar'
 import { FilterPanel, type AdvancedFilters } from '@/components/hunting/FilterPanel'
 import { HunterLeaderboard } from '@/components/hunting/HunterLeaderboard'
 import type { WalletAnalytics } from '@/lib/hyperliquid/types'
@@ -62,7 +61,6 @@ export default function HuntersPage() {
 
   return (
     <div>
-      <TopBar title="Alpha Hunting" />
       <div className="px-4 py-4 lg:px-6 space-y-4">
         <div>
           <h2 className="text-lg font-bold mb-1">Alpha Hunting Engine</h2>

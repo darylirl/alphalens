@@ -1,6 +1,5 @@
 'use client'
 import { useState } from 'react'
-import { TopBar } from '@/components/layout/TopBar'
 import { AlertFeed, AlertItem } from '@/components/alerts/AlertFeed'
 import { AlertConfig } from '@/components/alerts/AlertConfig'
 
@@ -18,7 +17,6 @@ export default function AlertsPage() {
 
   return (
     <div>
-      <TopBar title="Alerts" />
       <div className="px-4 py-4 lg:px-6 space-y-4">
         <div>
           <h2 className="text-lg font-bold mb-1">Alert Center</h2>

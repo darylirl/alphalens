@@ -2,7 +2,6 @@
 import { useEffect, useState, useMemo, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import Link from 'next/link'
-import { TopBar } from '@/components/layout/TopBar'
 import { SkeletonCard } from '@/components/ui/SkeletonCard'
 import { ChevronDown, Eye, Shield, Zap, Users, Clock, ArrowUpRight, ArrowDownRight } from 'lucide-react'
 
@@ -201,7 +200,6 @@ export default function SmartMoneyPage() {
 
   return (
     <div>
-      <TopBar title="Smart Money" />
       <div className="px-4 py-4 lg:px-6 space-y-4">
         <div>
           <h2 className="text-lg font-bold mb-1">Smart Money Flow</h2>

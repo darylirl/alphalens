@@ -2,7 +2,6 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import Link from 'next/link'
-import { TopBar } from '@/components/layout/TopBar'
 import { useWallet } from '@/lib/wallet/WalletContext'
 import { Copy, Wallet, Plus, ToggleLeft, ToggleRight, Trash2, ExternalLink } from 'lucide-react'
 
@@ -74,7 +73,6 @@ export default function CopyTradePage() {
   if (!address) {
     return (
       <div>
-        <TopBar title="Copy Trade" />
         <div className="px-4 py-16 text-center">
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
             <div className="w-16 h-16 mx-auto mb-4 rounded-lg bg-[#0F1A1E] flex items-center justify-center">
@@ -102,7 +100,6 @@ export default function CopyTradePage() {
 
   return (
     <div>
-      <TopBar title="Copy Trade" />
       <div className="px-4 py-4 lg:px-6 space-y-4">
         <div className="flex items-center justify-between">
           <div>

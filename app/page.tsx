@@ -1,6 +1,5 @@
 'use client'
 import { motion } from 'framer-motion'
-import Image from 'next/image'
 import Link from 'next/link'
 
 const fadeUp = {
@@ -41,21 +40,8 @@ const steps = [
 export default function LandingPage() {
   return (
     <div className="min-h-screen bg-[#0F1A1E] overflow-hidden">
-      {/* Nav */}
-      <nav className="fixed top-0 left-0 right-0 z-50 bg-[#0F1A1E]/80 backdrop-blur-xl border-b border-white/[0.08]">
-        <div className="max-w-6xl mx-auto flex items-center justify-between px-6 py-4">
-          <Image src="/logo.png" alt="AlphaLens" width={210} height={54} className="h-12 w-auto" />
-          <Link
-            href="/dashboard"
-            className="text-sm font-medium px-5 py-2 rounded border border-[#34EAB9] text-[#34EAB9] hover:bg-[#34EAB9] hover:text-[#0F1A1E] transition-all duration-150"
-          >
-            Launch App
-          </Link>
-        </div>
-      </nav>
-
       {/* Hero */}
-      <section className="relative pt-32 pb-20 px-6 lg:pt-44 lg:pb-32">
+      <section className="relative pt-16 pb-20 px-6 lg:pt-28 lg:pb-32">
         {/* Ambient bg */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <div className="absolute top-1/4 left-1/4 w-[600px] h-[600px] rounded-full bg-[#0F1A1E] opacity-[0.06] blur-[120px]" />
