@@ -1,8 +1,8 @@
 'use client'
 import { useState } from 'react'
 import { OneClickStrategies } from '@/components/quant/OneClickStrategies'
-import { RuleBuilder } from '@/components/quant/RuleBuilder'
-import { BacktestResult } from '@/components/quant/BacktestResult'
+import { SimpleRuleBuilder } from '@/components/quant/SimpleRuleBuilder'
+import { BacktestResult, type BacktestSignal } from '@/components/quant/BacktestResult'
 import { motion } from 'framer-motion'
 import { Trash2, Pause, Play } from 'lucide-react'
 
@@ -21,14 +21,19 @@ interface SavedRule {
 export default function QuantPage() {
   const [tab, setTab] = useState<Tab>('templates')
   const [savedRules, setSavedRules] = useState<SavedRule[]>([])
-  const [backtestData, setBacktestData] = useState<{ data: Array<{ date: string; pnl: number }>; totalPnl: number; winRate: number; tradeCount: number; sharpe: number } | null>(null)
+  const [backtestData, setBacktestData] = useState<{ strategyName: string; data: Array<{ date: string; pnl: number }>; totalPnl: number; winRate: number; tradeCount: number; sharpe: number; maxDrawdown: number; signals: BacktestSignal[] } | null>(null)
 
   const handleTemplateBacktest = (template: Record<string, unknown>) => {
-    const days = 30
+    const days = 90
     let cumPnl = 0
+    let peak = 0
+    let maxDd = 0
     const data = Array.from({ length: days }, (_, i) => {
       const change = (Math.random() - 0.4) * 500
       cumPnl += change
+      if (cumPnl > peak) peak = cumPnl
+      const dd = peak - cumPnl
+      if (dd > maxDd) maxDd = dd
       return {
         date: new Date(Date.now() - (days - i) * 86400000).toISOString().split('T')[0],
         pnl: Math.round(cumPnl)
@@ -37,13 +42,34 @@ export default function QuantPage() {
     const dailyReturns = data.map((d, i) => i === 0 ? 0 : d.pnl - data[i - 1].pnl)
     const mean = dailyReturns.reduce((s, v) => s + v, 0) / dailyReturns.length
     const std = Math.sqrt(dailyReturns.reduce((s, v) => s + (v - mean) ** 2, 0) / dailyReturns.length) || 1
+    const tradeCount = Math.floor(20 + Math.random() * 60)
+
+    const assets = ['ETH', 'BTC', 'SOL', 'HYPE', 'ARB']
+    const mockSignals: BacktestSignal[] = Array.from({ length: 5 }, (_, i) => {
+      const asset = assets[i % assets.length]
+      const dir: 'Long' | 'Short' = Math.random() > 0.4 ? 'Long' : 'Short'
+      const entry = asset === 'BTC' ? 62000 + Math.round(Math.random() * 5000) : asset === 'ETH' ? 3200 + Math.round(Math.random() * 400) : asset === 'SOL' ? 140 + Math.round(Math.random() * 30) : asset === 'HYPE' ? 25 + Math.round(Math.random() * 8) : 1.2 + Math.round(Math.random() * 0.4 * 100) / 100
+      const pnlAmt = Math.round((Math.random() - 0.35) * 3000)
+      const exit = dir === 'Long' ? entry + entry * (pnlAmt / 50000) : entry - entry * (pnlAmt / 50000)
+      return {
+        date: new Date(Date.now() - (i * 5 + Math.floor(Math.random() * 5)) * 86400000).toISOString().split('T')[0],
+        asset,
+        direction: dir,
+        entry: Math.round(entry * 100) / 100,
+        exit: Math.round(exit * 100) / 100,
+        pnl: pnlAmt,
+      }
+    })
 
     setBacktestData({
+      strategyName: template.name as string || 'Strategy',
       data,
       totalPnl: Math.round(cumPnl),
       winRate: 0.55 + Math.random() * 0.15,
-      tradeCount: Math.floor(20 + Math.random() * 60),
-      sharpe: Math.round((mean / std) * Math.sqrt(365) * 100) / 100
+      tradeCount,
+      sharpe: Math.round((mean / std) * Math.sqrt(365) * 100) / 100,
+      maxDrawdown: Math.round(maxDd),
+      signals: mockSignals,
     })
   }
 
@@ -112,26 +138,25 @@ export default function QuantPage() {
             <OneClickStrategies onSelect={handleTemplateBacktest} onActivate={handleTemplateActivate} />
             {backtestData && (
               <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
-                <h3 className="text-sm font-semibold mb-3">Backtest Preview</h3>
                 <BacktestResult {...backtestData} />
               </motion.div>
             )}
           </div>
         )}
 
-        {tab === 'builder' && <RuleBuilder onSave={handleRuleSave} />}
+        {tab === 'builder' && <SimpleRuleBuilder onSave={handleRuleSave} />}
 
         {tab === 'active' && (
           <div className="space-y-3">
             {savedRules.length === 0 ? (
               <div className="text-center py-12">
-                <p className="text-white/55 text-sm mb-3">No active rules yet</p>
-                <p className="text-white/40 text-xs mb-4">Create a rule from a template or build your own custom strategy</p>
+                <h3 className="text-[#F0FAF8] text-base font-semibold mb-2">No active strategies yet.</h3>
+                <p className="text-white/40 text-sm mb-6">Activate a template or build a custom rule to start receiving signals.</p>
                 <div className="flex gap-3 justify-center">
-                  <button onClick={() => setTab('templates')} className="text-sm font-medium bg-[#34EAB9] text-[#0F1A1E] px-4 py-2 rounded">
+                  <button onClick={() => setTab('templates')} className="text-sm font-semibold bg-[#34EAB9] text-[#0F1A1E] px-5 py-2.5 rounded hover:brightness-110 transition-all">
                     Browse Templates
                   </button>
-                  <button onClick={() => setTab('builder')} className="text-sm font-medium bg-[#0F1A1E] text-white/55 px-4 py-2 rounded border border-white/[0.12]">
+                  <button onClick={() => setTab('builder')} className="text-sm font-medium text-white/55 px-5 py-2.5 rounded border border-white/[0.12] hover:border-white/[0.24] transition-colors">
                     Build Custom
                   </button>
                 </div>
