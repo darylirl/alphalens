@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { useWallet } from '@/lib/wallet/WalletContext'
-import { Copy, Wallet, Plus, ToggleLeft, ToggleRight, ExternalLink, Clock, Shield, ChevronDown } from 'lucide-react'
+import { Copy, Wallet, Plus, ToggleLeft, ToggleRight, ExternalLink, Clock, Shield, ChevronDown, Zap, SlidersHorizontal, BarChart3 } from 'lucide-react'
 
 const ASSET_CATEGORIES = ['All', 'Major', 'AI & Compute', 'Meme', 'DeFi', 'L1 & L2', 'Gaming', 'Infrastructure']
 const DELAY_OPTIONS = [
@@ -141,27 +141,106 @@ function CopyTradeContent() {
   }
 
   if (!address) {
+    const previewWallets = [
+      { addr: '0x348e...50ef', name: 'Apex Momentum', type: 'Momentum', pnl: '+$834,134', win: '49%', sharpe: '3.03' },
+      { addr: '0x7a23...e91f', name: 'Ghost Trader', type: 'Momentum', pnl: '+$284,291', win: '71%', sharpe: '2.41' },
+      { addr: '0xa33a...1ff8', name: 'Whale #2', type: 'Momentum', pnl: '+$148,442', win: '50%', sharpe: '3.02' },
+    ]
+
     return (
       <div>
-        <div className="px-4 py-16 text-center">
-          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
-            <div className="w-16 h-16 mx-auto mb-4 rounded-lg bg-[#0F1A1E] flex items-center justify-center">
-              <Wallet size={28} className="text-[#34EAB9]" />
-            </div>
-            <h2 className="text-lg font-bold mb-2">Connect Your Wallet</h2>
-            <p className="text-white/55 text-sm mb-6 max-w-sm mx-auto">
-              Connect your wallet to copy trade top-performing Hyperliquid traders automatically.
+        <div className="px-4 py-8 lg:px-6 space-y-8">
+          {/* Header & value prop */}
+          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="text-center max-w-lg mx-auto">
+            <h1 className="font-display text-2xl md:text-3xl font-medium tracking-tight text-[#F0FAF8] mb-3">
+              Copy the best. Automatically.
+            </h1>
+            <p className="text-white/55 text-sm leading-relaxed">
+              Mirror the exact trades of top Hyperliquid wallets — with your own risk parameters. Set your allocation ratio, max position size, and asset filters. Alpha Lens handles the rest.
             </p>
+          </motion.div>
+
+          {/* Feature callouts */}
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="space-y-3 max-w-lg mx-auto">
+            <div className="flex items-start gap-3 card p-4">
+              <Zap size={18} className="text-[#34EAB9] flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-semibold text-[#F0FAF8]">Instant mirroring</p>
+                <p className="text-xs text-white/55">Trades copied within seconds of the original</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3 card p-4">
+              <SlidersHorizontal size={18} className="text-[#34EAB9] flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-semibold text-[#F0FAF8]">Full risk control</p>
+                <p className="text-xs text-white/55">Set allocation %, max size, asset filters, and delay window</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3 card p-4">
+              <BarChart3 size={18} className="text-[#34EAB9] flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-semibold text-[#F0FAF8]">Track your edge</p>
+                <p className="text-xs text-white/55">See your copy trading PnL vs the original trader side by side</p>
+              </div>
+            </div>
+          </motion.div>
+
+          {/* Connect wallet CTA */}
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="text-center">
             <button
               onClick={connect}
               disabled={connecting}
-              className="bg-[#34EAB9] text-[#0F1A1E] font-semibold px-6 py-3 rounded text-sm hover:bg-[#2BD4A6] transition-colors disabled:opacity-50"
+              className="bg-[#34EAB9] text-[#0F1A1E] font-semibold px-8 py-3.5 rounded text-sm hover:bg-[#2BD4A6] transition-colors disabled:opacity-50"
             >
               {connecting ? 'Connecting...' : 'Connect Wallet'}
             </button>
-            <p className="text-white/40 text-xs mt-4">
+            <p className="text-white/40 text-xs mt-3">
               Supports MetaMask, WalletConnect, and other EIP-1193 wallets
             </p>
+          </motion.div>
+
+          {/* Top Traders Preview — muted/blurred */}
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
+            <h3 className="font-semibold text-sm mb-3 text-center">Top Traders Available to Copy</h3>
+            <div className="relative">
+              <div className="space-y-2 opacity-60 blur-[1px]">
+                {previewWallets.map((w) => (
+                  <div key={w.addr} className="card p-4 flex items-center gap-4">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-[#F0FAF8]">{w.name}</p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="font-mono text-[10px] text-white/40">{w.addr}</span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#34EAB9]/10 text-[#34EAB9]">{w.type}</span>
+                      </div>
+                    </div>
+                    <div className="hidden sm:flex items-center gap-6 flex-shrink-0">
+                      <div className="text-right">
+                        <p className="font-mono text-sm font-semibold text-[#34EAB9]">{w.pnl}</p>
+                        <p className="text-[9px] text-white/40">30d PnL</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-mono text-sm text-[#F0FAF8]">{w.win}</p>
+                        <p className="text-[9px] text-white/40">Win Rate</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-mono text-sm text-[#F0FAF8]">{w.sharpe}</p>
+                        <p className="text-[9px] text-white/40">Sharpe</p>
+                      </div>
+                    </div>
+                    <div className="flex sm:hidden flex-col items-end flex-shrink-0">
+                      <p className="font-mono text-sm font-semibold text-[#34EAB9]">{w.pnl}</p>
+                      <p className="font-mono text-[10px] text-white/55">{w.win} · {w.sharpe}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {/* Overlay */}
+              <div className="absolute inset-0 flex items-center justify-center">
+                <p className="text-white/60 text-sm font-medium bg-[#0F1A1E]/80 px-4 py-2 rounded">
+                  Connect wallet to follow
+                </p>
+              </div>
+            </div>
           </motion.div>
         </div>
       </div>
