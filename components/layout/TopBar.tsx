@@ -1,4 +1,5 @@
 'use client'
+import Image from 'next/image'
 import { Search, Bell } from 'lucide-react'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -22,9 +23,7 @@ export function TopBar({ title }: { title: string }) {
   return (
     <header className="sticky top-0 z-40 bg-[#0F1A1E]/80 backdrop-blur-xl border-b border-white/[0.08]">
       <div className="flex items-center justify-between px-4 py-3 lg:px-6">
-        <h1 className="text-lg font-bold lg:hidden">
-          <span className="text-[#34EAB9]">A</span><span className="text-[#F0FAF8]">L</span>
-        </h1>
+        <Image src="/favicon.png" alt="AlphaLens" width={28} height={28} className="h-7 w-7 lg:hidden" />
         <h2 className="hidden lg:block text-base font-semibold text-[#F0FAF8]">{title}</h2>
 
         <form onSubmit={handleSearch} className="flex-1 max-w-xs ml-4 lg:max-w-sm">

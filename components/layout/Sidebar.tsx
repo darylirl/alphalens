@@ -1,4 +1,5 @@
 'use client'
+import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useState } from 'react'
@@ -36,9 +37,7 @@ export function Sidebar({ className = '' }: { className?: string }) {
     <aside className={`w-64 bg-[#0F1A1E] border-r border-white/[0.08] flex-col ${className}`}>
       <div className="px-5 pt-5 pb-4">
         <Link href="/" className="block">
-          <h1 className="text-lg font-bold tracking-tight">
-            <span className="text-[#34EAB9]">Alpha</span><span className="text-[#F0FAF8]"> Lens</span>
-          </h1>
+          <Image src="/logo.png" alt="AlphaLens" width={140} height={36} className="h-8 w-auto" />
         </Link>
       </div>
 

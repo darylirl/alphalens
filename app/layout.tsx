@@ -4,8 +4,12 @@ import { WalletProvider } from '@/lib/wallet/WalletContext'
 import { AppShell } from '@/components/layout/AppShell'
 
 export const metadata: Metadata = {
-  title: 'Alpha Lens',
+  title: 'AlphaLens',
   description: 'Hyperliquid Trader Intelligence Platform',
+  icons: {
+    icon: '/favicon.png',
+    apple: '/favicon.png',
+  },
 }
 
 export const viewport: Viewport = {
