@@ -1,7 +1,12 @@
 'use client'
-import { useMemo, useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { useMemo, useState, useCallback } from 'react'
 import type { AssetPosition } from '@/lib/hyperliquid/types'
+
+const BG = '#072724'
+const COLOR_POS = '#34EAB9'
+const COLOR_NEG = '#FF3B5C'
+const COLOR_NEUTRAL = '#1A3A35'
+const GAP = 2
 
 interface HeatmapCell {
   coin: string
@@ -14,16 +19,10 @@ interface HeatmapCell {
   roe: number
 }
 
-function getPnlGradient(pnl: number, roe: number): string {
-  if (pnl > 0) {
-    const intensity = Math.min(Math.abs(roe) / 50, 1)
-    return `linear-gradient(135deg, rgba(0,${Math.round(140 + intensity * 115)},${Math.round(60 + intensity * 40)},0.9), rgba(0,${Math.round(100 + intensity * 80)},${Math.round(40 + intensity * 20)},0.7))`
-  }
-  if (pnl < 0) {
-    const intensity = Math.min(Math.abs(roe) / 50, 1)
-    return `linear-gradient(135deg, rgba(${Math.round(140 + intensity * 115)},${Math.round(20 + intensity * 10)},${Math.round(20 + intensity * 10)},0.9), rgba(${Math.round(100 + intensity * 80)},${Math.round(15)},${Math.round(15)},0.7))`
-  }
-  return 'linear-gradient(135deg, rgba(34,34,34,0.9), rgba(28,28,28,0.7))'
+function getBlockColor(pnl: number): string {
+  if (pnl > 0) return COLOR_POS
+  if (pnl < 0) return COLOR_NEG
+  return COLOR_NEUTRAL
 }
 
 function formatPnl(n: number): string {
@@ -36,194 +35,6 @@ function formatNotional(n: number): string {
   if (n >= 1e6) return `$${(n / 1e6).toFixed(2)}M`
   if (n >= 1e3) return `$${(n / 1e3).toFixed(1)}K`
   return `$${n.toFixed(0)}`
-}
-
-export function PositionHeatmap({ positions }: { positions: AssetPosition[] }) {
-  const [hoveredCoin, setHoveredCoin] = useState<string | null>(null)
-
-  const cells = useMemo(() => {
-    const active = positions
-      .filter(p => parseFloat(p.position.szi) !== 0)
-      .map(p => {
-        const pos = p.position
-        const szi = parseFloat(pos.szi)
-        const posValue = Math.abs(parseFloat(pos.positionValue || '0'))
-        const pnl = parseFloat(pos.unrealizedPnl || '0')
-        const leverage = pos.leverage?.value || 0
-        const entryPx = parseFloat(pos.entryPx || '0')
-        const marginUsed = parseFloat(pos.marginUsed || '0')
-        const roe = marginUsed > 0 ? (pnl / marginUsed) * 100 : 0
-        return { coin: pos.coin, size: posValue, szi, pnl, leverage, pctOfTotal: 0, entryPx, roe }
-      })
-      .sort((a, b) => b.size - a.size)
-
-    const total = active.reduce((sum, c) => sum + c.size, 0)
-    for (const c of active) c.pctOfTotal = total > 0 ? (c.size / total) * 100 : 0
-    return active
-  }, [positions])
-
-  if (!cells.length) {
-    return <p className="text-white/55 text-sm text-center py-4">No open positions to display</p>
-  }
-
-  const rects = computeTreemapLayout(cells, 0, 0, 100, 100)
-  const hoveredCell = hoveredCoin ? cells.find(c => c.coin === hoveredCoin) : null
-
-  return (
-    <div className="space-y-3">
-      {/* Heatmap grid */}
-      <div className="relative w-full rounded overflow-hidden" style={{ paddingBottom: '55%' }}>
-        <div className="absolute inset-0">
-          {rects.map((r, i) => {
-            const cell = cells[i]
-            const isLong = cell.szi > 0
-            const isHovered = hoveredCoin === cell.coin
-            const gradient = getPnlGradient(cell.pnl, cell.roe)
-            const showFull = r.w > 18 && r.h > 16
-            const showMedium = r.w > 10 && r.h > 10
-            const showMini = r.w > 5 && r.h > 5
-
-            return (
-              <motion.div
-                key={cell.coin}
-                onMouseEnter={() => setHoveredCoin(cell.coin)}
-                onMouseLeave={() => setHoveredCoin(null)}
-                className="absolute cursor-pointer transition-all duration-150"
-                style={{
-                  left: `${r.x}%`,
-                  top: `${r.y}%`,
-                  width: `${r.w}%`,
-                  height: `${r.h}%`,
-                  padding: '1.5px',
-                }}
-                animate={{
-                  scale: isHovered ? 1.02 : 1,
-                  zIndex: isHovered ? 10 : 1,
-                }}
-              >
-                <div
-                  className="w-full h-full rounded-md flex flex-col items-center justify-center overflow-hidden relative"
-                  style={{
-                    background: gradient,
-                    boxShadow: isHovered
-                      ? cell.pnl >= 0
-                        ? '0 0 20px rgba(0,255,136,0.3), inset 0 0 15px rgba(0,255,136,0.1)'
-                        : '0 0 20px rgba(255,59,59,0.3), inset 0 0 15px rgba(255,59,59,0.1)'
-                      : 'inset 0 1px 0 rgba(255,255,255,0.05)',
-                    border: isHovered
-                      ? cell.pnl >= 0 ? '1px solid rgba(0,255,136,0.4)' : '1px solid rgba(255,59,59,0.4)'
-                      : '1px solid rgba(255,255,255,0.05)',
-                  }}
-                >
-                  {/* Full label */}
-                  {showFull && (
-                    <div className="flex flex-col items-center gap-0.5 px-1">
-                      <span className="font-bold text-[#F0FAF8] drop-shadow-md" style={{ fontSize: r.w > 28 ? '13px' : '10px' }}>
-                        {cell.coin}
-                      </span>
-                      <span
-                        className="font-bold drop-shadow-md"
-                        style={{
-                          fontSize: r.w > 28 ? '11px' : '9px',
-                          color: cell.pnl >= 0 ? '#34EAB9' : '#FF3B5C',
-                        }}
-                      >
-                        {cell.pnl >= 0 ? '+' : ''}{formatPnl(cell.pnl)}
-                      </span>
-                      <span className="font-mono text-[#F0FAF8]/60 drop-shadow-sm" style={{ fontSize: r.w > 28 ? '9px' : '7px' }}>
-                        {isLong ? 'LONG' : 'SHORT'} {cell.leverage}x
-                      </span>
-                      <span className="font-mono text-[#F0FAF8]/40" style={{ fontSize: '7px' }}>
-                        {cell.pctOfTotal.toFixed(0)}% of portfolio
-                      </span>
-                    </div>
-                  )}
-                  {/* Medium label */}
-                  {!showFull && showMedium && (
-                    <div className="flex flex-col items-center px-0.5">
-                      <span className="font-bold text-[#F0FAF8] drop-shadow-md text-[9px]">{cell.coin}</span>
-                      <span
-                        className="font-semibold drop-shadow-md text-[7px]"
-                        style={{ color: cell.pnl >= 0 ? '#34EAB9' : '#FF3B5C' }}
-                      >
-                        {cell.pnl >= 0 ? '+' : ''}{formatPnl(cell.pnl)}
-                      </span>
-                    </div>
-                  )}
-                  {/* Mini label */}
-                  {!showFull && !showMedium && showMini && (
-                    <span className="font-bold text-[#F0FAF8]/80 drop-shadow-md text-[7px]">{cell.coin}</span>
-                  )}
-
-                  {/* Side indicator bar */}
-                  <div
-                    className="absolute bottom-0 left-0 right-0 h-[2px]"
-                    style={{ background: isLong ? '#34EAB9' : '#FF3B5C', opacity: 0.6 }}
-                  />
-                </div>
-              </motion.div>
-            )
-          })}
-        </div>
-      </div>
-
-      {/* Hover tooltip */}
-      <AnimatePresence>
-        {hoveredCell && (
-          <motion.div
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 4 }}
-            className="card p-3 grid grid-cols-6 gap-2 text-xs"
-          >
-            <div>
-              <p className="text-[10px] text-white/40">Coin</p>
-              <p className="font-bold">{hoveredCell.coin}</p>
-            </div>
-            <div>
-              <p className="text-[10px] text-white/40">Side</p>
-              <p className={`font-semibold ${hoveredCell.szi > 0 ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>
-                {hoveredCell.szi > 0 ? 'Long' : 'Short'} <span className="font-mono">{hoveredCell.leverage}x</span>
-              </p>
-            </div>
-            <div>
-              <p className="text-[10px] text-white/40">Size</p>
-              <p className="font-mono font-semibold">{formatNotional(hoveredCell.size)}</p>
-            </div>
-            <div>
-              <p className="text-[10px] text-white/40">Entry</p>
-              <p className="font-mono">${hoveredCell.entryPx.toLocaleString()}</p>
-            </div>
-            <div>
-              <p className="text-[10px] text-white/40">uPnL</p>
-              <p className={`font-mono font-bold ${hoveredCell.pnl >= 0 ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>
-                {hoveredCell.pnl >= 0 ? '+' : ''}{formatPnl(hoveredCell.pnl)}
-              </p>
-            </div>
-            <div>
-              <p className="text-[10px] text-white/40">ROE</p>
-              <p className={`font-mono font-bold ${hoveredCell.roe >= 0 ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>
-                {hoveredCell.roe >= 0 ? '+' : ''}{hoveredCell.roe.toFixed(1)}%
-              </p>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Legend */}
-      <div className="flex items-center justify-between text-[10px] text-white/40 px-1">
-        <div className="flex items-center gap-3">
-          <span className="flex items-center gap-1">
-            <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: 'linear-gradient(135deg, rgba(0,255,136,0.9), rgba(0,180,100,0.7))' }} /> Profit
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: 'linear-gradient(135deg, rgba(255,59,59,0.9), rgba(180,15,15,0.7))' }} /> Loss
-          </span>
-        </div>
-        <span>Size = notional value &middot; Intensity = ROE%</span>
-      </div>
-    </div>
-  )
 }
 
 // Squarified treemap layout
@@ -265,4 +76,200 @@ function computeTreemapLayout(cells: HeatmapCell[], x: number, y: number, w: num
   }
 
   return rects
+}
+
+export function PositionHeatmap({ positions }: { positions: AssetPosition[] }) {
+  const [hoveredCoin, setHoveredCoin] = useState<string | null>(null)
+  const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
+
+  const cells = useMemo(() => {
+    const active = positions
+      .filter(p => parseFloat(p.position.szi) !== 0)
+      .map(p => {
+        const pos = p.position
+        const szi = parseFloat(pos.szi)
+        const posValue = Math.abs(parseFloat(pos.positionValue || '0'))
+        const pnl = parseFloat(pos.unrealizedPnl || '0')
+        const leverage = pos.leverage?.value || 0
+        const entryPx = parseFloat(pos.entryPx || '0')
+        const marginUsed = parseFloat(pos.marginUsed || '0')
+        const roe = marginUsed > 0 ? (pnl / marginUsed) * 100 : 0
+        return { coin: pos.coin, size: posValue, szi, pnl, leverage, pctOfTotal: 0, entryPx, roe }
+      })
+      .sort((a, b) => b.size - a.size)
+
+    const total = active.reduce((sum, c) => sum + c.size, 0)
+    for (const c of active) c.pctOfTotal = total > 0 ? (c.size / total) * 100 : 0
+    return active
+  }, [positions])
+
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    setTooltipPos({ x: e.clientX, y: e.clientY })
+  }, [])
+
+  if (!cells.length) {
+    return <p className="text-white/55 text-sm text-center py-4">No open positions to display</p>
+  }
+
+  const rects = computeTreemapLayout(cells, 0, 0, 100, 100)
+  const hoveredCell = hoveredCoin ? cells.find(c => c.coin === hoveredCoin) : null
+
+  return (
+    <div style={{ background: BG }} className="relative">
+      {/* Heatmap grid */}
+      <div
+        className="relative w-full"
+        style={{ paddingBottom: '55%', background: BG }}
+        onMouseMove={handleMouseMove}
+      >
+        <div className="absolute inset-0">
+          {rects.map((r, i) => {
+            const cell = cells[i]
+            const isLong = cell.szi > 0
+            const isHovered = hoveredCoin === cell.coin
+            const color = getBlockColor(cell.pnl)
+            const showFull = r.w > 18 && r.h > 16
+            const showMedium = r.w > 10 && r.h > 10
+            const showMini = r.w > 5 && r.h > 5
+
+            return (
+              <div
+                key={cell.coin}
+                onMouseEnter={() => setHoveredCoin(cell.coin)}
+                onMouseLeave={() => setHoveredCoin(null)}
+                className="absolute cursor-pointer"
+                style={{
+                  left: `${r.x}%`,
+                  top: `${r.y}%`,
+                  width: `${r.w}%`,
+                  height: `${r.h}%`,
+                  padding: `${GAP / 2}px`,
+                }}
+              >
+                <div
+                  className="w-full h-full flex flex-col items-center justify-center overflow-hidden relative"
+                  style={{
+                    background: color,
+                    borderRadius: 0,
+                    opacity: isHovered ? 0.85 : 1,
+                    transition: 'opacity 100ms ease-out',
+                  }}
+                >
+                  {/* Full label */}
+                  {showFull && (
+                    <div className="flex flex-col items-center gap-0.5 px-1">
+                      <span className="font-bold text-white" style={{ fontSize: r.w > 28 ? '13px' : '10px' }}>
+                        {cell.coin}
+                      </span>
+                      <span
+                        className="font-mono font-semibold text-white"
+                        style={{ fontSize: r.w > 28 ? '11px' : '9px' }}
+                      >
+                        {cell.pnl >= 0 ? '+' : ''}{formatPnl(cell.pnl)}
+                      </span>
+                      <span className="font-mono text-white/60" style={{ fontSize: r.w > 28 ? '9px' : '7px' }}>
+                        {isLong ? 'LONG' : 'SHORT'} {cell.leverage}x
+                      </span>
+                      <span className="font-mono text-white/40" style={{ fontSize: '7px' }}>
+                        {cell.pctOfTotal.toFixed(0)}%
+                      </span>
+                    </div>
+                  )}
+                  {/* Medium label */}
+                  {!showFull && showMedium && (
+                    <div className="flex flex-col items-center px-0.5">
+                      <span className="font-bold text-white text-[9px]">{cell.coin}</span>
+                      <span className="font-mono font-semibold text-white text-[7px]">
+                        {cell.pnl >= 0 ? '+' : ''}{formatPnl(cell.pnl)}
+                      </span>
+                    </div>
+                  )}
+                  {/* Mini label */}
+                  {!showFull && !showMedium && showMini && (
+                    <span className="font-bold text-white/80 text-[7px]">{cell.coin}</span>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Tooltip — fixed, follows cursor */}
+      {hoveredCell && (
+        <div
+          className="fixed z-50 pointer-events-none"
+          style={{
+            left: tooltipPos.x + 12,
+            top: tooltipPos.y + 12,
+            transition: 'opacity 100ms ease-out',
+          }}
+        >
+          <div
+            className="px-3 py-2"
+            style={{
+              background: BG,
+              border: '1px solid rgba(255,255,255,0.08)',
+              borderRadius: 0,
+              minWidth: '200px',
+            }}
+          >
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-white text-xs font-semibold">{hoveredCell.coin}</span>
+              <span
+                className="font-mono text-[11px] font-semibold"
+                style={{ color: hoveredCell.szi > 0 ? COLOR_POS : COLOR_NEG }}
+              >
+                {hoveredCell.szi > 0 ? 'Long' : 'Short'} {hoveredCell.leverage}x
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-[10px]">
+              <div className="flex justify-between">
+                <span className="text-white/40">Size</span>
+                <span className="font-mono text-white">{formatNotional(hoveredCell.size)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-white/40">Entry</span>
+                <span className="font-mono text-white">${hoveredCell.entryPx.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-white/40">uPnL</span>
+                <span
+                  className="font-mono font-semibold"
+                  style={{ color: hoveredCell.pnl >= 0 ? COLOR_POS : COLOR_NEG }}
+                >
+                  {hoveredCell.pnl >= 0 ? '+' : ''}{formatPnl(hoveredCell.pnl)}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-white/40">ROE</span>
+                <span
+                  className="font-mono font-semibold"
+                  style={{ color: hoveredCell.roe >= 0 ? COLOR_POS : COLOR_NEG }}
+                >
+                  {hoveredCell.roe >= 0 ? '+' : ''}{hoveredCell.roe.toFixed(1)}%
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Legend */}
+      <div className="flex items-center justify-between text-[10px] text-white/40 px-2 py-1.5" style={{ background: BG }}>
+        <div className="flex items-center gap-3">
+          <span className="flex items-center gap-1">
+            <span className="inline-block w-2.5 h-2.5" style={{ background: COLOR_POS, borderRadius: 0 }} /> Profit
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="inline-block w-2.5 h-2.5" style={{ background: COLOR_NEG, borderRadius: 0 }} /> Loss
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="inline-block w-2.5 h-2.5" style={{ background: COLOR_NEUTRAL, borderRadius: 0 }} /> Flat
+          </span>
+        </div>
+        <span>Size = notional value</span>
+      </div>
+    </div>
+  )
 }
