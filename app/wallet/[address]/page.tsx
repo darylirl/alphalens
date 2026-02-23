@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { WalletProfile } from '@/components/wallet/WalletProfile'
 import { SkeletonCard } from '@/components/ui/SkeletonCard'
-import { computeDailyPnl, computeSharpe, computeWinRate, computeTotalPnl, computeMaxDrawdown } from '@/lib/analytics/pnl'
+import { computeDailyPnl, computeSharpe, computeSharpeFromFills, computeWinRate, computeTotalPnl, computeMaxDrawdown } from '@/lib/analytics/pnl'
 import { detectArchetype } from '@/lib/analytics/archetype'
 import { computeAlphaDecay } from '@/lib/analytics/alphaDecay'
 import type { WalletDetail, Fill, ClearinghouseState } from '@/lib/hyperliquid/types'
@@ -71,12 +71,19 @@ export default function WalletPage() {
   const dailyValues = dailyPnl.map(d => d.pnl)
   const archetypeResult = detectArchetype(fills as Fill[], state as ClearinghouseState)
 
+  // Compute Sharpe from daily data, falling back to fill-level computation
+  function sharpeOrFallback(days: number): number {
+    const daily = computeSharpe(dailyValues.slice(-days))
+    if (!isNaN(daily)) return daily
+    return computeSharpeFromFills(fills as Fill[], days)
+  }
+
   const analytics = {
     archetype: archetypeResult.archetype,
     confidence: archetypeResult.confidence,
-    sharpe7d: computeSharpe(dailyValues.slice(-7)),
-    sharpe30d: computeSharpe(dailyValues.slice(-30)),
-    sharpe90d: computeSharpe(dailyValues.slice(-90)),
+    sharpe7d: sharpeOrFallback(7),
+    sharpe30d: sharpeOrFallback(30),
+    sharpe90d: sharpeOrFallback(90),
     winRate: computeWinRate(fills as Fill[]),
     totalPnl: computeTotalPnl(fills as Fill[]),
     alphaDecay: computeAlphaDecay(fills as Fill[]),

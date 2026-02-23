@@ -29,12 +29,40 @@ export function computeDailyPnl(fills: Fill[]): DailyPnl[] {
 }
 
 export function computeSharpe(dailyPnls: number[]): number {
-  if (dailyPnls.length < 3) return 0
+  if (dailyPnls.length < 2) return NaN
   const mean = dailyPnls.reduce((a, b) => a + b, 0) / dailyPnls.length
-  const variance = dailyPnls.reduce((sum, p) => sum + Math.pow(p - mean, 2), 0) / dailyPnls.length
+  const variance = dailyPnls.reduce((sum, p) => sum + Math.pow(p - mean, 2), 0) / (dailyPnls.length - 1)
   const std = Math.sqrt(variance)
-  if (std === 0) return 0
+  if (std === 0) return NaN
   return Math.round((mean / std) * Math.sqrt(365) * 1000) / 1000
+}
+
+/**
+ * Compute Sharpe from individual fills when daily data is too sparse.
+ * Groups by trade-level returns and annualizes.
+ */
+export function computeSharpeFromFills(fills: Fill[], windowDays?: number): number {
+  let filtered = fills.filter(f => f.closedPnl && parseFloat(f.closedPnl) !== 0)
+  if (windowDays) {
+    const cutoff = Date.now() - windowDays * 24 * 60 * 60 * 1000
+    filtered = filtered.filter(f => f.time >= cutoff)
+  }
+  if (filtered.length < 10) return NaN
+
+  const returns = filtered.map(f => parseFloat(f.closedPnl || '0'))
+  const mean = returns.reduce((a, b) => a + b, 0) / returns.length
+  const variance = returns.reduce((sum, r) => sum + Math.pow(r - mean, 2), 0) / (returns.length - 1)
+  const std = Math.sqrt(variance)
+  if (std === 0) return NaN
+
+  // Estimate trades per year based on density
+  const sortedTimes = filtered.map(f => f.time).sort((a, b) => a - b)
+  const spanMs = sortedTimes[sortedTimes.length - 1] - sortedTimes[0]
+  const spanDays = Math.max(spanMs / (24 * 60 * 60 * 1000), 1)
+  const tradesPerDay = filtered.length / spanDays
+  const annualizationFactor = Math.sqrt(tradesPerDay * 365)
+
+  return Math.round((mean / std) * annualizationFactor * 1000) / 1000
 }
 
 export function computeWinRate(fills: Fill[]): number {

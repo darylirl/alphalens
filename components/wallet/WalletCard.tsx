@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import Link from 'next/link'
 import { ArchetypeBadge } from './ArchetypeBadge'
 import { AlphaDecayMeter } from './AlphaDecayMeter'
+import { getWalletAlias, truncateAddress } from '@/lib/walletAliases'
 
 interface WalletCardProps {
   address: string
@@ -16,7 +17,9 @@ interface WalletCardProps {
 }
 
 export function WalletCard({ address, label, archetype, sharpe30d, winRate, totalPnl, alphaDecay, rank }: WalletCardProps) {
-  const shortAddr = `${address.slice(0, 6)}...${address.slice(-4)}`
+  const shortAddr = truncateAddress(address)
+  const alias = getWalletAlias(address)
+  const displayName = alias || label || shortAddr
   const pnlPositive = totalPnl >= 0
 
   return (
@@ -29,8 +32,8 @@ export function WalletCard({ address, label, archetype, sharpe30d, winRate, tota
                 <span className="text-white/40 text-sm font-mono w-6">#{rank}</span>
               )}
               <div>
-                <p className="font-medium text-sm text-[#F0FAF8]">{label || shortAddr}</p>
-                {label && <p className="text-white/40 text-xs font-mono">{shortAddr}</p>}
+                <p className="font-medium text-sm text-[#F0FAF8]">{displayName}</p>
+                {(alias || label) && <p className="text-white/40 text-xs font-mono">{shortAddr}</p>}
               </div>
             </div>
             <ArchetypeBadge type={archetype} />
@@ -49,7 +52,7 @@ export function WalletCard({ address, label, archetype, sharpe30d, winRate, tota
             </div>
             <div>
               <p className="text-white/40 text-[11px] mb-1">Sharpe</p>
-              <p className="font-semibold text-sm font-mono text-[#F0FAF8]">{sharpe30d.toFixed(2)}</p>
+              <p className="font-semibold text-sm font-mono text-[#F0FAF8]">{isNaN(sharpe30d) ? '—' : sharpe30d.toFixed(2)}</p>
             </div>
           </div>
 
