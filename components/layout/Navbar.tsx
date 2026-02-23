@@ -100,30 +100,32 @@ export function Navbar() {
             )}
           </div>
 
-          {/* Right: CTA only */}
+          {/* Right: CTA only on landing page */}
           <div className="flex items-center" style={{ paddingRight: '24px' }}>
-            <Link
-              href="/dashboard"
-              className="hidden md:inline-block text-sm font-medium transition-all duration-150 ease-out"
-              style={{
-                fontFamily: 'Inter, sans-serif',
-                border: '1px solid #34EAB9',
-                background: 'transparent',
-                color: '#34EAB9',
-                padding: '12px 20px',
-                borderRadius: '4px',
-              }}
-              onMouseEnter={e => {
-                e.currentTarget.style.background = '#34EAB9'
-                e.currentTarget.style.color = '#010E0C'
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.background = 'transparent'
-                e.currentTarget.style.color = '#34EAB9'
-              }}
-            >
-              Launch App
-            </Link>
+            {isLanding && (
+              <Link
+                href="/dashboard"
+                className="hidden md:inline-block text-sm font-medium transition-all duration-150 ease-out"
+                style={{
+                  fontFamily: 'Inter, sans-serif',
+                  border: '1px solid #34EAB9',
+                  background: 'transparent',
+                  color: '#34EAB9',
+                  padding: '12px 20px',
+                  borderRadius: '4px',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = '#34EAB9'
+                  e.currentTarget.style.color = '#010E0C'
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = 'transparent'
+                  e.currentTarget.style.color = '#34EAB9'
+                }}
+              >
+                Launch App
+              </Link>
+            )}
             {isLanding && (
               <Link
                 href="/dashboard"
