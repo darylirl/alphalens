@@ -17,14 +17,13 @@ const navLinks = [
 
 export function Navbar() {
   const path = usePathname()
+  const isLanding = path === '/'
   const [drawerOpen, setDrawerOpen] = useState(false)
 
-  // Close drawer on route change
   useEffect(() => {
     setDrawerOpen(false)
   }, [path])
 
-  // Lock body scroll when drawer is open
   useEffect(() => {
     if (drawerOpen) {
       document.body.style.overflow = 'hidden'
@@ -47,72 +46,71 @@ export function Navbar() {
           borderBottom: '1px solid rgba(255,255,255,0.08)',
         }}
       >
-        {/* Desktop: h-16 (64px), Mobile: h-14 (56px) */}
-        <div className="flex items-center justify-between h-14 md:h-16 px-4 md:px-6">
-          {/* Left: Logo lockup */}
-          {/* Desktop: favicon + wordmark */}
-          <Link href="/" className="hidden md:flex items-center gap-[10px]">
-            <Image src="/favicon.png" alt="" width={32} height={32} className="h-8 w-8" />
-            <span className="text-[#F0FAF8] text-base font-medium" style={{ fontFamily: 'Inter, sans-serif' }}>
-              Alpha Lens
-            </span>
+        <div className="flex items-center justify-between h-14 md:h-16">
+          {/* Desktop: full logo lockup */}
+          <Link href="/" className="hidden md:flex items-center" style={{ paddingLeft: '24px' }}>
+            <Image src="/logo.png" alt="Alpha Lens" width={160} height={32} className="h-8 w-auto" />
           </Link>
 
-          {/* Mobile: favicon + hamburger */}
-          <div className="flex md:hidden items-center gap-0">
-            <Link href="/" className="pl-0">
+          {/* Mobile left side */}
+          <div className="flex md:hidden items-center" style={{ paddingLeft: '16px' }}>
+            <Link href="/">
               <Image src="/favicon.png" alt="AlphaLens" width={28} height={28} className="h-7 w-7" />
             </Link>
-            <button
-              onClick={toggleDrawer}
-              className="p-4 flex flex-col justify-center items-center"
-              aria-label="Toggle menu"
-            >
-              <span
-                className="block w-[18px] h-[2px] bg-[#F0FAF8] transition-transform duration-200 ease-out"
-                style={{
-                  transform: drawerOpen ? 'translateY(3px) rotate(45deg)' : 'none',
-                }}
-              />
-              <span
-                className="block w-[18px] h-[2px] bg-[#F0FAF8] mt-1 transition-opacity duration-200"
-                style={{
-                  opacity: drawerOpen ? 0 : 1,
-                }}
-              />
-              <span
-                className="block w-[18px] h-[2px] bg-[#F0FAF8] mt-1 transition-transform duration-200 ease-out"
-                style={{
-                  transform: drawerOpen ? 'translateY(-3px) rotate(-45deg)' : 'none',
-                }}
-              />
-            </button>
+            {/* Hamburger — only on app pages */}
+            {!isLanding && (
+              <button
+                onClick={toggleDrawer}
+                className="p-4 flex flex-col justify-center items-center"
+                aria-label="Toggle menu"
+              >
+                <span
+                  className="block w-[18px] h-[2px] bg-[#F0FAF8] transition-transform duration-200 ease-out"
+                  style={{ transform: drawerOpen ? 'translateY(3px) rotate(45deg)' : 'none' }}
+                />
+                <span
+                  className="block w-[18px] h-[2px] bg-[#F0FAF8] mt-1 transition-opacity duration-200"
+                  style={{ opacity: drawerOpen ? 0 : 1 }}
+                />
+                <span
+                  className="block w-[18px] h-[2px] bg-[#F0FAF8] mt-1 transition-transform duration-200 ease-out"
+                  style={{ transform: drawerOpen ? 'translateY(-3px) rotate(-45deg)' : 'none' }}
+                />
+              </button>
+            )}
           </div>
 
-          {/* Right: Desktop nav links + CTA */}
-          <div className="hidden md:flex items-center gap-8">
-            {navLinks.map(({ href, label }) => {
-              const active = path.startsWith(href)
-              return (
-                <Link
-                  key={href}
-                  href={href}
-                  className="text-sm transition-colors duration-150 ease-out"
-                  style={{
-                    fontFamily: 'Inter, sans-serif',
-                    fontWeight: 400,
-                    color: active ? '#34EAB9' : '#8AADA9',
-                  }}
-                  onMouseEnter={e => { if (!active) (e.target as HTMLElement).style.color = '#F0FAF8' }}
-                  onMouseLeave={e => { if (!active) (e.target as HTMLElement).style.color = '#8AADA9' }}
-                >
-                  {label}
-                </Link>
-              )
-            })}
+          {/* Right side */}
+          <div className="flex items-center" style={{ paddingRight: '24px' }}>
+            {/* Desktop nav links — only on app pages */}
+            {!isLanding && (
+              <div className="hidden md:flex items-center gap-8 mr-8">
+                {navLinks.map(({ href, label }) => {
+                  const active = path.startsWith(href)
+                  return (
+                    <Link
+                      key={href}
+                      href={href}
+                      className="text-sm transition-colors duration-150 ease-out"
+                      style={{
+                        fontFamily: 'Inter, sans-serif',
+                        fontWeight: 400,
+                        color: active ? '#34EAB9' : '#8AADA9',
+                      }}
+                      onMouseEnter={e => { if (!active) (e.target as HTMLElement).style.color = '#F0FAF8' }}
+                      onMouseLeave={e => { if (!active) (e.target as HTMLElement).style.color = '#8AADA9' }}
+                    >
+                      {label}
+                    </Link>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* CTA button — desktop */}
             <Link
               href="/dashboard"
-              className="text-sm font-medium transition-all duration-150 ease-out"
+              className="hidden md:inline-block text-sm font-medium transition-all duration-150 ease-out"
               style={{
                 fontFamily: 'Inter, sans-serif',
                 border: '1px solid #34EAB9',
@@ -122,109 +120,131 @@ export function Navbar() {
                 borderRadius: '4px',
               }}
               onMouseEnter={e => {
-                const el = e.currentTarget
-                el.style.background = '#34EAB9'
-                el.style.color = '#010E0C'
+                e.currentTarget.style.background = '#34EAB9'
+                e.currentTarget.style.color = '#010E0C'
               }}
               onMouseLeave={e => {
-                const el = e.currentTarget
-                el.style.background = 'transparent'
-                el.style.color = '#34EAB9'
+                e.currentTarget.style.background = 'transparent'
+                e.currentTarget.style.color = '#34EAB9'
               }}
             >
               Launch App
             </Link>
+
+            {/* CTA button — mobile (landing only, or always visible) */}
+            {isLanding && (
+              <Link
+                href="/dashboard"
+                className="md:hidden text-sm font-medium transition-all duration-150 ease-out"
+                style={{
+                  fontFamily: 'Inter, sans-serif',
+                  border: '1px solid #34EAB9',
+                  background: 'transparent',
+                  color: '#34EAB9',
+                  padding: '10px 16px',
+                  borderRadius: '4px',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = '#34EAB9'
+                  e.currentTarget.style.color = '#010E0C'
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = 'transparent'
+                  e.currentTarget.style.color = '#34EAB9'
+                }}
+              >
+                Launch App
+              </Link>
+            )}
           </div>
         </div>
       </nav>
 
-      {/* Mobile drawer overlay */}
-      <div
-        className="fixed inset-0 z-[60] md:hidden pointer-events-none"
-        style={{
-          background: drawerOpen ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0)',
-          transition: 'background 250ms ease-out',
-          pointerEvents: drawerOpen ? 'auto' : 'none',
-        }}
-        onClick={closeDrawer}
-      >
-        {/* Drawer panel */}
+      {/* Mobile drawer — only on app pages */}
+      {!isLanding && (
         <div
-          className="absolute top-0 left-0 h-full flex flex-col"
+          className="fixed inset-0 z-[60] md:hidden pointer-events-none"
           style={{
-            width: '280px',
-            background: '#072724',
-            transform: drawerOpen ? 'translateX(0)' : 'translateX(-100%)',
-            transition: drawerOpen ? 'transform 250ms ease-out' : 'transform 200ms ease-in',
+            background: drawerOpen ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0)',
+            transition: 'background 250ms ease-out',
+            pointerEvents: drawerOpen ? 'auto' : 'none',
           }}
-          onClick={e => e.stopPropagation()}
+          onClick={closeDrawer}
         >
-          {/* Drawer header: logo + close */}
           <div
-            className="flex items-center justify-between p-6"
-            style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}
+            className="absolute top-0 left-0 h-full flex flex-col"
+            style={{
+              width: '280px',
+              background: '#072724',
+              transform: drawerOpen ? 'translateX(0)' : 'translateX(-100%)',
+              transition: drawerOpen ? 'transform 250ms ease-out' : 'transform 200ms ease-in',
+            }}
+            onClick={e => e.stopPropagation()}
           >
-            <Link href="/" className="flex items-center gap-[10px]" onClick={closeDrawer}>
-              <Image src="/favicon.png" alt="" width={32} height={32} className="h-8 w-8" />
-              <span className="text-[#F0FAF8] text-base font-medium" style={{ fontFamily: 'Inter, sans-serif' }}>
-                Alpha Lens
-              </span>
-            </Link>
-            <button
-              onClick={closeDrawer}
-              className="text-[#8AADA9] hover:text-[#F0FAF8] transition-colors text-xl leading-none p-1"
-              aria-label="Close menu"
+            {/* Drawer header */}
+            <div
+              className="flex items-center justify-between p-6"
+              style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}
             >
-              &#x2715;
-            </button>
-          </div>
+              <Link href="/" className="flex items-center" onClick={closeDrawer}>
+                <Image src="/logo.png" alt="Alpha Lens" width={160} height={32} className="h-8 w-auto" />
+              </Link>
+              <button
+                onClick={closeDrawer}
+                className="text-[#8AADA9] hover:text-[#F0FAF8] transition-colors text-xl leading-none p-1"
+                aria-label="Close menu"
+              >
+                &#x2715;
+              </button>
+            </div>
 
-          {/* Drawer nav links */}
-          <nav className="flex-1 overflow-y-auto">
-            {navLinks.map(({ href, label }, i) => {
-              const active = path.startsWith(href)
-              return (
-                <Link
-                  key={href}
-                  href={href}
-                  onClick={closeDrawer}
-                  className="block"
-                  style={{
-                    padding: '20px 24px',
-                    fontFamily: 'Inter, sans-serif',
-                    fontSize: '16px',
-                    fontWeight: 400,
-                    color: active ? '#34EAB9' : '#F0FAF8',
-                    borderLeft: active ? '3px solid #34EAB9' : '3px solid transparent',
-                    borderBottom: i < navLinks.length - 1 ? '1px solid rgba(255,255,255,0.06)' : 'none',
-                  }}
-                >
-                  {label}
-                </Link>
-              )
-            })}
-          </nav>
+            {/* Drawer nav links */}
+            <nav className="flex-1 overflow-y-auto">
+              {navLinks.map(({ href, label }, i) => {
+                const active = path.startsWith(href)
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    onClick={closeDrawer}
+                    className="block"
+                    style={{
+                      padding: '20px 24px',
+                      fontFamily: 'Inter, sans-serif',
+                      fontSize: '16px',
+                      fontWeight: 400,
+                      color: active ? '#34EAB9' : '#F0FAF8',
+                      borderLeft: active ? '3px solid #34EAB9' : '3px solid transparent',
+                      borderBottom: i < navLinks.length - 1 ? '1px solid rgba(255,255,255,0.06)' : 'none',
+                    }}
+                  >
+                    {label}
+                  </Link>
+                )
+              })}
+            </nav>
 
-          {/* Drawer CTA */}
-          <div className="p-6">
-            <Link
-              href="/dashboard"
-              onClick={closeDrawer}
-              className="block text-center text-sm font-medium"
-              style={{
-                fontFamily: 'Inter, sans-serif',
-                background: '#34EAB9',
-                color: '#010E0C',
-                padding: '12px 20px',
-                borderRadius: '4px',
-                width: '100%',
-              }}
-            >
-              Launch App
-            </Link>
+            {/* Drawer CTA */}
+            <div className="p-6">
+              <Link
+                href="/dashboard"
+                onClick={closeDrawer}
+                className="block text-center text-sm font-medium"
+                style={{
+                  fontFamily: 'Inter, sans-serif',
+                  background: '#34EAB9',
+                  color: '#010E0C',
+                  padding: '12px 20px',
+                  borderRadius: '4px',
+                  width: '100%',
+                }}
+              >
+                Launch App
+              </Link>
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </>
   )
 }
