@@ -31,9 +31,9 @@ export async function getClearinghouseState(address: string): Promise<Clearingho
 }
 
 export async function getUserFills(address: string, startTime?: number): Promise<Fill[]> {
-  const st = startTime || new Date('2023-01-01').getTime()
+  const st = startTime ?? 1
   try {
-    return await post({ type: 'userFillsByTime', user: address, startTime: st, aggregateByTime: false })
+    return await post({ type: 'userFillsByTime', user: address, startTime: st })
   } catch {
     // Fallback to legacy endpoint
     return post({ type: 'userFills', user: address })
@@ -41,7 +41,7 @@ export async function getUserFills(address: string, startTime?: number): Promise
 }
 
 export async function getUserFundings(address: string, startTime?: number): Promise<UserFunding[]> {
-  const st = startTime || new Date('2023-01-01').getTime()
+  const st = startTime ?? 1
   return post({ type: 'userFundings', user: address, startTime: st })
 }
 

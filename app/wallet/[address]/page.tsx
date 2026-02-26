@@ -22,7 +22,7 @@ export default function WalletPage() {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(`/api/wallets/${address}`)
+      const res = await fetch(`/api/wallets/${address}`, { cache: 'no-store' })
       const data = await res.json()
       if (res.ok && data.state) {
         const walletData = data as WalletDetail

@@ -5,9 +5,11 @@ import type { LedgerUpdate } from '@/lib/hyperliquid/types'
 const HL_URL = 'https://api.hyperliquid.xyz/info'
 
 const FILLS_PER_PAGE = 500
-const MAX_FILL_PAGES = 20 // 10,000 fills hard cap from API
+const MAX_FILL_PAGES = 25 // safety margin above 10k API cap
 const LEDGER_PER_PAGE = 500
 const MAX_LEDGER_PAGES = 200 // generous limit for ledger
+// Use 1ms (not 0) as genesis — some APIs treat 0 as unset/falsy
+const GENESIS_TIME = 1
 
 async function hlPost(payload: Record<string, unknown>) {
   try {
@@ -32,22 +34,27 @@ async function hlPostWithRetry(payload: Record<string, unknown>) {
 
 async function fetchAllFills(address: string): Promise<{ fills: Array<Record<string, unknown>>; capped: boolean }> {
   const allFills: Array<Record<string, unknown>> = []
-  let cursor = 0
+  let cursor = GENESIS_TIME
   let capped = false
+  let pageSize = 0
 
   for (let page = 0; page < MAX_FILL_PAGES; page++) {
     const data = await hlPostWithRetry({
       type: 'userFillsByTime',
       user: address,
       startTime: cursor,
-      aggregateByTime: false,
     })
     if (!Array.isArray(data) || data.length === 0) break
 
     allFills.push(...data)
+    // Track the largest page we've seen to detect "full" vs "last" page
+    if (data.length > pageSize) pageSize = data.length
 
-    // If fewer than a full page, we've reached the end
-    if (data.length < FILLS_PER_PAGE) break
+    // If this page returned fewer than the largest page we've seen,
+    // we've reached the end. For the very first page, only break if
+    // it's clearly a partial page (< FILLS_PER_PAGE).
+    const threshold = page === 0 ? FILLS_PER_PAGE : pageSize
+    if (data.length < threshold) break
 
     // Paginate: use the last fill's timestamp + 1ms as next startTime
     const lastTime = (data[data.length - 1] as { time: number }).time
@@ -55,14 +62,14 @@ async function fetchAllFills(address: string): Promise<{ fills: Array<Record<str
     cursor = lastTime + 1
   }
 
-  // If we fetched exactly MAX_FILL_PAGES full pages, fills are likely capped at 10k
-  if (allFills.length >= MAX_FILL_PAGES * FILLS_PER_PAGE) {
+  // Detect if we hit the API's 10k fill hard cap
+  if (allFills.length >= 10_000) {
     capped = true
   }
 
   if (allFills.length > 0) return { fills: allFills, capped }
 
-  // Fallback to legacy endpoint if new endpoint returned nothing
+  // Fallback to legacy endpoint if paginated endpoint returned nothing
   const legacy = await hlPost({ type: 'userFills', user: address })
   if (Array.isArray(legacy)) return { fills: legacy, capped: false }
   return { fills: [], capped: false }
@@ -70,7 +77,7 @@ async function fetchAllFills(address: string): Promise<{ fills: Array<Record<str
 
 async function fetchAllLedgerUpdates(address: string): Promise<LedgerUpdate[]> {
   const allUpdates: LedgerUpdate[] = []
-  let cursor = 0
+  let cursor = GENESIS_TIME
 
   for (let page = 0; page < MAX_LEDGER_PAGES; page++) {
     const data = await hlPostWithRetry({
@@ -129,7 +136,7 @@ export async function GET(req: Request, { params }: { params: { address: string 
     const [state, fillsResult, fundings, ledgerUpdates] = await Promise.all([
       hlPost({ type: 'clearinghouseState', user: address }),
       fetchAllFills(address),
-      hlPost({ type: 'userFundings', user: address, startTime: 0 }).then(
+      hlPost({ type: 'userFundings', user: address, startTime: GENESIS_TIME }).then(
         data => Array.isArray(data) ? data : []
       ),
       fetchAllLedgerUpdates(address),
