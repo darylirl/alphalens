@@ -148,9 +148,27 @@ export interface WalletAnalytics {
   mostTradedAsset: string
 }
 
+export interface LedgerUpdate {
+  time: number
+  hash: string
+  delta: {
+    type: string
+    usdc: string
+  }
+}
+
+export interface AllTimePnlResult {
+  allTimePnl: number
+  totalDeposited: number
+  totalWithdrawn: number
+  accountValue: number
+}
+
 export interface WalletDetail {
   state: ClearinghouseState
   fills: Fill[]
   fundings: UserFunding[]
   address: string
+  allTimePnl?: AllTimePnlResult
+  fillsCapped?: boolean
 }

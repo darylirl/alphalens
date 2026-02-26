@@ -1,15 +1,38 @@
 'use client'
 import { useState, useMemo } from 'react'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
-import type { DailyPnl } from '@/lib/analytics/pnl'
+import type { DailyPnl, PnlPoint } from '@/lib/analytics/pnl'
 
 type Timeframe = '7D' | '30D' | '90D' | 'All'
 
 interface PnLChartProps {
   data: DailyPnl[]
+  pnlSeries?: PnlPoint[]
 }
 
-function filterByTimeframe(data: DailyPnl[], tf: Timeframe): DailyPnl[] {
+interface ChartPoint {
+  date: string
+  cumulative: number
+}
+
+function buildDailyFromSeries(series: PnlPoint[]): ChartPoint[] {
+  if (!series.length) return []
+
+  // Aggregate per-fill data into daily points (last PnL value of each day)
+  const dailyMap = new Map<string, number>()
+  for (const point of series) {
+    const date = new Date(point.timestamp).toISOString().split('T')[0]
+    dailyMap.set(date, point.pnl)
+  }
+
+  const points: ChartPoint[] = []
+  for (const [date, cumulative] of dailyMap) {
+    points.push({ date, cumulative })
+  }
+  return points.sort((a, b) => a.date.localeCompare(b.date))
+}
+
+function filterByTimeframe(data: ChartPoint[], tf: Timeframe): ChartPoint[] {
   if (tf === 'All' || !data.length) return data
   const days = tf === '7D' ? 7 : tf === '30D' ? 30 : 90
   const cutoff = new Date()
@@ -20,10 +43,10 @@ function filterByTimeframe(data: DailyPnl[], tf: Timeframe): DailyPnl[] {
   return filtered
 }
 
-function fillDateGaps(data: DailyPnl[]): DailyPnl[] {
+function fillDateGaps(data: ChartPoint[]): ChartPoint[] {
   if (data.length < 2) return data
 
-  const result: DailyPnl[] = []
+  const result: ChartPoint[] = []
   const startDate = new Date(data[0].date)
   const endDate = new Date(data[data.length - 1].date)
   const dateMap = new Map(data.map(d => [d.date, d]))
@@ -37,26 +60,31 @@ function fillDateGaps(data: DailyPnl[]): DailyPnl[] {
       lastCumulative = entry.cumulative
       result.push(entry)
     } else {
-      result.push({ date: dateStr, pnl: 0, cumulative: lastCumulative })
+      result.push({ date: dateStr, cumulative: lastCumulative })
     }
     current.setDate(current.getDate() + 1)
   }
   return result
 }
 
-export function PnLChart({ data }: PnLChartProps) {
-  const [timeframe, setTimeframe] = useState<Timeframe>('30D')
+export function PnLChart({ data, pnlSeries }: PnLChartProps) {
+  const [timeframe, setTimeframe] = useState<Timeframe>('All')
 
   const chartData = useMemo(() => {
-    const filtered = filterByTimeframe(data, timeframe)
-    return fillDateGaps(filtered)
-  }, [data, timeframe])
+    // Prefer pnlSeries (fee-adjusted, from-genesis) when available
+    const baseData = pnlSeries && pnlSeries.length > 0
+      ? buildDailyFromSeries(pnlSeries)
+      : data.map(d => ({ date: d.date, cumulative: d.cumulative }))
 
-  if (!data.length) {
+    const filtered = filterByTimeframe(baseData, timeframe)
+    return fillDateGaps(filtered)
+  }, [data, pnlSeries, timeframe])
+
+  if ((!data.length && (!pnlSeries || !pnlSeries.length))) {
     return <p className="text-white/55 text-sm text-center py-8">No PnL data available</p>
   }
 
-  const isPositive = chartData[chartData.length - 1]?.cumulative >= 0
+  const isPositive = chartData.length > 0 && chartData[chartData.length - 1]?.cumulative >= 0
 
   return (
     <div>

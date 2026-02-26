@@ -1,12 +1,13 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useParams } from 'next/navigation'
 import { WalletProfile } from '@/components/wallet/WalletProfile'
 import { SkeletonCard } from '@/components/ui/SkeletonCard'
-import { computeDailyPnl, computeSharpe, computeSharpeFromFills, computeWinRate, computeTotalPnl, computeMaxDrawdown } from '@/lib/analytics/pnl'
+import { computeDailyPnl, computeSharpe, computeSharpeFromFills, computeWinRate, computeTotalPnl, computeMaxDrawdown, buildPnlSeries } from '@/lib/analytics/pnl'
 import { detectArchetype } from '@/lib/analytics/archetype'
 import { computeAlphaDecay } from '@/lib/analytics/alphaDecay'
-import type { WalletDetail, Fill, ClearinghouseState } from '@/lib/hyperliquid/types'
+import type { WalletDetail, Fill, ClearinghouseState, AllTimePnlResult } from '@/lib/hyperliquid/types'
+import { getCachedFills, setCachedFills, mergeFills } from '@/lib/fillsCache'
 import { Star } from 'lucide-react'
 
 export default function WalletPage() {
@@ -15,6 +16,7 @@ export default function WalletPage() {
   const [detail, setDetail] = useState<WalletDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const cacheApplied = useRef(false)
 
   const loadWallet = async () => {
     setLoading(true)
@@ -23,7 +25,23 @@ export default function WalletPage() {
       const res = await fetch(`/api/wallets/${address}`)
       const data = await res.json()
       if (res.ok && data.state) {
-        setDetail(data as WalletDetail)
+        const walletData = data as WalletDetail
+        const freshFills = (walletData.fills || []) as Fill[]
+
+        // Merge with cached fills for a more complete history
+        const cached = getCachedFills(address)
+        let allFills: Fill[]
+        if (cached && !cacheApplied.current) {
+          allFills = mergeFills(cached.fills, freshFills)
+          cacheApplied.current = true
+        } else {
+          allFills = freshFills
+        }
+
+        // Update cache with merged fills
+        setCachedFills(address, allFills)
+
+        setDetail({ ...walletData, fills: allFills })
       } else {
         setError(data.error || 'Could not load wallet data')
       }
@@ -68,6 +86,7 @@ export default function WalletPage() {
   const state = detail.state || { assetPositions: [], crossMarginSummary: { accountValue: '0', totalMarginUsed: '0', totalNtlPos: '0', totalRawUsd: '0' }, marginSummary: { accountValue: '0', totalMarginUsed: '0', totalNtlPos: '0', totalRawUsd: '0' }, withdrawable: '0' }
 
   const dailyPnl = computeDailyPnl(fills as Fill[])
+  const pnlSeries = buildPnlSeries(fills as Fill[])
   const dailyValues = dailyPnl.map(d => d.pnl)
   const archetypeResult = detectArchetype(fills as Fill[], state as ClearinghouseState)
 
@@ -78,6 +97,9 @@ export default function WalletPage() {
     return computeSharpeFromFills(fills as Fill[], days)
   }
 
+  // Use true all-time PnL from ledger if available, otherwise fall back to fill sum
+  const headlinePnl = detail.allTimePnl?.allTimePnl ?? computeTotalPnl(fills as Fill[])
+
   const analytics = {
     archetype: archetypeResult.archetype,
     confidence: archetypeResult.confidence,
@@ -85,7 +107,7 @@ export default function WalletPage() {
     sharpe30d: sharpeOrFallback(30),
     sharpe90d: sharpeOrFallback(90),
     winRate: computeWinRate(fills as Fill[]),
-    totalPnl: computeTotalPnl(fills as Fill[]),
+    totalPnl: headlinePnl,
     alphaDecay: computeAlphaDecay(fills as Fill[]),
     maxDrawdown: computeMaxDrawdown(dailyValues),
     tradeCount: fills.length
@@ -100,7 +122,14 @@ export default function WalletPage() {
             Add to Watchlist
           </button>
         </div>
-        <WalletProfile detail={detail} analytics={analytics} dailyPnl={dailyPnl} />
+        <WalletProfile
+          detail={detail}
+          analytics={analytics}
+          dailyPnl={dailyPnl}
+          pnlSeries={pnlSeries}
+          fillsCapped={detail.fillsCapped || false}
+          allTimePnl={detail.allTimePnl}
+        />
       </div>
     </div>
   )

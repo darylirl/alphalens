@@ -7,8 +7,8 @@ import { PositionHeatmap } from './PositionHeatmap'
 import { PnLChart } from './PnLChart'
 import { TokenMetrics } from './TokenMetrics'
 import { StrategySummary } from './StrategySummary'
-import type { WalletDetail } from '@/lib/hyperliquid/types'
-import type { DailyPnl } from '@/lib/analytics/pnl'
+import type { WalletDetail, AllTimePnlResult } from '@/lib/hyperliquid/types'
+import type { DailyPnl, PnlPoint } from '@/lib/analytics/pnl'
 import { getWalletAlias, truncateAddress } from '@/lib/walletAliases'
 
 interface WalletProfileProps {
@@ -26,9 +26,12 @@ interface WalletProfileProps {
     tradeCount: number
   }
   dailyPnl: DailyPnl[]
+  pnlSeries: PnlPoint[]
+  fillsCapped: boolean
+  allTimePnl?: AllTimePnlResult
 }
 
-export function WalletProfile({ detail, analytics, dailyPnl }: WalletProfileProps) {
+export function WalletProfile({ detail, analytics, dailyPnl, pnlSeries, fillsCapped, allTimePnl }: WalletProfileProps) {
   const shortAddr = truncateAddress(detail.address)
   const alias = getWalletAlias(detail.address)
   const accountValue = parseFloat(detail.state.crossMarginSummary?.accountValue || '0')
@@ -53,7 +56,7 @@ export function WalletProfile({ detail, analytics, dailyPnl }: WalletProfileProp
         </div>
 
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <MetricBox label="Total PnL" value={`$${analytics.totalPnl.toLocaleString()}`} positive={analytics.totalPnl >= 0} />
+          <MetricBox label="All-Time PnL" value={`$${analytics.totalPnl.toLocaleString()}`} positive={analytics.totalPnl >= 0} />
           <MetricBox label="Win Rate" value={`${(analytics.winRate * 100).toFixed(0)}%`} />
           <MetricBox label="Sharpe (30d)" value={isNaN(analytics.sharpe30d) ? '—' : analytics.sharpe30d.toFixed(2)} />
           <MetricBox label="Max DD" value={`$${Math.abs(analytics.maxDrawdown).toLocaleString()}`} positive={false} />
@@ -89,7 +92,12 @@ export function WalletProfile({ detail, analytics, dailyPnl }: WalletProfileProp
 
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="card p-4">
         <h3 className="text-sm font-semibold mb-3">Cumulative PnL</h3>
-        <PnLChart data={dailyPnl} />
+        <PnLChart data={dailyPnl} pnlSeries={pnlSeries} />
+        {fillsCapped && (
+          <p className="text-[10px] text-white/40 mt-2 text-center">
+            Showing last 10,000 fills. True all-time PnL shown above.
+          </p>
+        )}
       </motion.div>
 
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="card p-4">
