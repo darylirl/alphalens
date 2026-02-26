@@ -83,10 +83,10 @@ export function TokenMetrics({ fills }: { fills: Fill[] }) {
             <tr key={m.token} className="border-t border-white/[0.08]">
               <td className="py-2.5 font-medium">{m.token}</td>
               <td className={`py-2.5 text-right font-mono ${m.roi >= 0 ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>
-                {m.roi.toFixed(2)}%
+                {m.roi >= 0 ? '+' : ''}{m.roi.toFixed(2)}%
               </td>
               <td className={`py-2.5 text-right font-mono ${m.netPnl >= 0 ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>
-                ${m.netPnl.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                {m.netPnl >= 0 ? '+' : '-'}${Math.abs(m.netPnl).toLocaleString(undefined, { maximumFractionDigits: 2 })}
               </td>
               <td className="py-2.5 text-right font-mono">
                 ${m.volume.toLocaleString(undefined, { maximumFractionDigits: 0 })}
@@ -98,10 +98,10 @@ export function TokenMetrics({ fills }: { fills: Fill[] }) {
               <td className="py-2.5 text-right font-mono text-[#34EAB9]">{m.wins}</td>
               <td className="py-2.5 text-right font-mono text-[#FF3B5C]">{m.losses}</td>
               <td className="py-2.5 text-right font-mono text-[#34EAB9]">
-                ${m.avgWin.toFixed(2)}
+                +${m.avgWin.toFixed(2)}
               </td>
               <td className="py-2.5 text-right font-mono text-[#FF3B5C]">
-                ${m.avgLoss.toFixed(2)}
+                -${m.avgLoss.toFixed(2)}
               </td>
             </tr>
           ))}

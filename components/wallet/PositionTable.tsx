@@ -42,7 +42,7 @@ export function PositionTable({ positions }: PositionTableProps) {
                 <td className="py-2.5 text-right font-mono">{Math.abs(size).toFixed(4)}</td>
                 <td className="py-2.5 text-right font-mono">${entry.toLocaleString()}</td>
                 <td className={`py-2.5 text-right font-mono ${upnl >= 0 ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>
-                  {upnl >= 0 ? '+' : ''}${upnl.toFixed(2)}
+                  {upnl >= 0 ? '+' : '-'}${Math.abs(upnl).toFixed(2)}
                 </td>
                 <td className="py-2.5 text-right font-mono">{leverage}x</td>
               </tr>

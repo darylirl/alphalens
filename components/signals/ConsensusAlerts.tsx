@@ -22,9 +22,10 @@ export interface ConsensusAlert {
 }
 
 function formatUsd(n: number): string {
-  if (Math.abs(n) >= 1e6) return `$${(n / 1e6).toFixed(1)}M`
-  if (Math.abs(n) >= 1e3) return `$${(n / 1e3).toFixed(0)}K`
-  return `$${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+  const abs = Math.abs(n)
+  if (abs >= 1e6) return `$${(abs / 1e6).toFixed(1)}M`
+  if (abs >= 1e3) return `$${(abs / 1e3).toFixed(0)}K`
+  return `$${abs.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
 }
 
 function timeAgo(ts: number): string {
@@ -103,7 +104,7 @@ export function ConsensusAlerts({ alerts }: { alerts: ConsensusAlert[] }) {
                       </div>
                       <div className="flex items-center gap-3">
                         <span className={`font-mono text-[10px] ${w.pnl30d >= 0 ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>
-                          {w.pnl30d >= 0 ? '+' : ''}{formatUsd(w.pnl30d)}
+                          {w.pnl30d >= 0 ? '+' : '-'}{formatUsd(w.pnl30d)}
                         </span>
                         <span className="font-mono text-[10px] text-white/55">{formatUsd(w.size)}</span>
                       </div>

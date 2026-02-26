@@ -126,7 +126,7 @@ export function PnLChart({ portfolio }: PnLChartProps) {
               fontSize: '12px',
             }}
             labelStyle={{ color: 'rgba(255,255,255,0.55)' }}
-            formatter={(value: number) => [`$${value.toLocaleString()}`, 'Cumulative PnL']}
+            formatter={(value: number) => [`${value >= 0 ? '+' : '-'}$${Math.abs(value).toLocaleString()}`, 'Cumulative PnL']}
           />
           <Area
             type="monotone"

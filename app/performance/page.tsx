@@ -70,9 +70,10 @@ const DEMO_TRADES: FollowedTrade[] = [
 ]
 
 function formatUsd(n: number): string {
-  if (Math.abs(n) >= 1e6) return `$${(n / 1e6).toFixed(1)}M`
-  if (Math.abs(n) >= 1e3) return `$${(n / 1e3).toFixed(1)}K`
-  return `$${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+  const abs = Math.abs(n)
+  if (abs >= 1e6) return `$${(abs / 1e6).toFixed(1)}M`
+  if (abs >= 1e3) return `$${(abs / 1e3).toFixed(1)}K`
+  return `$${abs.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
 }
 
 export default function PerformancePage() {
@@ -171,7 +172,7 @@ export default function PerformancePage() {
                   <span className="text-[10px] text-white/40">Alpha Lens PnL</span>
                 </div>
                 <p className={`font-mono font-bold text-lg ${totalPnl >= 0 ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>
-                  {totalPnl >= 0 ? '+' : ''}{formatUsd(totalPnl)}
+                  {totalPnl >= 0 ? '+' : '-'}{formatUsd(totalPnl)}
                 </p>
               </div>
               <div className="card p-3">
@@ -224,7 +225,7 @@ export default function PerformancePage() {
                         </div>
                       </div>
                       <p className={`font-mono font-bold ${w.totalPnl >= 0 ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>
-                        {w.totalPnl >= 0 ? '+' : ''}{formatUsd(w.totalPnl)}
+                        {w.totalPnl >= 0 ? '+' : '-'}{formatUsd(w.totalPnl)}
                       </p>
                     </div>
                   </motion.div>
@@ -248,7 +249,7 @@ export default function PerformancePage() {
                         <span className="text-[10px] text-white/40">via {t.sourceLabel}</span>
                       </div>
                       <p className={`font-mono text-sm font-semibold ${t.yourPnl >= 0 ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>
-                        {t.yourPnl >= 0 ? '+' : ''}{formatUsd(t.yourPnl)}
+                        {t.yourPnl >= 0 ? '+' : '-'}{formatUsd(t.yourPnl)}
                       </p>
                     </div>
                   ))}
@@ -287,7 +288,7 @@ export default function PerformancePage() {
                     </div>
                     <div className="text-right">
                       <p className={`font-mono font-bold ${t.yourPnl >= 0 ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>
-                        {t.yourPnl >= 0 ? '+' : ''}{formatUsd(t.yourPnl)}
+                        {t.yourPnl >= 0 ? '+' : '-'}{formatUsd(t.yourPnl)}
                       </p>
                       <p className="text-[9px] text-white/40">Your PnL</p>
                     </div>
@@ -307,13 +308,13 @@ export default function PerformancePage() {
                     <div className="bg-[#0F1A1E] rounded p-2">
                       <p className="text-[9px] text-white/40 mb-1">Source PnL</p>
                       <p className={`font-mono ${t.sourcePnl >= 0 ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>
-                        {t.sourcePnl >= 0 ? '+' : ''}{formatUsd(t.sourcePnl)}
+                        {t.sourcePnl >= 0 ? '+' : '-'}{formatUsd(t.sourcePnl)}
                       </p>
                     </div>
                     <div className="bg-[#0F1A1E] rounded p-2">
                       <p className="text-[9px] text-white/40 mb-1">Your PnL</p>
                       <p className={`font-mono ${t.yourPnl >= 0 ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>
-                        {t.yourPnl >= 0 ? '+' : ''}{formatUsd(t.yourPnl)}
+                        {t.yourPnl >= 0 ? '+' : '-'}{formatUsd(t.yourPnl)}
                       </p>
                     </div>
                   </div>
@@ -346,7 +347,7 @@ export default function PerformancePage() {
                     </p>
                   </div>
                   <p className={`font-mono font-bold text-lg ${w.totalPnl >= 0 ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>
-                    {w.totalPnl >= 0 ? '+' : ''}{formatUsd(w.totalPnl)}
+                    {w.totalPnl >= 0 ? '+' : '-'}{formatUsd(w.totalPnl)}
                   </p>
                 </div>
 
@@ -361,11 +362,11 @@ export default function PerformancePage() {
                   </div>
                   <div className="bg-[#0F1A1E] rounded p-2 text-center">
                     <p className="text-[9px] text-white/40 mb-0.5">Best</p>
-                    <p className="font-mono font-semibold text-[#34EAB9]">+{formatUsd(w.bestTrade)}</p>
+                    <p className={`font-mono font-semibold ${w.bestTrade >= 0 ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>{w.bestTrade >= 0 ? '+' : '-'}{formatUsd(w.bestTrade)}</p>
                   </div>
                   <div className="bg-[#0F1A1E] rounded p-2 text-center">
                     <p className="text-[9px] text-white/40 mb-0.5">Worst</p>
-                    <p className="font-mono font-semibold text-[#FF3B5C]">{formatUsd(w.worstTrade)}</p>
+                    <p className={`font-mono font-semibold ${w.worstTrade >= 0 ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>{w.worstTrade >= 0 ? '+' : '-'}{formatUsd(w.worstTrade)}</p>
                   </div>
                 </div>
               </motion.div>

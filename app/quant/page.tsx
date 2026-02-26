@@ -202,7 +202,7 @@ export default function QuantPage() {
                     </div>
                     <div className="flex gap-4 text-xs text-white/55">
                       <span>Paper PnL: <span className={`font-mono ${rule.paperPnl >= 0 ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>
-                        {rule.paperPnl >= 0 ? '+' : ''}${rule.paperPnl.toLocaleString()}
+                        {rule.paperPnl >= 0 ? '+' : '-'}${Math.abs(rule.paperPnl).toLocaleString()}
                       </span></span>
                       <span>Triggers: <span className="font-mono">{rule.triggerCount}</span></span>
                       <span>{rule.isActive ? 'Running' : 'Paused'}</span>

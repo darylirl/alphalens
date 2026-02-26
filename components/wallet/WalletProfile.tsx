@@ -71,21 +71,21 @@ export function WalletProfile({ detail, headlinePnl }: WalletProfileProps) {
         </div>
 
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <MetricBox label="All-Time PnL" value={`$${analytics.totalPnl.toLocaleString()}`} positive={analytics.totalPnl >= 0} />
+          <MetricBox label="All-Time PnL" value={`${analytics.totalPnl >= 0 ? '+' : '-'}$${Math.abs(analytics.totalPnl).toLocaleString()}`} positive={analytics.totalPnl >= 0} />
           <MetricBox label="Win Rate" value={`${(analytics.winRate * 100).toFixed(0)}%`} />
-          <MetricBox label="Sharpe (30d)" value={isNaN(analytics.sharpe30d) ? '—' : analytics.sharpe30d.toFixed(2)} />
-          <MetricBox label="Max DD" value={`$${Math.abs(analytics.maxDrawdown).toLocaleString()}`} positive={false} />
+          <MetricBox label="Sharpe (30d)" value={isNaN(analytics.sharpe30d) ? '—' : `${analytics.sharpe30d >= 0 ? '+' : ''}${analytics.sharpe30d.toFixed(2)}`} positive={isNaN(analytics.sharpe30d) ? undefined : analytics.sharpe30d >= 0} />
+          <MetricBox label="Max DD" value={`-$${Math.abs(analytics.maxDrawdown).toLocaleString()}`} positive={false} />
         </div>
       </motion.div>
 
       <div className="grid grid-cols-3 gap-3">
         <div className="card p-3 text-center">
           <p className="text-xs text-white/55 mb-1">Sharpe 7d</p>
-          <p className="font-mono font-semibold">{isNaN(analytics.sharpe7d) ? '—' : analytics.sharpe7d.toFixed(2)}</p>
+          <p className={`font-mono font-semibold ${isNaN(analytics.sharpe7d) ? '' : analytics.sharpe7d >= 0 ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>{isNaN(analytics.sharpe7d) ? '—' : `${analytics.sharpe7d >= 0 ? '+' : ''}${analytics.sharpe7d.toFixed(2)}`}</p>
         </div>
         <div className="card p-3 text-center">
           <p className="text-xs text-white/55 mb-1">Sharpe 90d</p>
-          <p className="font-mono font-semibold">{isNaN(analytics.sharpe90d) ? '—' : analytics.sharpe90d.toFixed(2)}</p>
+          <p className={`font-mono font-semibold ${isNaN(analytics.sharpe90d) ? '' : analytics.sharpe90d >= 0 ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>{isNaN(analytics.sharpe90d) ? '—' : `${analytics.sharpe90d >= 0 ? '+' : ''}${analytics.sharpe90d.toFixed(2)}`}</p>
         </div>
         <div className="card p-3 text-center">
           <p className="text-xs text-white/55 mb-1">Trades</p>

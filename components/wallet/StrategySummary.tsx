@@ -27,9 +27,10 @@ function formatDuration(seconds: number): string {
 }
 
 function formatUsd(n: number): string {
-  if (Math.abs(n) >= 1e6) return `$${(n / 1e6).toFixed(1)}M`
-  if (Math.abs(n) >= 1e3) return `$${(n / 1e3).toFixed(0)}K`
-  return `$${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+  const abs = Math.abs(n)
+  if (abs >= 1e6) return `$${(abs / 1e6).toFixed(1)}M`
+  if (abs >= 1e3) return `$${(abs / 1e3).toFixed(0)}K`
+  return `$${abs.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
 }
 
 export function StrategySummary({ fills, state, address, analytics }: StrategySummaryProps) {
@@ -254,7 +255,7 @@ export function StrategySummary({ fills, state, address, analytics }: StrategySu
                   </div>
                   <span className="font-mono text-[10px] text-white/55 w-8 text-right">{pct}%</span>
                   <span className={`font-mono text-[10px] w-16 text-right ${asset.pnl >= 0 ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>
-                    {asset.pnl >= 0 ? '+' : ''}{formatUsd(asset.pnl)}
+                    {asset.pnl >= 0 ? '+' : '-'}{formatUsd(asset.pnl)}
                   </span>
                 </div>
               )

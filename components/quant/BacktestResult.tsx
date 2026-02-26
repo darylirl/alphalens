@@ -37,12 +37,12 @@ export function BacktestResult({ strategyName, data, totalPnl, winRate, tradeCou
         <div className="bg-[#0F1A1E] rounded p-3">
           <p className="text-white/55 text-xs mb-1">Total Return</p>
           <p className={`font-mono font-semibold text-sm ${isPositive ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>
-            {isPositive ? '+' : ''}${totalPnl.toLocaleString()}
+            {isPositive ? '+' : '-'}${Math.abs(totalPnl).toLocaleString()}
           </p>
         </div>
         <div className="bg-[#0F1A1E] rounded p-3">
           <p className="text-white/55 text-xs mb-1">Sharpe Ratio</p>
-          <p className="font-mono font-semibold text-sm">{sharpe.toFixed(2)}</p>
+          <p className={`font-mono font-semibold text-sm ${sharpe >= 0 ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>{sharpe >= 0 ? '+' : ''}{sharpe.toFixed(2)}</p>
         </div>
         <div className="bg-[#0F1A1E] rounded p-3">
           <p className="text-white/55 text-xs mb-1">Max Drawdown</p>
@@ -80,7 +80,7 @@ export function BacktestResult({ strategyName, data, totalPnl, winRate, tradeCou
             <Tooltip
               contentStyle={{ backgroundColor: '#0F1A1E', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', fontSize: '12px' }}
               labelStyle={{ color: 'rgba(255,255,255,0.55)' }}
-              formatter={(value: number) => [`$${value.toLocaleString()}`, 'PnL']}
+              formatter={(value: number) => [`${value >= 0 ? '+' : '-'}$${Math.abs(value).toLocaleString()}`, 'PnL']}
             />
             <Area type="monotone" dataKey="pnl" stroke={isPositive ? '#34EAB9' : '#FF3B5C'} strokeWidth={2} fill="url(#btGradient)" />
           </AreaChart>
@@ -113,7 +113,7 @@ export function BacktestResult({ strategyName, data, totalPnl, winRate, tradeCou
                     <td className="py-2 pr-3 text-right font-mono text-white/55">${s.entry.toLocaleString()}</td>
                     <td className="py-2 pr-3 text-right font-mono text-white/55">${s.exit.toLocaleString()}</td>
                     <td className={`py-2 text-right font-mono font-semibold ${s.pnl >= 0 ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>
-                      {s.pnl >= 0 ? '+' : ''}${s.pnl.toLocaleString()}
+                      {s.pnl >= 0 ? '+' : '-'}${Math.abs(s.pnl).toLocaleString()}
                     </td>
                   </tr>
                 ))}

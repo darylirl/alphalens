@@ -81,10 +81,11 @@ interface SectorInsight {
 }
 
 const formatUsd = (n: number) => {
-  if (Math.abs(n) >= 1e9) return `$${(n / 1e9).toFixed(2)}B`
-  if (Math.abs(n) >= 1e6) return `$${(n / 1e6).toFixed(2)}M`
-  if (Math.abs(n) >= 1e3) return `$${(n / 1e3).toFixed(1)}K`
-  return `$${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+  const abs = Math.abs(n)
+  if (abs >= 1e9) return `$${(abs / 1e9).toFixed(2)}B`
+  if (abs >= 1e6) return `$${(abs / 1e6).toFixed(2)}M`
+  if (abs >= 1e3) return `$${(abs / 1e3).toFixed(1)}K`
+  return `$${abs.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
 }
 
 const directionBg = (d: string) => {
@@ -248,7 +249,7 @@ export default function SmartMoneyPage() {
                   <div className="flex items-center justify-between mt-1">
                     <span className="text-[9px] text-white/40">{formatUsd(t.totalNotional)}</span>
                     <span className={`text-[9px] font-semibold ${pnlColor(t.totalPnl)}`}>
-                      {t.totalPnl >= 0 ? '+' : ''}{formatUsd(t.totalPnl)}
+                      {t.totalPnl >= 0 ? '+' : '-'}{formatUsd(t.totalPnl)}
                     </span>
                   </div>
                 </button>
@@ -278,7 +279,7 @@ export default function SmartMoneyPage() {
                         <div className="text-right text-[10px]">
                           <span className="text-white/55">Avg PnL: </span>
                           <span className={pnlColor(tier.avgPnl)}>
-                            {tier.avgPnl >= 0 ? '+' : ''}{formatUsd(tier.avgPnl)}
+                            {tier.avgPnl >= 0 ? '+' : '-'}{formatUsd(tier.avgPnl)}
                           </span>
                         </div>
                       </div>
@@ -323,16 +324,16 @@ export default function SmartMoneyPage() {
                                   <span className="text-[#FF3B5C]">{formatUsd(w.totalShort)}</span>
                                 </td>
                                 <td className={`py-2.5 text-right font-mono ${pnlColor(w.cumulativePnl)}`}>
-                                  {w.cumulativePnl >= 0 ? '+' : ''}{formatUsd(w.cumulativePnl)}
+                                  {w.cumulativePnl >= 0 ? '+' : '-'}{formatUsd(w.cumulativePnl)}
                                 </td>
                                 <td className={`py-2.5 text-right font-mono ${pnlColor(w.unrealizedPnl)}`}>
-                                  {w.unrealizedPnl >= 0 ? '+' : ''}{formatUsd(w.unrealizedPnl)}
+                                  {w.unrealizedPnl >= 0 ? '+' : '-'}{formatUsd(w.unrealizedPnl)}
                                 </td>
                                 <td className={`py-2.5 text-right font-mono ${pnlColor(w.fundingPnl)}`}>
-                                  {w.fundingPnl >= 0 ? '+' : ''}{formatUsd(w.fundingPnl)}
+                                  {w.fundingPnl >= 0 ? '+' : '-'}{formatUsd(w.fundingPnl)}
                                 </td>
                                 <td className={`py-2.5 text-right font-mono font-semibold ${pnlColor(w.totalPnl)}`}>
-                                  {w.totalPnl >= 0 ? '+' : ''}{formatUsd(w.totalPnl)}
+                                  {w.totalPnl >= 0 ? '+' : '-'}{formatUsd(w.totalPnl)}
                                 </td>
                                 <td className="py-2.5 text-right text-[10px] text-white/55">
                                   {timeAgo(w.firstTradeTime)}
@@ -523,7 +524,7 @@ export default function SmartMoneyPage() {
                       <div className="flex items-center gap-2">
                         <div className="text-right">
                           <p className={`font-mono text-sm font-bold ${pnlColor(token.aggregatePnl)}`}>
-                            {token.aggregatePnl >= 0 ? '+' : ''}{formatUsd(token.aggregatePnl)}
+                            {token.aggregatePnl >= 0 ? '+' : '-'}{formatUsd(token.aggregatePnl)}
                           </p>
                           <p className="text-[9px] text-white/40">Agg. uPnL</p>
                         </div>
@@ -646,13 +647,13 @@ export default function SmartMoneyPage() {
                                       <td className="py-2 text-right font-mono">{formatUsd(w.notional)}</td>
                                       <td className="py-2 text-right font-mono">{w.leverage}x</td>
                                       <td className={`py-2 text-right font-mono ${pnlColor(w.pnl)}`}>
-                                        {w.pnl >= 0 ? '+' : ''}{formatUsd(w.pnl)}
+                                        {w.pnl >= 0 ? '+' : '-'}{formatUsd(w.pnl)}
                                       </td>
                                       <td className={`py-2 text-right font-mono font-semibold ${pnlColor(w.totalPnl)}`}>
-                                        {w.totalPnl >= 0 ? '+' : ''}{formatUsd(w.totalPnl)}
+                                        {w.totalPnl >= 0 ? '+' : '-'}{formatUsd(w.totalPnl)}
                                       </td>
                                       <td className={`py-2 text-right font-mono ${pnlColor(w.fundingPnl)}`}>
-                                        {w.fundingPnl >= 0 ? '+' : ''}{formatUsd(w.fundingPnl)}
+                                        {w.fundingPnl >= 0 ? '+' : '-'}{formatUsd(w.fundingPnl)}
                                       </td>
                                       <td className="py-2 text-right text-[10px] text-white/55">
                                         {timeAgo(w.firstTradeTime)}

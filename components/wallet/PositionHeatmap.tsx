@@ -26,9 +26,10 @@ function getBlockColor(pnl: number): string {
 }
 
 function formatPnl(n: number): string {
-  if (Math.abs(n) >= 1e6) return `$${(n / 1e6).toFixed(1)}M`
-  if (Math.abs(n) >= 1e3) return `$${(n / 1e3).toFixed(1)}K`
-  return `$${n.toFixed(0)}`
+  const abs = Math.abs(n)
+  if (abs >= 1e6) return `$${(abs / 1e6).toFixed(1)}M`
+  if (abs >= 1e3) return `$${(abs / 1e3).toFixed(1)}K`
+  return `$${abs.toFixed(0)}`
 }
 
 function formatNotional(n: number): string {
@@ -165,7 +166,7 @@ export function PositionHeatmap({ positions }: { positions: AssetPosition[] }) {
                         className="font-mono font-semibold text-white"
                         style={{ fontSize: r.w > 28 ? '11px' : '9px' }}
                       >
-                        {cell.pnl >= 0 ? '+' : ''}{formatPnl(cell.pnl)}
+                        {cell.pnl >= 0 ? '+' : '-'}{formatPnl(cell.pnl)}
                       </span>
                       <span className="font-mono text-white/60" style={{ fontSize: r.w > 28 ? '9px' : '7px' }}>
                         {isLong ? 'LONG' : 'SHORT'} {cell.leverage}x
@@ -180,7 +181,7 @@ export function PositionHeatmap({ positions }: { positions: AssetPosition[] }) {
                     <div className="flex flex-col items-center px-0.5">
                       <span className="font-bold text-white text-[9px]">{cell.coin}</span>
                       <span className="font-mono font-semibold text-white text-[7px]">
-                        {cell.pnl >= 0 ? '+' : ''}{formatPnl(cell.pnl)}
+                        {cell.pnl >= 0 ? '+' : '-'}{formatPnl(cell.pnl)}
                       </span>
                     </div>
                   )}
@@ -238,7 +239,7 @@ export function PositionHeatmap({ positions }: { positions: AssetPosition[] }) {
                   className="font-mono font-semibold"
                   style={{ color: hoveredCell.pnl >= 0 ? COLOR_POS : COLOR_NEG }}
                 >
-                  {hoveredCell.pnl >= 0 ? '+' : ''}{formatPnl(hoveredCell.pnl)}
+                  {hoveredCell.pnl >= 0 ? '+' : '-'}{formatPnl(hoveredCell.pnl)}
                 </span>
               </div>
               <div className="flex justify-between">

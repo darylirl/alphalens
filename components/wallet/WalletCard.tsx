@@ -43,7 +43,7 @@ export function WalletCard({ address, label, archetype, sharpe30d, winRate, tota
             <div>
               <p className="text-white/40 text-[11px] mb-1">30d PnL</p>
               <p className={`font-semibold text-sm font-mono ${pnlPositive ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>
-                {pnlPositive ? '+' : ''}${Math.abs(totalPnl).toLocaleString()}
+                {pnlPositive ? '+' : '-'}${Math.abs(totalPnl).toLocaleString()}
               </p>
             </div>
             <div>
@@ -52,7 +52,7 @@ export function WalletCard({ address, label, archetype, sharpe30d, winRate, tota
             </div>
             <div>
               <p className="text-white/40 text-[11px] mb-1">Sharpe</p>
-              <p className="font-semibold text-sm font-mono text-[#F0FAF8]">{isNaN(sharpe30d) ? '—' : sharpe30d.toFixed(2)}</p>
+              <p className={`font-semibold text-sm font-mono ${isNaN(sharpe30d) ? 'text-[#F0FAF8]' : sharpe30d >= 0 ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>{isNaN(sharpe30d) ? '—' : `${sharpe30d >= 0 ? '+' : ''}${sharpe30d.toFixed(2)}`}</p>
             </div>
           </div>
 

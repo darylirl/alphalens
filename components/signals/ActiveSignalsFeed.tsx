@@ -83,9 +83,10 @@ function timeAgo(ts: number): string {
 }
 
 function formatUsd(n: number): string {
-  if (Math.abs(n) >= 1e6) return `$${(n / 1e6).toFixed(1)}M`
-  if (Math.abs(n) >= 1e3) return `$${(n / 1e3).toFixed(0)}K`
-  return `$${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+  const abs = Math.abs(n)
+  if (abs >= 1e6) return `$${(abs / 1e6).toFixed(1)}M`
+  if (abs >= 1e3) return `$${(abs / 1e3).toFixed(0)}K`
+  return `$${abs.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
 }
 
 interface ActiveSignalsFeedProps {
@@ -258,7 +259,7 @@ export function ActiveSignalsFeed({ signals, compact = false }: ActiveSignalsFee
                           {(signal.winRate * 100).toFixed(0)}% win
                         </span>
                         <span className={`font-mono text-[9px] ${signal.pnl30d >= 0 ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>
-                          {signal.pnl30d >= 0 ? '+' : ''}{formatUsd(signal.pnl30d)} 30d
+                          {signal.pnl30d >= 0 ? '+' : '-'}{formatUsd(signal.pnl30d)} 30d
                         </span>
                       </div>
                     </div>

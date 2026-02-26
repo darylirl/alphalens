@@ -258,13 +258,13 @@ export default function DashboardPage() {
                             </span>
                           </td>
                           <td className={`py-3 px-4 text-right font-mono font-semibold ${pnlPositive ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>
-                            {pnlPositive ? '+' : ''}${Math.abs(w.totalPnlUsd).toLocaleString()}
+                            {pnlPositive ? '+' : '-'}${Math.abs(w.totalPnlUsd).toLocaleString()}
                           </td>
                           <td className="py-3 px-4 text-right font-mono">
                             {(w.winRate * 100).toFixed(0)}%
                           </td>
-                          <td className="py-3 px-4 text-right font-mono">
-                            {isNaN(w.sharpe30d) ? '—' : w.sharpe30d.toFixed(2)}
+                          <td className={`py-3 px-4 text-right font-mono ${isNaN(w.sharpe30d) ? '' : w.sharpe30d >= 0 ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>
+                            {isNaN(w.sharpe30d) ? '—' : `${w.sharpe30d >= 0 ? '+' : ''}${w.sharpe30d.toFixed(2)}`}
                           </td>
                         </tr>
                       )
