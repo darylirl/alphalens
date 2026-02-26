@@ -41,7 +41,7 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen bg-[#0F1A1E] overflow-hidden">
       {/* Hero */}
-      <section className="relative pt-16 pb-20 px-6 lg:pt-28 lg:pb-32">
+      <section className="relative pt-16 pb-12 px-6 lg:pt-28 lg:pb-20">
         {/* Ambient bg */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <div className="absolute top-1/4 left-1/4 w-[600px] h-[600px] rounded-full bg-[#0F1A1E] opacity-[0.06] blur-[120px]" />
@@ -62,9 +62,9 @@ export default function LandingPage() {
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.15, duration: 0.5 }}
-            className="text-white/55 text-lg md:text-xl max-w-2xl mx-auto mb-10 leading-relaxed"
+            className="text-white/40 text-base md:text-lg max-w-2xl mx-auto mb-8 leading-relaxed"
           >
-            Alpha Lens tracks the best-performing wallets on Hyperliquid in real time — so you can see exactly what they&apos;re doing, follow their moves, and build your own edge from real on-chain activity.
+            Decode the wallets beating the market. Track their edge, copy their trades, build your system.
           </motion.p>
 
           <motion.div
@@ -85,7 +85,7 @@ export default function LandingPage() {
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.4, duration: 0.5 }}
-            className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-3 max-w-3xl mx-auto"
+            className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-3 max-w-3xl mx-auto"
           >
             {/* Card 1 — Live Trader Performance */}
             <div className="bg-[#0F1A1E] border border-white/[0.08] rounded-lg p-4 text-left">
@@ -117,7 +117,7 @@ export default function LandingPage() {
             initial={{ opacity: 0, y: 40 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.5, duration: 0.7, ease: [0.25, 0.4, 0.25, 1] }}
-            className="mt-16 relative"
+            className="mt-10 relative"
           >
             <div className="bg-[#0F1A1E] border border-white/[0.08] rounded-lg overflow-hidden shadow-2xl shadow-[#34EAB9]/5">
               {/* Fake browser chrome */}
@@ -126,7 +126,7 @@ export default function LandingPage() {
                 <div className="w-2.5 h-2.5 rounded-full bg-white/40 opacity-40" />
                 <div className="w-2.5 h-2.5 rounded-full bg-[#34EAB9] opacity-40" />
                 <div className="flex-1 ml-3 bg-[#0F1A1E] rounded px-3 py-1 text-[10px] font-mono text-white/40">
-                  app.alphalens.io/dashboard
+                  alphalens-taupe.vercel.app/dashboard
                 </div>
               </div>
               {/* Dashboard preview */}
@@ -166,7 +166,7 @@ export default function LandingPage() {
 
       {/* Live Leaderboard Preview */}
       <section className="border-y border-white/[0.08] bg-[#0F1A1E]">
-        <div className="max-w-4xl mx-auto px-6 py-12">
+        <div className="max-w-4xl mx-auto px-6 py-8">
           <motion.div
             initial="hidden"
             whileInView="visible"
@@ -247,7 +247,7 @@ export default function LandingPage() {
           key={f.num}
           className="bg-[#0F1A1E]"
         >
-          <div className="max-w-5xl mx-auto px-6 py-20 lg:py-28">
+          <div className="max-w-5xl mx-auto px-6 py-14 lg:py-20">
             <motion.div
               custom={0}
               initial="hidden"
@@ -388,7 +388,7 @@ export default function LandingPage() {
 
       {/* How it works */}
       <section className="bg-[#0F1A1E]">
-        <div className="max-w-5xl mx-auto px-6 py-20">
+        <div className="max-w-5xl mx-auto px-6 py-14">
           <motion.p
             initial="hidden"
             whileInView="visible"

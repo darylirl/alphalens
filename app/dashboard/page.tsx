@@ -26,7 +26,7 @@ export default function DashboardPage() {
   useEffect(() => {
     async function load() {
       try {
-        const res = await fetch('/api/hunters?limit=5&sort=sharpe_30d')
+        const res = await fetch('/api/hunters?limit=20&sort=sharpe_30d')
         if (res.ok) {
           const data = await res.json()
           setTopWallets(Array.isArray(data) ? data.map((w: Record<string, unknown>) => ({
@@ -163,9 +163,9 @@ export default function DashboardPage() {
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="card p-3">
             <div className="flex items-center gap-2 mb-2">
               <Crosshair size={14} className="text-[#34EAB9]" />
-              <span className="text-xs text-white/55">Tracked</span>
+              <span className="text-xs text-white/55">Wallets Tracked</span>
             </div>
-            <p className="font-semibold text-sm">{topWallets.length > 0 ? `${topWallets.length}+` : '—'} wallets</p>
+            <p className="font-semibold text-sm">{topWallets.length > 0 ? topWallets.length : '—'}</p>
           </motion.div>
         </div>
 
@@ -218,28 +218,60 @@ export default function DashboardPage() {
 
         <div>
           <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-sm">Top Alpha Hunters</h3>
+            <h3 className="font-semibold text-sm">Top Wallets</h3>
             <Link href="/hunters" className="text-[#34EAB9] text-xs font-medium">View All</Link>
           </div>
           {loading ? (
             <div className="space-y-3">
-              {Array.from({ length: 3 }).map((_, i) => <SkeletonCard key={i} />)}
+              {Array.from({ length: 5 }).map((_, i) => <SkeletonCard key={i} />)}
             </div>
           ) : topWallets.length > 0 ? (
-            <div className="space-y-3">
-              {topWallets.slice(0, 5).map((w, i) => (
-                <WalletCard
-                  key={w.address}
-                  address={w.address}
-                  label={w.label}
-                  archetype={w.archetype}
-                  sharpe30d={w.sharpe30d}
-                  winRate={w.winRate}
-                  totalPnl={w.totalPnlUsd}
-                  alphaDecay={w.alphaDecayScore}
-                  rank={i + 1}
-                />
-              ))}
+            <div className="card overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs min-w-[600px]">
+                  <thead>
+                    <tr className="text-white/40 text-[10px] border-b border-white/[0.08]">
+                      <th className="text-left py-3 px-4 font-medium">Rank</th>
+                      <th className="text-left py-3 px-4 font-medium">Address</th>
+                      <th className="text-left py-3 px-4 font-medium">Archetype</th>
+                      <th className="text-right py-3 px-4 font-medium">30d PnL</th>
+                      <th className="text-right py-3 px-4 font-medium">Win Rate</th>
+                      <th className="text-right py-3 px-4 font-medium">Sharpe</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {topWallets.map((w, i) => {
+                      const pnlPositive = w.totalPnlUsd >= 0
+                      return (
+                        <tr
+                          key={w.address}
+                          onClick={() => router.push(`/wallet/${w.address}`)}
+                          className="border-t border-white/[0.04] hover:bg-white/[0.04] cursor-pointer transition-colors"
+                        >
+                          <td className="py-3 px-4 font-mono text-white/40">#{i + 1}</td>
+                          <td className="py-3 px-4 font-mono text-[#F0FAF8]">
+                            {w.address.slice(0, 6)}...{w.address.slice(-4)}
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className="text-[10px] font-medium px-2 py-0.5 rounded bg-[#34EAB9]/10 text-[#34EAB9] capitalize">
+                              {w.archetype.replace('_', ' ')}
+                            </span>
+                          </td>
+                          <td className={`py-3 px-4 text-right font-mono font-semibold ${pnlPositive ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>
+                            {pnlPositive ? '+' : ''}${Math.abs(w.totalPnlUsd).toLocaleString()}
+                          </td>
+                          <td className="py-3 px-4 text-right font-mono">
+                            {(w.winRate * 100).toFixed(0)}%
+                          </td>
+                          <td className="py-3 px-4 text-right font-mono">
+                            {isNaN(w.sharpe30d) ? '—' : w.sharpe30d.toFixed(2)}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
           ) : (
             <div className="card p-6 text-center">

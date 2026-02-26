@@ -1,14 +1,47 @@
 'use client'
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { WalletProfile } from '@/components/wallet/WalletProfile'
 import { SkeletonCard } from '@/components/ui/SkeletonCard'
-import { computeDailyPnl, computeSharpe, computeSharpeFromFills, computeWinRate, computeTotalPnl, computeMaxDrawdown, buildPnlSeries } from '@/lib/analytics/pnl'
-import { detectArchetype } from '@/lib/analytics/archetype'
-import { computeAlphaDecay } from '@/lib/analytics/alphaDecay'
-import type { WalletDetail, Fill, ClearinghouseState, AllTimePnlResult } from '@/lib/hyperliquid/types'
-import { getCachedFills, setCachedFills, mergeFills } from '@/lib/fillsCache'
+import type { WalletDetail, PortfolioEntry } from '@/lib/hyperliquid/types'
 import { Star } from 'lucide-react'
+
+const PORTFOLIO_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
+
+function getCachedPortfolio(address: string): PortfolioEntry[] | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = localStorage.getItem(`alphalens_portfolio_${address.toLowerCase()}`)
+    if (!raw) return null
+    const cached = JSON.parse(raw) as { portfolio: PortfolioEntry[]; cachedAt: number }
+    if (Date.now() - cached.cachedAt > PORTFOLIO_CACHE_TTL) return null
+    return cached.portfolio
+  } catch {
+    return null
+  }
+}
+
+function setCachedPortfolio(address: string, portfolio: PortfolioEntry[]): void {
+  if (typeof window === 'undefined') return
+  try {
+    localStorage.setItem(
+      `alphalens_portfolio_${address.toLowerCase()}`,
+      JSON.stringify({ portfolio, cachedAt: Date.now() })
+    )
+  } catch { /* full */ }
+}
+
+function getPortfolioTimeframe(portfolio: PortfolioEntry[], label: string): PortfolioEntry[1] | null {
+  const entry = portfolio.find(([key]) => key === label)
+  return entry ? entry[1] : null
+}
+
+function getAllTimePnl(portfolio: PortfolioEntry[]): number {
+  const allTime = getPortfolioTimeframe(portfolio, 'allTime')
+  if (!allTime?.pnlHistory?.length) return 0
+  const lastPoint = allTime.pnlHistory[allTime.pnlHistory.length - 1]
+  return parseFloat(lastPoint[1]) || 0
+}
 
 export default function WalletPage() {
   const params = useParams()
@@ -16,32 +49,27 @@ export default function WalletPage() {
   const [detail, setDetail] = useState<WalletDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const cacheApplied = useRef(false)
 
   const loadWallet = async () => {
     setLoading(true)
     setError(null)
+
+    // Try cached portfolio first
+    const cachedPortfolio = getCachedPortfolio(address)
+
     try {
       const res = await fetch(`/api/wallets/${address}`, { cache: 'no-store' })
       const data = await res.json()
       if (res.ok && data.state) {
         const walletData = data as WalletDetail
-        const freshFills = (walletData.fills || []) as Fill[]
+        const portfolio = walletData.portfolio?.length ? walletData.portfolio : (cachedPortfolio || [])
 
-        // Merge with cached fills for a more complete history
-        const cached = getCachedFills(address)
-        let allFills: Fill[]
-        if (cached && !cacheApplied.current) {
-          allFills = mergeFills(cached.fills, freshFills)
-          cacheApplied.current = true
-        } else {
-          allFills = freshFills
+        // Cache fresh portfolio
+        if (walletData.portfolio?.length) {
+          setCachedPortfolio(address, walletData.portfolio)
         }
 
-        // Update cache with merged fills
-        setCachedFills(address, allFills)
-
-        setDetail({ ...walletData, fills: allFills })
+        setDetail({ ...walletData, portfolio })
       } else {
         setError(data.error || 'Could not load wallet data')
       }
@@ -82,36 +110,7 @@ export default function WalletPage() {
     )
   }
 
-  const fills = detail.fills || []
-  const state = detail.state || { assetPositions: [], crossMarginSummary: { accountValue: '0', totalMarginUsed: '0', totalNtlPos: '0', totalRawUsd: '0' }, marginSummary: { accountValue: '0', totalMarginUsed: '0', totalNtlPos: '0', totalRawUsd: '0' }, withdrawable: '0' }
-
-  const dailyPnl = computeDailyPnl(fills as Fill[])
-  const pnlSeries = buildPnlSeries(fills as Fill[])
-  const dailyValues = dailyPnl.map(d => d.pnl)
-  const archetypeResult = detectArchetype(fills as Fill[], state as ClearinghouseState)
-
-  // Compute Sharpe from daily data, falling back to fill-level computation
-  function sharpeOrFallback(days: number): number {
-    const daily = computeSharpe(dailyValues.slice(-days))
-    if (!isNaN(daily)) return daily
-    return computeSharpeFromFills(fills as Fill[], days)
-  }
-
-  // Use true all-time PnL from ledger if available, otherwise fall back to fill sum
-  const headlinePnl = detail.allTimePnl?.allTimePnl ?? computeTotalPnl(fills as Fill[])
-
-  const analytics = {
-    archetype: archetypeResult.archetype,
-    confidence: archetypeResult.confidence,
-    sharpe7d: sharpeOrFallback(7),
-    sharpe30d: sharpeOrFallback(30),
-    sharpe90d: sharpeOrFallback(90),
-    winRate: computeWinRate(fills as Fill[]),
-    totalPnl: headlinePnl,
-    alphaDecay: computeAlphaDecay(fills as Fill[]),
-    maxDrawdown: computeMaxDrawdown(dailyValues),
-    tradeCount: fills.length
-  }
+  const headlinePnl = getAllTimePnl(detail.portfolio)
 
   return (
     <div>
@@ -124,11 +123,7 @@ export default function WalletPage() {
         </div>
         <WalletProfile
           detail={detail}
-          analytics={analytics}
-          dailyPnl={dailyPnl}
-          pnlSeries={pnlSeries}
-          fillsCapped={detail.fillsCapped || false}
-          allTimePnl={detail.allTimePnl}
+          headlinePnl={headlinePnl}
         />
       </div>
     </div>

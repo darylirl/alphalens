@@ -93,26 +93,3 @@ export function computeTotalPnl(fills: Fill[]): number {
     fills.reduce((sum, f) => sum + parseFloat(f.closedPnl || '0'), 0) * 100
   ) / 100
 }
-
-export interface PnlPoint {
-  timestamp: number
-  pnl: number
-}
-
-export function buildPnlSeries(fills: Fill[]): PnlPoint[] {
-  if (!fills.length) return []
-
-  const sorted = [...fills].sort((a, b) => a.time - b.time)
-  let running = 0
-  const series: PnlPoint[] = []
-
-  for (const fill of sorted) {
-    running += parseFloat(fill.closedPnl || '0') - parseFloat(fill.fee || '0')
-    series.push({
-      timestamp: fill.time,
-      pnl: Math.round(running * 100) / 100,
-    })
-  }
-
-  return series
-}

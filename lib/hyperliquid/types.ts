@@ -148,27 +148,16 @@ export interface WalletAnalytics {
   mostTradedAsset: string
 }
 
-export interface LedgerUpdate {
-  time: number
-  hash: string
-  delta: {
-    type: string
-    usdc: string
-  }
-}
-
-export interface AllTimePnlResult {
-  allTimePnl: number
-  totalDeposited: number
-  totalWithdrawn: number
-  accountValue: number
-}
+// Portfolio API response: array of [timeframe_label, data] tuples
+// Timeframe labels: "day", "week", "month", "allTime", "perpDay", "perpWeek", "perpMonth", "perpAllTime"
+export type PortfolioEntry = [string, {
+  pnlHistory: Array<[number, string]>
+  accountValueHistory: Array<[number, string]>
+}]
 
 export interface WalletDetail {
   state: ClearinghouseState
-  fills: Fill[]
+  portfolio: PortfolioEntry[]
   fundings: UserFunding[]
   address: string
-  allTimePnl?: AllTimePnlResult
-  fillsCapped?: boolean
 }

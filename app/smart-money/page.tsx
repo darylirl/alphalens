@@ -204,8 +204,11 @@ export default function SmartMoneyPage() {
         <div>
           <h2 className="text-lg font-bold mb-1">Smart Money Flow</h2>
           <p className="text-white/55 text-xs">
-            Live scan of <span className="font-mono">{total > 0 ? total.toLocaleString() : '—'}</span> wallets across <span className="font-mono">{tokens.length}</span> assets.
-            Confidence scoring powered by consensus, liquidity, participation, and whale alignment.
+            {total > 0 && tokens.length > 0 ? (
+              <>Live scan of <span className="font-mono">{total.toLocaleString()}</span> wallets across <span className="font-mono">{tokens.length}</span> assets. Confidence scoring powered by consensus, liquidity, participation, and whale alignment.</>
+            ) : (
+              <>Real-time analysis of smart money positions across Hyperliquid.</>
+            )}
           </p>
         </div>
 
@@ -467,6 +470,10 @@ export default function SmartMoneyPage() {
         {loading ? (
           <div className="space-y-3">
             {Array.from({ length: 5 }).map((_, i) => <SkeletonCard key={i} />)}
+          </div>
+        ) : tokens.length === 0 ? (
+          <div className="card p-8 text-center">
+            <p className="text-white/55 text-sm">Smart money flow data is loading — check back shortly.</p>
           </div>
         ) : filteredTokens.length > 0 ? (
           <div className="space-y-3">

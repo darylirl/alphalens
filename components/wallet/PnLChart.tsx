@@ -1,13 +1,20 @@
 'use client'
 import { useState, useMemo } from 'react'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
-import type { DailyPnl, PnlPoint } from '@/lib/analytics/pnl'
+import type { PortfolioEntry } from '@/lib/hyperliquid/types'
 
 type Timeframe = '7D' | '30D' | '90D' | 'All'
 
+// Map UI timeframe to portfolio API timeframe label
+const TIMEFRAME_MAP: Record<Timeframe, string> = {
+  '7D': 'perpDay',
+  '30D': 'perpMonth',
+  '90D': 'perpMonth',
+  'All': 'allTime',
+}
+
 interface PnLChartProps {
-  data: DailyPnl[]
-  pnlSeries?: PnlPoint[]
+  portfolio: PortfolioEntry[]
 }
 
 interface ChartPoint {
@@ -15,21 +22,27 @@ interface ChartPoint {
   cumulative: number
 }
 
-function buildDailyFromSeries(series: PnlPoint[]): ChartPoint[] {
-  if (!series.length) return []
+function extractPnlHistory(portfolio: PortfolioEntry[], timeframeLabel: string): ChartPoint[] {
+  const entry = portfolio.find(([key]) => key === timeframeLabel)
+  if (!entry) return []
 
-  // Aggregate per-fill data into daily points (last PnL value of each day)
-  const dailyMap = new Map<string, number>()
-  for (const point of series) {
-    const date = new Date(point.timestamp).toISOString().split('T')[0]
-    dailyMap.set(date, point.pnl)
-  }
+  const history = entry[1]?.pnlHistory
+  if (!Array.isArray(history) || history.length === 0) return []
 
-  const points: ChartPoint[] = []
-  for (const [date, cumulative] of dailyMap) {
-    points.push({ date, cumulative })
+  return history.map(([timestamp, value]) => ({
+    date: new Date(timestamp).toISOString().split('T')[0],
+    cumulative: Math.round(parseFloat(value) * 100) / 100,
+  }))
+}
+
+function deduplicateByDate(points: ChartPoint[]): ChartPoint[] {
+  const map = new Map<string, number>()
+  for (const p of points) {
+    map.set(p.date, p.cumulative)
   }
-  return points.sort((a, b) => a.date.localeCompare(b.date))
+  return Array.from(map.entries())
+    .map(([date, cumulative]) => ({ date, cumulative }))
+    .sort((a, b) => a.date.localeCompare(b.date))
 }
 
 function filterByTimeframe(data: ChartPoint[], tf: Timeframe): ChartPoint[] {
@@ -43,52 +56,28 @@ function filterByTimeframe(data: ChartPoint[], tf: Timeframe): ChartPoint[] {
   return filtered
 }
 
-function fillDateGaps(data: ChartPoint[]): ChartPoint[] {
-  if (data.length < 2) return data
-
-  const result: ChartPoint[] = []
-  const startDate = new Date(data[0].date)
-  const endDate = new Date(data[data.length - 1].date)
-  const dateMap = new Map(data.map(d => [d.date, d]))
-
-  let lastCumulative = 0
-  const current = new Date(startDate)
-  while (current <= endDate) {
-    const dateStr = current.toISOString().split('T')[0]
-    const entry = dateMap.get(dateStr)
-    if (entry) {
-      lastCumulative = entry.cumulative
-      result.push(entry)
-    } else {
-      result.push({ date: dateStr, cumulative: lastCumulative })
-    }
-    current.setDate(current.getDate() + 1)
-  }
-  return result
-}
-
-export function PnLChart({ data, pnlSeries }: PnLChartProps) {
+export function PnLChart({ portfolio }: PnLChartProps) {
   const [timeframe, setTimeframe] = useState<Timeframe>('All')
 
   const chartData = useMemo(() => {
-    // Prefer pnlSeries (fee-adjusted, from-genesis) when available
-    const baseData = pnlSeries && pnlSeries.length > 0
-      ? buildDailyFromSeries(pnlSeries)
-      : data.map(d => ({ date: d.date, cumulative: d.cumulative }))
+    const tfLabel = TIMEFRAME_MAP[timeframe]
+    const points = extractPnlHistory(portfolio, tfLabel)
+    const deduped = deduplicateByDate(points)
+    // For 90D, we use perpMonth data but filter to last 90 days
+    if (timeframe === '90D') {
+      return filterByTimeframe(deduped, '90D')
+    }
+    return deduped
+  }, [portfolio, timeframe])
 
-    const filtered = filterByTimeframe(baseData, timeframe)
-    return fillDateGaps(filtered)
-  }, [data, pnlSeries, timeframe])
-
-  if ((!data.length && (!pnlSeries || !pnlSeries.length))) {
+  if (!portfolio.length || !chartData.length) {
     return <p className="text-white/55 text-sm text-center py-8">No PnL data available</p>
   }
 
-  const isPositive = chartData.length > 0 && chartData[chartData.length - 1]?.cumulative >= 0
+  const isPositive = chartData[chartData.length - 1]?.cumulative >= 0
 
   return (
     <div>
-      {/* Timeframe toggle */}
       <div className="flex items-center gap-1 mb-3">
         {(['7D', '30D', '90D', 'All'] as Timeframe[]).map(tf => (
           <button
@@ -127,7 +116,7 @@ export function PnLChart({ data, pnlSeries }: PnLChartProps) {
             tick={{ fill: 'rgba(255,255,255,0.55)', fontSize: 10 }}
             axisLine={false}
             tickLine={false}
-            tickFormatter={(val) => `$${val >= 1000 ? `${(val / 1000).toFixed(0)}k` : val}`}
+            tickFormatter={(val) => `$${Math.abs(val) >= 1000 ? `${(val / 1000).toFixed(0)}k` : val}`}
           />
           <Tooltip
             contentStyle={{

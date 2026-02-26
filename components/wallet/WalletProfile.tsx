@@ -7,34 +7,49 @@ import { PositionHeatmap } from './PositionHeatmap'
 import { PnLChart } from './PnLChart'
 import { TokenMetrics } from './TokenMetrics'
 import { StrategySummary } from './StrategySummary'
-import type { WalletDetail, AllTimePnlResult } from '@/lib/hyperliquid/types'
-import type { DailyPnl, PnlPoint } from '@/lib/analytics/pnl'
+import type { WalletDetail, Fill, ClearinghouseState } from '@/lib/hyperliquid/types'
+import { computeDailyPnl, computeSharpe, computeSharpeFromFills, computeWinRate, computeMaxDrawdown } from '@/lib/analytics/pnl'
+import { detectArchetype } from '@/lib/analytics/archetype'
+import { computeAlphaDecay } from '@/lib/analytics/alphaDecay'
 import { getWalletAlias, truncateAddress } from '@/lib/walletAliases'
 
 interface WalletProfileProps {
   detail: WalletDetail
-  analytics: {
-    archetype: string
-    confidence: number
-    sharpe7d: number
-    sharpe30d: number
-    sharpe90d: number
-    winRate: number
-    totalPnl: number
-    alphaDecay: number
-    maxDrawdown: number
-    tradeCount: number
-  }
-  dailyPnl: DailyPnl[]
-  pnlSeries: PnlPoint[]
-  fillsCapped: boolean
-  allTimePnl?: AllTimePnlResult
+  headlinePnl: number
 }
 
-export function WalletProfile({ detail, analytics, dailyPnl, pnlSeries, fillsCapped, allTimePnl }: WalletProfileProps) {
+export function WalletProfile({ detail, headlinePnl }: WalletProfileProps) {
   const shortAddr = truncateAddress(detail.address)
   const alias = getWalletAlias(detail.address)
   const accountValue = parseFloat(detail.state.crossMarginSummary?.accountValue || '0')
+
+  // Derive fill-based analytics from state positions (for archetype, etc.)
+  // Portfolio endpoint handles PnL; fills are no longer needed for the chart
+  const fills = (detail as unknown as { fills?: Fill[] }).fills || []
+  const state = detail.state as ClearinghouseState
+
+  const dailyPnl = computeDailyPnl(fills)
+  const dailyValues = dailyPnl.map(d => d.pnl)
+  const archetypeResult = detectArchetype(fills, state)
+
+  function sharpeOrFallback(days: number): number {
+    const daily = computeSharpe(dailyValues.slice(-days))
+    if (!isNaN(daily)) return daily
+    return computeSharpeFromFills(fills, days)
+  }
+
+  const analytics = {
+    archetype: archetypeResult.archetype,
+    confidence: archetypeResult.confidence,
+    sharpe7d: sharpeOrFallback(7),
+    sharpe30d: sharpeOrFallback(30),
+    sharpe90d: sharpeOrFallback(90),
+    winRate: computeWinRate(fills),
+    totalPnl: headlinePnl,
+    alphaDecay: computeAlphaDecay(fills),
+    maxDrawdown: computeMaxDrawdown(dailyValues),
+    tradeCount: fills.length
+  }
 
   return (
     <div className="space-y-4">
@@ -79,8 +94,8 @@ export function WalletProfile({ detail, analytics, dailyPnl, pnlSeries, fillsCap
       </div>
 
       <StrategySummary
-        fills={detail.fills}
-        state={detail.state}
+        fills={fills}
+        state={state}
         address={detail.address}
         analytics={analytics}
       />
@@ -92,12 +107,7 @@ export function WalletProfile({ detail, analytics, dailyPnl, pnlSeries, fillsCap
 
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="card p-4">
         <h3 className="text-sm font-semibold mb-3">Cumulative PnL</h3>
-        <PnLChart data={dailyPnl} pnlSeries={pnlSeries} />
-        {fillsCapped && (
-          <p className="text-[10px] text-white/40 mt-2 text-center">
-            Showing last 10,000 fills. True all-time PnL shown above.
-          </p>
-        )}
+        <PnLChart portfolio={detail.portfolio} />
       </motion.div>
 
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="card p-4">
@@ -112,7 +122,7 @@ export function WalletProfile({ detail, analytics, dailyPnl, pnlSeries, fillsCap
 
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="card p-4">
         <h3 className="text-sm font-semibold mb-3">Token Metrics</h3>
-        <TokenMetrics fills={detail.fills} />
+        <TokenMetrics fills={fills} />
       </motion.div>
     </div>
   )
