@@ -159,5 +159,6 @@ export interface WalletDetail {
   state: ClearinghouseState
   portfolio: PortfolioEntry[]
   fundings: UserFunding[]
+  fills: Fill[]
   address: string
 }

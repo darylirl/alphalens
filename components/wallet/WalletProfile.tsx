@@ -7,7 +7,7 @@ import { PositionHeatmap } from './PositionHeatmap'
 import { PnLChart } from './PnLChart'
 import { TokenMetrics } from './TokenMetrics'
 import { StrategySummary } from './StrategySummary'
-import type { WalletDetail, Fill, ClearinghouseState } from '@/lib/hyperliquid/types'
+import type { WalletDetail, ClearinghouseState } from '@/lib/hyperliquid/types'
 import { computeDailyPnl, computeSharpe, computeSharpeFromFills, computeWinRate, computeMaxDrawdown } from '@/lib/analytics/pnl'
 import { detectArchetype } from '@/lib/analytics/archetype'
 import { computeAlphaDecay } from '@/lib/analytics/alphaDecay'
@@ -23,9 +23,7 @@ export function WalletProfile({ detail, headlinePnl }: WalletProfileProps) {
   const alias = getWalletAlias(detail.address)
   const accountValue = parseFloat(detail.state.crossMarginSummary?.accountValue || '0')
 
-  // Derive fill-based analytics from state positions (for archetype, etc.)
-  // Portfolio endpoint handles PnL; fills are no longer needed for the chart
-  const fills = (detail as unknown as { fills?: Fill[] }).fills || []
+  const fills = detail.fills || []
   const state = detail.state as ClearinghouseState
 
   const dailyPnl = computeDailyPnl(fills)
@@ -74,18 +72,18 @@ export function WalletProfile({ detail, headlinePnl }: WalletProfileProps) {
           <MetricBox label="All-Time PnL" value={`${analytics.totalPnl >= 0 ? '+' : '-'}$${Math.abs(analytics.totalPnl).toLocaleString()}`} positive={analytics.totalPnl >= 0} />
           <MetricBox label="Win Rate" value={`${(analytics.winRate * 100).toFixed(0)}%`} />
           <MetricBox label="Sharpe (30d)" value={isNaN(analytics.sharpe30d) ? '—' : `${analytics.sharpe30d >= 0 ? '+' : ''}${analytics.sharpe30d.toFixed(2)}`} positive={isNaN(analytics.sharpe30d) ? undefined : analytics.sharpe30d >= 0} />
-          <MetricBox label="Max DD" value={`-$${Math.abs(analytics.maxDrawdown).toLocaleString()}`} positive={false} />
+          <MetricBox label="Max DD" value={analytics.maxDrawdown === 0 ? '$0' : `-$${Math.abs(analytics.maxDrawdown).toLocaleString()}`} positive={analytics.maxDrawdown === 0 ? undefined : false} />
         </div>
       </motion.div>
 
       <div className="grid grid-cols-3 gap-3">
         <div className="card p-3 text-center">
           <p className="text-xs text-white/55 mb-1">Sharpe 7d</p>
-          <p className={`font-mono font-semibold ${isNaN(analytics.sharpe7d) ? '' : analytics.sharpe7d >= 0 ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>{isNaN(analytics.sharpe7d) ? '—' : `${analytics.sharpe7d >= 0 ? '+' : ''}${analytics.sharpe7d.toFixed(2)}`}</p>
+          <p className={`font-mono font-semibold ${isNaN(analytics.sharpe7d) ? 'text-white/55' : analytics.sharpe7d >= 0 ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>{isNaN(analytics.sharpe7d) ? '—' : `${analytics.sharpe7d >= 0 ? '+' : ''}${analytics.sharpe7d.toFixed(2)}`}</p>
         </div>
         <div className="card p-3 text-center">
           <p className="text-xs text-white/55 mb-1">Sharpe 90d</p>
-          <p className={`font-mono font-semibold ${isNaN(analytics.sharpe90d) ? '' : analytics.sharpe90d >= 0 ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>{isNaN(analytics.sharpe90d) ? '—' : `${analytics.sharpe90d >= 0 ? '+' : ''}${analytics.sharpe90d.toFixed(2)}`}</p>
+          <p className={`font-mono font-semibold ${isNaN(analytics.sharpe90d) ? 'text-white/55' : analytics.sharpe90d >= 0 ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>{isNaN(analytics.sharpe90d) ? '—' : `${analytics.sharpe90d >= 0 ? '+' : ''}${analytics.sharpe90d.toFixed(2)}`}</p>
         </div>
         <div className="card p-3 text-center">
           <p className="text-xs text-white/55 mb-1">Trades</p>

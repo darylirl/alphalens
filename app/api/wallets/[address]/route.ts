@@ -24,10 +24,15 @@ export async function GET(req: Request, { params }: { params: { address: string 
   }
 
   try {
-    const [state, portfolio, fundings] = await Promise.all([
+    const ninetyDaysAgo = Date.now() - 90 * 24 * 60 * 60 * 1000
+
+    const [state, portfolio, fundings, fills] = await Promise.all([
       hlPost({ type: 'clearinghouseState', user: address }),
       hlPost({ type: 'portfolio', user: address }),
       hlPost({ type: 'userFundings', user: address, startTime: 1 }).then(
+        data => Array.isArray(data) ? data : []
+      ),
+      hlPost({ type: 'userFillsByTime', user: address, startTime: ninetyDaysAgo }).then(
         data => Array.isArray(data) ? data : []
       ),
     ])
@@ -43,6 +48,7 @@ export async function GET(req: Request, { params }: { params: { address: string 
       state: state || defaultState,
       portfolio: Array.isArray(portfolio) ? portfolio : [],
       fundings,
+      fills,
       address,
     })
   } catch {
