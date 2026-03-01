@@ -385,18 +385,11 @@ When answering:
 - If the user asks for something the tools can't provide, explain what's available and suggest the closest alternative.
 - Be concise but thorough. Lead with the answer, then provide supporting details.`
 
-// Model options — Haiku is the default (fast, cheap, handles tool calling well).
-// Most of the intelligence is in the tools, not the model.
-const MODELS: Record<string, string> = {
-  haiku: 'claude-haiku-4-5-20251001',   // Default — fast, cheapest, great for lookups
-  sonnet: 'claude-sonnet-4-6',          // Upgrade — better reasoning for complex queries
-}
-
-const DEFAULT_MODEL = 'haiku'
+const MODEL_ID = 'claude-haiku-4-5-20251001'
 
 export async function POST(req: Request) {
   try {
-    const { query, model: requestedModel } = await req.json()
+    const { query } = await req.json()
 
     if (!query || typeof query !== 'string' || query.trim().length === 0) {
       return NextResponse.json({ error: 'Query is required' }, { status: 400 })
@@ -410,9 +403,6 @@ export async function POST(req: Request) {
       )
     }
 
-    const modelKey = (typeof requestedModel === 'string' && MODELS[requestedModel]) ? requestedModel : DEFAULT_MODEL
-    const modelId = MODELS[modelKey]
-
     const client = new Anthropic({ apiKey })
 
     // Run the agentic loop
@@ -425,7 +415,7 @@ export async function POST(req: Request) {
     // Allow up to 10 tool-call rounds
     for (let i = 0; i < 10; i++) {
       const response = await client.messages.create({
-        model: modelId,
+        model: MODEL_ID,
         max_tokens: 4096,
         system: SYSTEM_PROMPT,
         tools,
@@ -438,7 +428,7 @@ export async function POST(req: Request) {
           (b): b is Anthropic.TextBlock => b.type === 'text'
         )
         const answer = textBlocks.map((b) => b.text).join('\n')
-        return NextResponse.json({ answer, toolCalls: toolCallLog, model: modelKey })
+        return NextResponse.json({ answer, toolCalls: toolCallLog})
       }
 
       // Process tool calls
@@ -452,7 +442,7 @@ export async function POST(req: Request) {
           (b): b is Anthropic.TextBlock => b.type === 'text'
         )
         const answer = textBlocks.map((b) => b.text).join('\n')
-        return NextResponse.json({ answer, toolCalls: toolCallLog, model: modelKey })
+        return NextResponse.json({ answer, toolCalls: toolCallLog})
       }
 
       // Add the assistant response to messages
