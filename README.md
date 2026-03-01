@@ -53,6 +53,8 @@ AlphaLens is a full-stack trading analytics platform built on top of the [Hyperl
 
 - **Watchlists** — Client-side watchlist management (create lists, add/remove wallets). Stored in Zustand (browser memory, not persisted to database).
 
+- **AI Agent** — Natural language interface powered by Claude (Anthropic API). Ask questions like "Find me 10 wallets that made 100% profit in the last 3 days" and the agent queries live Hyperliquid and Supabase data using tool calls to return formatted answers. Supports wallet search with filters, live position lookups, PnL history, trade fills, market overview, and asset info. Requires an `ANTHROPIC_API_KEY` environment variable.
+
 - **Alerts UI** — Multi-tab alert center: Live Signals, Consensus Alerts, Alert Log, and Settings. Notification delivery scaffolding for Telegram and ntfy.sh is built but signals are currently empty (the WebSocket signal pipeline is not connected).
 
 - **Learn/Education** — Static educational content explaining archetypes, equity tiers, smart money scoring, metrics glossary, and best practices.
@@ -101,6 +103,7 @@ See the [Placeholder & Mock Data](#placeholder--mock-data) and [Known Limitation
 | Database | **Supabase** (Postgres) | Wallet data, copy-trade configs |
 | Caching | **Upstash Redis** | API response caching |
 | Icons | **Lucide React** | Icon system |
+| AI Agent | **Anthropic Claude API** (`@anthropic-ai/sdk`) | Natural language queries with tool use |
 | Notifications | **Telegram Bot API**, **ntfy.sh** | Alert delivery |
 | Deployment | **Vercel** | Hosting, serverless functions, cron |
 | Analytics Service | **FastAPI + Python** | Standalone scoring/ingestion (optional) |
@@ -116,6 +119,7 @@ See the [Placeholder & Mock Data](#placeholder--mock-data) and [Known Limitation
 - A Supabase project (free tier works)
 - (Optional) Upstash Redis account
 - (Optional) Telegram bot token
+- (Optional) Anthropic API key (for AI Agent)
 
 ### Installation
 
@@ -140,6 +144,9 @@ UPSTASH_REDIS_REST_TOKEN=your-token
 
 # Optional — Telegram Alerts
 TELEGRAM_BOT_TOKEN=your-bot-token
+
+# Optional — AI Agent (Claude)
+ANTHROPIC_API_KEY=sk-ant-your-key
 
 # Optional — Public app URL
 NEXT_PUBLIC_APP_URL=http://localhost:3000
@@ -186,6 +193,7 @@ This fetches recent trades from 20 top Hyperliquid coins, discovers active walle
 | `UPSTASH_REDIS_REST_URL` | No | `lib/cache/redis.ts` | Upstash Redis REST endpoint |
 | `UPSTASH_REDIS_REST_TOKEN` | No | `lib/cache/redis.ts` | Upstash Redis auth token |
 | `TELEGRAM_BOT_TOKEN` | No | `lib/notifications/telegram.ts` | Telegram bot for alerts |
+| `ANTHROPIC_API_KEY` | No | `app/api/agent/route.ts` | Claude API key for AI Agent |
 | `NEXT_PUBLIC_APP_URL` | No | Client-side | Public-facing app URL |
 | `CRON_SECRET` | No | `vercel.json` | Protects cron endpoint on Vercel |
 
@@ -205,6 +213,7 @@ alphalens/
 │   ├── copy-trade/page.tsx       # Copy trading setup
 │   ├── quant/page.tsx            # Pocket Quant strategy builder
 │   ├── performance/page.tsx      # Performance attribution
+│   ├── agent/page.tsx            # AI Agent chat interface
 │   ├── alerts/page.tsx           # Alert center
 │   ├── watchlist/page.tsx        # Watchlist management
 │   ├── learn/page.tsx            # Educational content
@@ -212,6 +221,7 @@ alphalens/
 │
 ├── components/
 │   ├── layout/                   # AppShell, Navbar, Sidebar, BottomNav
+│   ├── agent/                    # AgentChat (AI assistant interface)
 │   ├── wallet/                   # WalletProfile, PnLChart, PositionTable,
 │   │                             # PositionHeatmap, TokenMetrics, StrategySummary,
 │   │                             # WalletCard, ArchetypeBadge, AlphaDecayMeter
@@ -280,6 +290,7 @@ alphalens/
 | `/copy-trade` | Copy Trade | `/api/copy-trade` → Supabase | Configure copy-trading relationships (config only, no execution) |
 | `/quant` | Pocket Quant | `/api/quant/backtest` (mock) | Rule builder, strategy templates, mock backtester |
 | `/performance` | Performance | Hardcoded demo data | Copy-trade performance attribution and trade log |
+| `/agent` | AI Agent | `/api/agent` → Claude API + Hyperliquid + Supabase | Natural language queries for wallet data, market analysis, and PnL lookups |
 | `/alerts` | Alert Center | `/api/signals` (stub) | Live signals, consensus alerts, alert log, notification settings |
 | `/watchlist` | Watchlist | Zustand (client-only) | Manage wallet watchlists (not persisted to DB) |
 | `/learn` | Learn | Static | Educational content on archetypes, tiers, metrics |
@@ -299,6 +310,7 @@ alphalens/
 | `/api/smart-money` | GET | Hyperliquid + Supabase | Token-level analysis, tier classification, sector insights |
 | `/api/seed` | GET/POST | Hyperliquid `recentTrades` → Supabase | Discovers wallets from recent trades, computes metrics, seeds DB |
 | `/api/copy-trade` | GET/POST | Supabase `copy_trade_configs` | Read/write copy-trade configurations |
+| `/api/agent` | POST | Claude API + Hyperliquid + Supabase | AI agent that interprets natural language queries and uses tools to fetch live data |
 
 ### Stubs / Partially Implemented
 
@@ -364,6 +376,24 @@ alphalens/
 ### ntfy.sh
 
 **Status:** Helper function implemented in `lib/notifications/ntfy.ts`. Ready to send push notifications to any ntfy.sh topic. **Not connected** to any live trigger.
+
+### Anthropic (Claude) API
+
+**Client:** `@anthropic-ai/sdk`
+**Used in:** `app/api/agent/route.ts`
+**Model:** `claude-sonnet-4-20250514`
+**Status:** Fully implemented and connected. The AI Agent uses Claude with tool use to interpret natural language queries and call 6 tools:
+
+| Tool | Description |
+|------|-------------|
+| `search_wallets` | Query Supabase wallets table with filters (PnL, win rate, Sharpe, archetype, leverage, trades) |
+| `get_wallet_state` | Fetch live positions, account value, margin from Hyperliquid |
+| `get_wallet_pnl` | Retrieve historical PnL across all timeframes from the portfolio endpoint |
+| `get_wallet_fills` | Get recent trade fills with summary stats (win rate, top assets, PnL) |
+| `get_market_overview` | Get 24h volume, open interest, top gainers/losers |
+| `get_asset_info` | Look up specific asset price, 24h change, volume, funding rate |
+
+The agent runs an agentic loop (up to 10 rounds of tool calls) and returns a formatted answer. Requires `ANTHROPIC_API_KEY` env var. Get one at [console.anthropic.com](https://console.anthropic.com).
 
 ---
 
