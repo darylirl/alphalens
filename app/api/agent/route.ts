@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/db/supabase'
+import { getSupabase } from '@/lib/db/supabase'
 
 const HL_URL = 'https://api.hyperliquid.xyz/info'
 
@@ -165,7 +165,7 @@ async function executeTool(
       const sortBy = (input.sort_by as string) || 'total_pnl_usd'
       const limit = Math.min(Math.max((input.limit as number) || 10, 1), 100)
 
-      let query = supabase
+      let query = getSupabase()
         .from('wallets')
         .select(
           'address, label, archetype, archetype_confidence, sharpe_7d, sharpe_30d, sharpe_90d, win_rate, total_pnl_usd, alpha_decay_score, avg_leverage, trade_count_30d, most_traded_asset'
