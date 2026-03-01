@@ -1,10 +1,15 @@
 'use client'
 import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Send, Bot, User, Loader2, Sparkles, ChevronDown, Zap, Brain } from 'lucide-react'
+import { Send, Bot, User, Loader2, Sparkles, ChevronDown, ChevronUp, Zap, Brain } from 'lucide-react'
 import Link from 'next/link'
 
 type ModelKey = 'haiku' | 'sonnet'
+
+const MODEL_OPTIONS: { key: ModelKey; label: string; description: string; icon: typeof Zap }[] = [
+  { key: 'haiku', label: 'Haiku', description: 'Fast & affordable', icon: Zap },
+  { key: 'sonnet', label: 'Sonnet', description: 'Deeper analysis', icon: Brain },
+]
 
 interface ToolCall {
   tool: string
@@ -46,12 +51,26 @@ export function AgentChat() {
   const [loading, setLoading] = useState(false)
   const [showSuggestions, setShowSuggestions] = useState(true)
   const [model, setModel] = useState<ModelKey>('haiku')
+  const [showModelMenu, setShowModelMenu] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const modelMenuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, loading])
+
+  // Close model menu on click outside
+  useEffect(() => {
+    if (!showModelMenu) return
+    const handleClick = (e: MouseEvent) => {
+      if (modelMenuRef.current && !modelMenuRef.current.contains(e.target as Node)) {
+        setShowModelMenu(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [showModelMenu])
 
   const sendQuery = async (query: string) => {
     if (!query.trim() || loading) return
@@ -241,21 +260,69 @@ export function AgentChat() {
       {/* Input area */}
       <div className="border-t border-white/[0.06] px-4 py-3 lg:px-6">
         <form onSubmit={handleSubmit} className="flex gap-2 max-w-4xl mx-auto">
-          {/* Model toggle */}
-          <button
-            type="button"
-            onClick={() => setModel(model === 'haiku' ? 'sonnet' : 'haiku')}
-            disabled={loading}
-            className={`flex items-center gap-1.5 text-[11px] font-mono px-3 py-3 rounded-xl border transition-all shrink-0 disabled:opacity-50 ${
-              model === 'haiku'
-                ? 'bg-white/[0.04] border-white/[0.08] text-white/55 hover:text-white/80'
-                : 'bg-[#34EAB9]/10 border-[#34EAB9]/20 text-[#34EAB9]'
-            }`}
-            title={model === 'haiku' ? 'Haiku: Fast & cheap. Click for Sonnet.' : 'Sonnet: Deeper analysis. Click for Haiku.'}
-          >
-            {model === 'haiku' ? <Zap size={12} /> : <Brain size={12} />}
-            <span className="hidden sm:inline">{model === 'haiku' ? 'Haiku' : 'Sonnet'}</span>
-          </button>
+          {/* Model selector drop-up */}
+          <div className="relative" ref={modelMenuRef}>
+            <button
+              type="button"
+              onClick={() => setShowModelMenu(!showModelMenu)}
+              disabled={loading}
+              className={`flex items-center gap-1.5 text-[11px] font-mono px-3 py-3 rounded-xl border transition-all shrink-0 disabled:opacity-50 ${
+                model === 'haiku'
+                  ? 'bg-white/[0.04] border-white/[0.08] text-white/55 hover:text-white/80'
+                  : 'bg-[#34EAB9]/10 border-[#34EAB9]/20 text-[#34EAB9]'
+              }`}
+            >
+              {MODEL_OPTIONS.find((m) => m.key === model)?.icon &&
+                (() => {
+                  const Icon = MODEL_OPTIONS.find((m) => m.key === model)!.icon
+                  return <Icon size={12} />
+                })()}
+              <span className="hidden sm:inline">{MODEL_OPTIONS.find((m) => m.key === model)?.label}</span>
+              {showModelMenu ? <ChevronDown size={10} /> : <ChevronUp size={10} />}
+            </button>
+
+            <AnimatePresence>
+              {showModelMenu && (
+                <motion.div
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 4 }}
+                  transition={{ duration: 0.15 }}
+                  className="absolute bottom-full left-0 mb-2 w-52 rounded-xl border border-white/[0.08] bg-[#0F1A1E] shadow-xl overflow-hidden z-50"
+                >
+                  <p className="text-[10px] text-white/30 uppercase tracking-wider px-3 pt-2.5 pb-1">Select model</p>
+                  {MODEL_OPTIONS.map((opt) => {
+                    const Icon = opt.icon
+                    const isActive = model === opt.key
+                    return (
+                      <button
+                        key={opt.key}
+                        type="button"
+                        onClick={() => {
+                          setModel(opt.key)
+                          setShowModelMenu(false)
+                        }}
+                        className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-left transition-colors ${
+                          isActive
+                            ? 'bg-[#34EAB9]/10 text-[#34EAB9]'
+                            : 'text-white/60 hover:bg-white/[0.04] hover:text-white/90'
+                        }`}
+                      >
+                        <Icon size={14} />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium">{opt.label}</p>
+                          <p className="text-[10px] text-white/35">{opt.description}</p>
+                        </div>
+                        {isActive && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#34EAB9] shrink-0" />
+                        )}
+                      </button>
+                    )
+                  })}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
 
           <input
             ref={inputRef}
@@ -276,7 +343,7 @@ export function AgentChat() {
           </button>
         </form>
         <p className="text-center text-white/25 text-[10px] mt-2">
-          {model === 'haiku' ? 'Haiku — fast & affordable' : 'Sonnet — deeper analysis'} · Queries live Hyperliquid data
+          {MODEL_OPTIONS.find((m) => m.key === model)?.label} — {MODEL_OPTIONS.find((m) => m.key === model)?.description} · Queries live Hyperliquid data
         </p>
       </div>
     </div>
@@ -406,6 +473,11 @@ function FormattedContent({ content }: { content: string }) {
   )
 }
 
+function truncateAddress(addr: string): string {
+  if (addr.length <= 12) return addr
+  return `${addr.slice(0, 6)}...${addr.slice(-4)}`
+}
+
 function InlineFormatted({ text }: { text: string }) {
   // Bold, inline code, and wallet addresses
   const parts = text.split(/(\*\*.*?\*\*|`[^`]+`|0x[a-fA-F0-9]{6,}\.{0,3}[a-fA-F0-9]{0,4})/g)
@@ -421,15 +493,16 @@ function InlineFormatted({ text }: { text: string }) {
           )
         if (part.startsWith('`') && part.endsWith('`')) {
           const inner = part.slice(1, -1)
-          // Make full wallet addresses inside backticks clickable
+          // Make wallet addresses inside backticks clickable
           if (inner.match(/^0x[a-fA-F0-9]{40}$/)) {
             return (
               <Link
                 key={i}
                 href={`/wallet/${inner}`}
                 className="text-[#34EAB9] bg-[#34EAB9]/10 px-1.5 py-0.5 rounded text-[11px] font-mono underline decoration-[#34EAB9]/30 hover:decoration-[#34EAB9] transition-colors"
+                title={inner}
               >
-                {inner}
+                {truncateAddress(inner)}
               </Link>
             )
           }
@@ -443,19 +516,20 @@ function InlineFormatted({ text }: { text: string }) {
           )
         }
         if (part.match(/^0x[a-fA-F0-9]{6,}/)) {
-          // Full 42-char addresses are clickable links to the wallet page
-          const fullMatch = part.match(/^0x[a-fA-F0-9]{40}$/)
-          if (fullMatch) {
+          // Full 42-char addresses → clickable, truncated display
+          if (part.match(/^0x[a-fA-F0-9]{40}$/)) {
             return (
               <Link
                 key={i}
                 href={`/wallet/${part}`}
                 className="text-[#34EAB9] font-mono text-[11px] underline decoration-[#34EAB9]/30 hover:decoration-[#34EAB9] transition-colors"
+                title={part}
               >
-                {part}
+                {truncateAddress(part)}
               </Link>
             )
           }
+          // Truncated or partial addresses — still not full, show as code
           return (
             <code key={i} className="text-[#34EAB9] font-mono text-[11px]">
               {part}

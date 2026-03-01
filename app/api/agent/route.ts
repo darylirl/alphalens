@@ -380,7 +380,7 @@ Equity tiers: Leviathan (>$10M), Whale ($1M-$10M), Shark ($250K-$1M), Dolphin ($
 When answering:
 - Use the tools to get real data. Never make up wallet addresses or numbers.
 - Present results in clear, structured format with the most important metrics highlighted.
-- For wallet addresses, always show the truncated form (0x1234...abcd) and full address.
+- For wallet addresses, ALWAYS output the full address (e.g. 0x1234567890abcdef1234567890abcdef12345678). Never truncate addresses — the UI will handle display formatting.
 - Format currency values with $ prefix and appropriate notation ($1.2M, $45K, $3,200).
 - If the user asks for something the tools can't provide, explain what's available and suggest the closest alternative.
 - Be concise but thorough. Lead with the answer, then provide supporting details.`
