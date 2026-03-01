@@ -155,7 +155,7 @@ const tools: Anthropic.Tool[] = [
   {
     name: 'scan_wallets_by_period',
     description:
-      'Scan tracked wallets to find those with the highest realized PnL or return percentage over a custom time period (e.g. last 3 days, last 2 weeks). Fetches live trade data from Hyperliquid for each candidate wallet and computes exact returns. Use this for any query about profits/returns over a specific number of days.',
+      'Scan ALL tracked wallets to find those with the highest realized PnL or return percentage over a custom time period (e.g. last 3 days, last 2 weeks). Fetches live trade data from Hyperliquid for every wallet in the database and computes exact returns. Use this for any query about profits/returns over a specific number of days.',
     input_schema: {
       type: 'object' as const,
       properties: {
@@ -391,70 +391,86 @@ async function executeTool(
       const limit = Math.min(Math.max((input.limit as number) || 10, 1), 20)
       const startTime = Date.now() - days * 24 * 60 * 60 * 1000
 
-      // Get candidate wallets from Supabase (top 50 by total PnL as candidates)
-      const { data: candidates, error: dbError } = await getSupabase()
-        .from('wallets')
-        .select('address, label, archetype, total_pnl_usd, win_rate')
-        .order('total_pnl_usd', { ascending: false })
-        .limit(50)
+      // Fetch ALL tracked wallets from Supabase (paginate in case there are >1000)
+      const allCandidates: Array<{ address: string; label: string | null; archetype: string | null }> = []
+      const PAGE_SIZE = 1000
+      let offset = 0
+      while (true) {
+        const { data: page, error: dbError } = await getSupabase()
+          .from('wallets')
+          .select('address, label, archetype')
+          .range(offset, offset + PAGE_SIZE - 1)
 
-      if (dbError) return JSON.stringify({ error: dbError.message })
-      if (!candidates || candidates.length === 0) return JSON.stringify({ error: 'No wallets in database' })
+        if (dbError) return JSON.stringify({ error: dbError.message })
+        if (!page || page.length === 0) break
+        allCandidates.push(...page)
+        if (page.length < PAGE_SIZE) break
+        offset += PAGE_SIZE
+      }
 
-      // For each candidate, fetch fills + account value in parallel
-      const results = await Promise.allSettled(
-        candidates.map(async (wallet) => {
-          const [fills, state] = await Promise.all([
-            hlPost({ type: 'userFillsByTime', user: wallet.address, startTime }),
-            hlPost({ type: 'clearinghouseState', user: wallet.address }),
-          ])
+      if (allCandidates.length === 0) return JSON.stringify({ error: 'No wallets in database' })
 
-          if (!Array.isArray(fills)) return null
-
-          let periodPnl = 0
-          let tradeCount = 0
-          let wins = 0
-          for (const f of fills) {
-            const pnl = parseFloat(f.closedPnl || '0')
-            periodPnl += pnl
-            tradeCount++
-            if (pnl > 0) wins++
-          }
-
-          const accountValue = parseFloat(state?.marginSummary?.accountValue || '0')
-          // Estimate starting value: current value minus the PnL earned in this period
-          const startingValue = accountValue - periodPnl
-          const returnPct = startingValue > 0
-            ? Math.round((periodPnl / startingValue) * 10000) / 100
-            : periodPnl > 0 ? Infinity : 0
-
-          return {
-            address: wallet.address,
-            label: wallet.label,
-            archetype: wallet.archetype,
-            periodDays: days,
-            periodPnl: Math.round(periodPnl * 100) / 100,
-            returnPct,
-            currentAccountValue: Math.round(accountValue * 100) / 100,
-            tradeCount,
-            winRate: tradeCount > 0 ? Math.round((wins / tradeCount) * 1000) / 10 : 0,
-          }
-        })
-      )
-
-      // Collect successful results and filter
+      // Process wallets in batches to avoid overwhelming the Hyperliquid API
+      const BATCH_SIZE = 15
       interface PeriodResult {
         address: string; label: string | null; archetype: string | null
         periodDays: number; periodPnl: number; returnPct: number
         currentAccountValue: number; tradeCount: number; winRate: number
       }
-      let wallets: PeriodResult[] = []
-      for (const r of results) {
-        if (r.status === 'fulfilled' && r.value != null && r.value.tradeCount > 0) {
-          wallets.push(r.value)
+      const allResults: PeriodResult[] = []
+
+      for (let b = 0; b < allCandidates.length; b += BATCH_SIZE) {
+        const batch = allCandidates.slice(b, b + BATCH_SIZE)
+
+        const batchResults = await Promise.allSettled(
+          batch.map(async (wallet) => {
+            const [fills, state] = await Promise.all([
+              hlPost({ type: 'userFillsByTime', user: wallet.address, startTime }),
+              hlPost({ type: 'clearinghouseState', user: wallet.address }),
+            ])
+
+            if (!Array.isArray(fills)) return null
+
+            let periodPnl = 0
+            let tradeCount = 0
+            let wins = 0
+            for (const f of fills) {
+              const pnl = parseFloat(f.closedPnl || '0')
+              periodPnl += pnl
+              tradeCount++
+              if (pnl > 0) wins++
+            }
+
+            if (tradeCount === 0) return null
+
+            const accountValue = parseFloat(state?.marginSummary?.accountValue || '0')
+            const startingValue = accountValue - periodPnl
+            const returnPct = startingValue > 0
+              ? Math.round((periodPnl / startingValue) * 10000) / 100
+              : periodPnl > 0 ? Infinity : 0
+
+            return {
+              address: wallet.address,
+              label: wallet.label,
+              archetype: wallet.archetype,
+              periodDays: days,
+              periodPnl: Math.round(periodPnl * 100) / 100,
+              returnPct,
+              currentAccountValue: Math.round(accountValue * 100) / 100,
+              tradeCount,
+              winRate: tradeCount > 0 ? Math.round((wins / tradeCount) * 1000) / 10 : 0,
+            }
+          })
+        )
+
+        for (const r of batchResults) {
+          if (r.status === 'fulfilled' && r.value != null) {
+            allResults.push(r.value)
+          }
         }
       }
 
+      let wallets = allResults
       if (minReturnPct != null) wallets = wallets.filter((w) => w.returnPct >= minReturnPct)
       if (minPnlUsd != null) wallets = wallets.filter((w) => w.periodPnl >= minPnlUsd)
 
@@ -465,7 +481,7 @@ async function executeTool(
       return JSON.stringify({
         period: `${days} days`,
         matchCount: wallets.length,
-        candidatesScanned: candidates.length,
+        totalWalletsScanned: allCandidates.length,
         wallets,
       })
     }
