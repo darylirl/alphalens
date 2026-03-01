@@ -12,9 +12,11 @@ interface CopyableAddressProps {
   className?: string
   /** Use monospace font. Default true. */
   mono?: boolean
+  /** Color variant. 'accent' = green (default), 'white' = white text with underline. */
+  variant?: 'accent' | 'white'
 }
 
-export function CopyableAddress({ address, linked = true, className = '', mono = true }: CopyableAddressProps) {
+export function CopyableAddress({ address, linked = true, className = '', mono = true, variant = 'accent' }: CopyableAddressProps) {
   const [copied, setCopied] = useState(false)
 
   const copy = async (e: React.MouseEvent) => {
@@ -27,19 +29,22 @@ export function CopyableAddress({ address, linked = true, className = '', mono =
 
   const display = truncateAddress(address)
   const fontClass = mono ? 'font-mono' : ''
+  const textClass = variant === 'white'
+    ? `text-[#F0FAF8] underline decoration-white/30 hover:decoration-white/70 ${fontClass} text-xs`
+    : `text-[#34EAB9] ${fontClass} text-xs hover:underline`
 
   const inner = (
     <span className={`inline-flex items-center gap-1.5 group ${className}`}>
       {linked ? (
         <Link
           href={`/wallet/${address}`}
-          className={`text-[#34EAB9] ${fontClass} text-xs hover:underline`}
+          className={textClass}
           title={address}
         >
           {display}
         </Link>
       ) : (
-        <span className={`text-[#34EAB9] ${fontClass} text-xs`} title={address}>
+        <span className={textClass} title={address}>
           {display}
         </span>
       )}

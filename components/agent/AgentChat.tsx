@@ -496,7 +496,7 @@ function InlineFormatted({ text }: { text: string }) {
           const inner = part.slice(1, -1)
           // Wallet addresses inside backticks: clickable + copyable
           if (inner.match(/^0x[a-fA-F0-9]{40}$/)) {
-            return <CopyableAddress key={i} address={inner} />
+            return <CopyableAddress key={i} address={inner} variant="white" />
           }
           return (
             <code
@@ -510,7 +510,7 @@ function InlineFormatted({ text }: { text: string }) {
         if (part.match(/^0x[a-fA-F0-9]{6,}/)) {
           // Full addresses: clickable + copyable
           if (part.match(/^0x[a-fA-F0-9]{40}$/)) {
-            return <CopyableAddress key={i} address={part} />
+            return <CopyableAddress key={i} address={part} variant="white" />
           }
           // Truncated or partial addresses
           return (
