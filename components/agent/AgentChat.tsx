@@ -1,7 +1,9 @@
 'use client'
 import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Send, Bot, User, Loader2, Sparkles, ChevronDown } from 'lucide-react'
+import { Send, Bot, User, Loader2, Sparkles, ChevronDown, Zap, Brain } from 'lucide-react'
+
+type ModelKey = 'haiku' | 'sonnet'
 
 interface ToolCall {
   tool: string
@@ -13,6 +15,7 @@ interface Message {
   role: 'user' | 'assistant'
   content: string
   toolCalls?: ToolCall[]
+  model?: ModelKey
   timestamp: Date
 }
 
@@ -41,6 +44,7 @@ export function AgentChat() {
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [showSuggestions, setShowSuggestions] = useState(true)
+  const [model, setModel] = useState<ModelKey>('haiku')
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -66,7 +70,7 @@ export function AgentChat() {
       const res = await fetch('/api/agent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: query.trim() }),
+        body: JSON.stringify({ query: query.trim(), model }),
       })
 
       const data = await res.json()
@@ -87,6 +91,7 @@ export function AgentChat() {
             role: 'assistant',
             content: data.answer,
             toolCalls: data.toolCalls,
+            model: data.model,
             timestamp: new Date(),
           },
         ])
@@ -166,9 +171,19 @@ export function AgentChat() {
                     : 'space-y-2'
                 }`}
               >
-                {/* Tool call badges for assistant messages */}
-                {msg.role === 'assistant' && msg.toolCalls && msg.toolCalls.length > 0 && (
-                  <ToolCallBadges toolCalls={msg.toolCalls} />
+                {/* Model badge + tool call badges for assistant messages */}
+                {msg.role === 'assistant' && (
+                  <div className="flex items-center gap-2 mb-1">
+                    {msg.model && (
+                      <span className="inline-flex items-center gap-1 text-[10px] text-white/30 font-mono">
+                        {msg.model === 'haiku' ? <Zap size={9} /> : <Brain size={9} />}
+                        {msg.model}
+                      </span>
+                    )}
+                    {msg.toolCalls && msg.toolCalls.length > 0 && (
+                      <ToolCallBadges toolCalls={msg.toolCalls} />
+                    )}
+                  </div>
                 )}
 
                 {/* Message content */}
@@ -225,6 +240,24 @@ export function AgentChat() {
       {/* Input area */}
       <div className="border-t border-white/[0.06] px-4 py-3 lg:px-6">
         <form onSubmit={handleSubmit} className="flex gap-2 max-w-4xl mx-auto">
+          {/* Model toggle */}
+          <div className="flex items-center shrink-0">
+            <button
+              type="button"
+              onClick={() => setModel(model === 'haiku' ? 'sonnet' : 'haiku')}
+              disabled={loading}
+              className={`flex items-center gap-1.5 text-[11px] font-mono px-3 py-3 rounded-xl border transition-all disabled:opacity-50 ${
+                model === 'haiku'
+                  ? 'bg-white/[0.04] border-white/[0.08] text-white/55 hover:text-white/80'
+                  : 'bg-[#34EAB9]/10 border-[#34EAB9]/20 text-[#34EAB9]'
+              }`}
+              title={model === 'haiku' ? 'Haiku: Fast & cheap — great for lookups. Click for Sonnet.' : 'Sonnet: Smarter — better for complex analysis. Click for Haiku.'}
+            >
+              {model === 'haiku' ? <Zap size={12} /> : <Brain size={12} />}
+              <span className="hidden sm:inline">{model === 'haiku' ? 'Haiku' : 'Sonnet'}</span>
+            </button>
+          </div>
+
           <input
             ref={inputRef}
             type="text"
@@ -244,7 +277,7 @@ export function AgentChat() {
           </button>
         </form>
         <p className="text-center text-white/25 text-[10px] mt-2">
-          Queries live Hyperliquid data. Results may take a few seconds.
+          {model === 'haiku' ? 'Haiku — fast & affordable' : 'Sonnet — deeper analysis'} · Queries live Hyperliquid data
         </p>
       </div>
     </div>
