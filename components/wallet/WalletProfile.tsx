@@ -1,4 +1,5 @@
 'use client'
+import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { ArchetypeBadge } from './ArchetypeBadge'
 import { AlphaDecayMeter } from './AlphaDecayMeter'
@@ -7,11 +8,22 @@ import { PositionHeatmap } from './PositionHeatmap'
 import { PnLChart } from './PnLChart'
 import { TokenMetrics } from './TokenMetrics'
 import { StrategySummary } from './StrategySummary'
+import { TradeHistory } from './TradeHistory'
+import { FundingHistory } from './FundingHistory'
+import { CopyableAddress } from '@/components/ui/CopyableAddress'
 import type { WalletDetail, ClearinghouseState } from '@/lib/hyperliquid/types'
 import { computeDailyPnl, computeSharpe, computeSharpeFromFills, computeWinRate, computeMaxDrawdown } from '@/lib/analytics/pnl'
 import { detectArchetype } from '@/lib/analytics/archetype'
 import { computeAlphaDecay } from '@/lib/analytics/alphaDecay'
-import { getWalletAlias, truncateAddress } from '@/lib/walletAliases'
+import { getWalletAlias } from '@/lib/walletAliases'
+
+type Tab = 'overview' | 'trades' | 'funding'
+
+const TABS: { key: Tab; label: string }[] = [
+  { key: 'overview', label: 'Overview' },
+  { key: 'trades', label: 'Trade History' },
+  { key: 'funding', label: 'Funding' },
+]
 
 interface WalletProfileProps {
   detail: WalletDetail
@@ -19,7 +31,7 @@ interface WalletProfileProps {
 }
 
 export function WalletProfile({ detail, headlinePnl }: WalletProfileProps) {
-  const shortAddr = truncateAddress(detail.address)
+  const [activeTab, setActiveTab] = useState<Tab>('overview')
   const alias = getWalletAlias(detail.address)
   const accountValue = parseFloat(detail.state.crossMarginSummary?.accountValue || '0')
 
@@ -51,18 +63,19 @@ export function WalletProfile({ detail, headlinePnl }: WalletProfileProps) {
 
   return (
     <div className="space-y-4">
+      {/* Profile header — always visible */}
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="card p-4">
         <div className="flex items-start justify-between mb-4">
           <div>
             {alias ? (
               <>
                 <p className="text-lg font-semibold text-[#F0FAF8] mb-0.5">{alias}</p>
-                <p className="font-mono text-xs text-white/40 mb-1">{shortAddr}</p>
+                <CopyableAddress address={detail.address} linked={false} />
               </>
             ) : (
-              <p className="font-mono text-sm text-white/55 mb-1">{shortAddr}</p>
+              <CopyableAddress address={detail.address} linked={false} className="mb-1" />
             )}
-            <p className="font-mono text-2xl font-bold">${accountValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+            <p className="font-mono text-2xl font-bold mt-1">${accountValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
             <p className="text-xs text-white/55 mt-1">Account Value</p>
           </div>
           <ArchetypeBadge type={analytics.archetype} />
@@ -76,52 +89,94 @@ export function WalletProfile({ detail, headlinePnl }: WalletProfileProps) {
         </div>
       </motion.div>
 
-      <div className="grid grid-cols-3 gap-3">
-        <div className="card p-3 text-center">
-          <p className="text-xs text-white/55 mb-1">Sharpe 7d</p>
-          <p className={`font-mono font-semibold ${isNaN(analytics.sharpe7d) ? 'text-white/55' : analytics.sharpe7d >= 0 ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>{isNaN(analytics.sharpe7d) ? '—' : `${analytics.sharpe7d >= 0 ? '+' : ''}${analytics.sharpe7d.toFixed(2)}`}</p>
-        </div>
-        <div className="card p-3 text-center">
-          <p className="text-xs text-white/55 mb-1">Sharpe 90d</p>
-          <p className={`font-mono font-semibold ${isNaN(analytics.sharpe90d) ? 'text-white/55' : analytics.sharpe90d >= 0 ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>{isNaN(analytics.sharpe90d) ? '—' : `${analytics.sharpe90d >= 0 ? '+' : ''}${analytics.sharpe90d.toFixed(2)}`}</p>
-        </div>
-        <div className="card p-3 text-center">
-          <p className="text-xs text-white/55 mb-1">Trades</p>
-          <p className="font-mono font-semibold">{analytics.tradeCount}</p>
-        </div>
+      {/* Tab navigation */}
+      <div className="flex gap-1 bg-white/[0.02] rounded-lg p-1">
+        {TABS.map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={`flex-1 text-xs font-medium py-2 rounded-md transition-all ${
+              activeTab === tab.key
+                ? 'bg-[#34EAB9]/10 text-[#34EAB9] border border-[#34EAB9]/20'
+                : 'text-white/40 hover:text-white/70 border border-transparent'
+            }`}
+          >
+            {tab.label}
+            {tab.key === 'trades' && fills.length > 0 && (
+              <span className="ml-1.5 text-[10px] text-white/25">{fills.length}</span>
+            )}
+            {tab.key === 'funding' && detail.fundings.length > 0 && (
+              <span className="ml-1.5 text-[10px] text-white/25">{detail.fundings.length}</span>
+            )}
+          </button>
+        ))}
       </div>
 
-      <StrategySummary
-        fills={fills}
-        state={state}
-        address={detail.address}
-        analytics={analytics}
-      />
+      {/* Tab content */}
+      {activeTab === 'overview' && (
+        <>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="card p-3 text-center">
+              <p className="text-xs text-white/55 mb-1">Sharpe 7d</p>
+              <p className={`font-mono font-semibold ${isNaN(analytics.sharpe7d) ? 'text-white/55' : analytics.sharpe7d >= 0 ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>{isNaN(analytics.sharpe7d) ? '—' : `${analytics.sharpe7d >= 0 ? '+' : ''}${analytics.sharpe7d.toFixed(2)}`}</p>
+            </div>
+            <div className="card p-3 text-center">
+              <p className="text-xs text-white/55 mb-1">Sharpe 90d</p>
+              <p className={`font-mono font-semibold ${isNaN(analytics.sharpe90d) ? 'text-white/55' : analytics.sharpe90d >= 0 ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>{isNaN(analytics.sharpe90d) ? '—' : `${analytics.sharpe90d >= 0 ? '+' : ''}${analytics.sharpe90d.toFixed(2)}`}</p>
+            </div>
+            <div className="card p-3 text-center">
+              <p className="text-xs text-white/55 mb-1">Trades</p>
+              <p className="font-mono font-semibold">{analytics.tradeCount}</p>
+            </div>
+          </div>
 
-      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="card p-4">
-        <h3 className="text-sm font-semibold mb-1">Alpha Decay</h3>
-        <AlphaDecayMeter score={analytics.alphaDecay} />
-      </motion.div>
+          <StrategySummary
+            fills={fills}
+            state={state}
+            address={detail.address}
+            analytics={analytics}
+          />
 
-      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="card p-4">
-        <h3 className="text-sm font-semibold mb-3">Cumulative PnL</h3>
-        <PnLChart portfolio={detail.portfolio} />
-      </motion.div>
+          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="card p-4">
+            <h3 className="text-sm font-semibold mb-1">Alpha Decay</h3>
+            <AlphaDecayMeter score={analytics.alphaDecay} />
+          </motion.div>
 
-      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="card p-4">
-        <h3 className="text-sm font-semibold mb-3">Position Heatmap</h3>
-        <PositionHeatmap positions={detail.state.assetPositions} />
-      </motion.div>
+          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="card p-4">
+            <h3 className="text-sm font-semibold mb-3">Cumulative PnL</h3>
+            <PnLChart portfolio={detail.portfolio} />
+          </motion.div>
 
-      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }} className="card p-4">
-        <h3 className="text-sm font-semibold mb-3">Open Positions</h3>
-        <PositionTable positions={detail.state.assetPositions} />
-      </motion.div>
+          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="card p-4">
+            <h3 className="text-sm font-semibold mb-3">Position Heatmap</h3>
+            <PositionHeatmap positions={detail.state.assetPositions} />
+          </motion.div>
 
-      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="card p-4">
-        <h3 className="text-sm font-semibold mb-3">Token Metrics</h3>
-        <TokenMetrics fills={fills} />
-      </motion.div>
+          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }} className="card p-4">
+            <h3 className="text-sm font-semibold mb-3">Open Positions</h3>
+            <PositionTable positions={detail.state.assetPositions} />
+          </motion.div>
+
+          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="card p-4">
+            <h3 className="text-sm font-semibold mb-3">Token Metrics</h3>
+            <TokenMetrics fills={fills} />
+          </motion.div>
+        </>
+      )}
+
+      {activeTab === 'trades' && (
+        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="card p-4">
+          <h3 className="text-sm font-semibold mb-3">Trade History (Last 90 Days)</h3>
+          <TradeHistory fills={fills} />
+        </motion.div>
+      )}
+
+      {activeTab === 'funding' && (
+        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="card p-4">
+          <h3 className="text-sm font-semibold mb-3">Funding Payments</h3>
+          <FundingHistory fundings={detail.fundings} />
+        </motion.div>
+      )}
     </div>
   )
 }

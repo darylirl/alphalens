@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { CopyableAddress } from '@/components/ui/CopyableAddress'
 import { WalletCard } from '@/components/wallet/WalletCard'
 import { SkeletonCard } from '@/components/ui/SkeletonCard'
 import { PulseIndicator } from '@/components/ui/PulseIndicator'
@@ -249,8 +250,8 @@ export default function DashboardPage() {
                           className="border-t border-white/[0.04] hover:bg-white/[0.04] cursor-pointer transition-colors"
                         >
                           <td className="py-3 px-4 font-mono text-white/40">#{i + 1}</td>
-                          <td className="py-3 px-4 font-mono text-[#F0FAF8]">
-                            {w.address.slice(0, 6)}...{w.address.slice(-4)}
+                          <td className="py-3 px-4">
+                            <CopyableAddress address={w.address} linked={false} />
                           </td>
                           <td className="py-3 px-4">
                             <span className="text-[10px] font-medium px-2 py-0.5 rounded bg-[#34EAB9]/10 text-[#34EAB9] capitalize">

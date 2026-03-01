@@ -3,6 +3,7 @@ import { useEffect, useState, useMemo, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import Link from 'next/link'
 import { SkeletonCard } from '@/components/ui/SkeletonCard'
+import { CopyableAddress } from '@/components/ui/CopyableAddress'
 import { ChevronDown, Eye, Shield, Zap, Users, Clock, ArrowUpRight, ArrowDownRight } from 'lucide-react'
 
 interface CoinWallet {
@@ -309,8 +310,8 @@ export default function SmartMoneyPage() {
                           <tbody>
                             {tier.wallets.map(w => (
                               <tr key={w.address} className="border-t border-[#0F1A1E] hover:bg-[#0F1A1E] transition-colors">
-                                <td className="py-2.5 font-mono text-[11px]">
-                                  {w.address.slice(0, 6)}...{w.address.slice(-4)}
+                                <td className="py-2.5">
+                                  <CopyableAddress address={w.address} />
                                 </td>
                                 <td className="py-2.5 text-right font-mono font-semibold">
                                   {formatUsd(w.accountValue)}
@@ -636,7 +637,7 @@ export default function SmartMoneyPage() {
                                 <tbody>
                                   {token.wallets.map(w => (
                                     <tr key={w.address} className="border-t border-white/[0.08]">
-                                      <td className="py-2 font-mono text-[11px]">{w.address.slice(0, 6)}...{w.address.slice(-4)}</td>
+                                      <td className="py-2"><CopyableAddress address={w.address} /></td>
                                       <td className="py-2 text-[10px] text-white/55">{w.tier}</td>
                                       <td className="py-2">
                                         <span className={`inline-flex items-center gap-0.5 font-semibold ${w.side === 'Long' ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>

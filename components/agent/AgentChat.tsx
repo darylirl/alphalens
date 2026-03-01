@@ -2,7 +2,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Send, Bot, User, Loader2, Sparkles, ChevronDown, ChevronUp, Zap, Brain } from 'lucide-react'
-import Link from 'next/link'
+import { CopyableAddress } from '@/components/ui/CopyableAddress'
 
 type ModelKey = 'haiku' | 'sonnet'
 
@@ -494,18 +494,9 @@ function InlineFormatted({ text }: { text: string }) {
           )
         if (part.startsWith('`') && part.endsWith('`')) {
           const inner = part.slice(1, -1)
-          // Make wallet addresses inside backticks clickable
+          // Wallet addresses inside backticks: clickable + copyable
           if (inner.match(/^0x[a-fA-F0-9]{40}$/)) {
-            return (
-              <Link
-                key={i}
-                href={`/wallet/${inner}`}
-                className="text-[#34EAB9] bg-[#34EAB9]/10 px-1.5 py-0.5 rounded text-[11px] font-mono underline decoration-[#34EAB9]/30 hover:decoration-[#34EAB9] transition-colors"
-                title={inner}
-              >
-                {truncateAddress(inner)}
-              </Link>
-            )
+            return <CopyableAddress key={i} address={inner} />
           }
           return (
             <code
@@ -517,20 +508,11 @@ function InlineFormatted({ text }: { text: string }) {
           )
         }
         if (part.match(/^0x[a-fA-F0-9]{6,}/)) {
-          // Full 42-char addresses → clickable, truncated display
+          // Full addresses: clickable + copyable
           if (part.match(/^0x[a-fA-F0-9]{40}$/)) {
-            return (
-              <Link
-                key={i}
-                href={`/wallet/${part}`}
-                className="text-[#34EAB9] font-mono text-[11px] underline decoration-[#34EAB9]/30 hover:decoration-[#34EAB9] transition-colors"
-                title={part}
-              >
-                {truncateAddress(part)}
-              </Link>
-            )
+            return <CopyableAddress key={i} address={part} />
           }
-          // Truncated or partial addresses — still not full, show as code
+          // Truncated or partial addresses
           return (
             <code key={i} className="text-[#34EAB9] font-mono text-[11px]">
               {part}

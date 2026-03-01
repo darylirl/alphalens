@@ -1,6 +1,8 @@
 'use client'
+import { useState } from 'react'
 import { motion } from 'framer-motion'
 import Link from 'next/link'
+import { Copy, Check } from 'lucide-react'
 import { ArchetypeBadge } from './ArchetypeBadge'
 import { AlphaDecayMeter } from './AlphaDecayMeter'
 import { getWalletAlias, truncateAddress } from '@/lib/walletAliases'
@@ -17,10 +19,19 @@ interface WalletCardProps {
 }
 
 export function WalletCard({ address, label, archetype, sharpe30d, winRate, totalPnl, alphaDecay, rank }: WalletCardProps) {
+  const [copied, setCopied] = useState(false)
   const shortAddr = truncateAddress(address)
   const alias = getWalletAlias(address)
   const displayName = alias || label || shortAddr
   const pnlPositive = totalPnl >= 0
+
+  const copyAddress = async (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    await navigator.clipboard.writeText(address)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
+  }
 
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, ease: 'easeOut' }}>
@@ -31,9 +42,18 @@ export function WalletCard({ address, label, archetype, sharpe30d, winRate, tota
               {rank && (
                 <span className="text-white/40 text-sm font-mono w-6">#{rank}</span>
               )}
-              <div>
-                <p className="font-medium text-sm text-[#F0FAF8]">{displayName}</p>
-                {(alias || label) && <p className="text-white/40 text-xs font-mono">{shortAddr}</p>}
+              <div className="flex items-center gap-1.5">
+                <div>
+                  <p className="font-medium text-sm text-[#F0FAF8]">{displayName}</p>
+                  {(alias || label) && <p className="text-white/40 text-xs font-mono">{shortAddr}</p>}
+                </div>
+                <button
+                  onClick={copyAddress}
+                  className="text-white/20 hover:text-white/60 transition-colors shrink-0 p-0.5"
+                  title="Copy full address"
+                >
+                  {copied ? <Check size={12} className="text-[#34EAB9]" /> : <Copy size={12} />}
+                </button>
               </div>
             </div>
             <ArchetypeBadge type={archetype} />

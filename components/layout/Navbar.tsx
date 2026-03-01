@@ -2,7 +2,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
+import { Search } from 'lucide-react'
 
 const navLinks = [
   { href: '/dashboard', label: 'Dashboard' },
@@ -19,8 +20,24 @@ const navLinks = [
 
 export function Navbar() {
   const path = usePathname()
+  const router = useRouter()
   const isLanding = path === '/'
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchError, setSearchError] = useState(false)
+
+  const handleSearch = useCallback((e: React.FormEvent) => {
+    e.preventDefault()
+    const q = searchQuery.trim()
+    if (/^0x[a-fA-F0-9]{40}$/.test(q)) {
+      setSearchError(false)
+      setSearchQuery('')
+      router.push(`/wallet/${q}`)
+    } else {
+      setSearchError(true)
+      setTimeout(() => setSearchError(false), 2000)
+    }
+  }, [searchQuery, router])
 
   useEffect(() => {
     setDrawerOpen(false)
@@ -102,8 +119,25 @@ export function Navbar() {
             )}
           </div>
 
-          {/* Right: CTA only on landing page */}
-          <div className="flex items-center" style={{ paddingRight: '24px' }}>
+          {/* Right: search + CTA */}
+          <div className="flex items-center gap-3" style={{ paddingRight: '24px' }}>
+            {/* Global address search — desktop only, app pages */}
+            {!isLanding && (
+              <form onSubmit={handleSearch} className="hidden md:flex items-center relative">
+                <Search size={13} className="absolute left-2.5 text-white/30 pointer-events-none" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search address (0x...)"
+                  className={`w-44 lg:w-56 bg-white/[0.04] border rounded-lg pl-8 pr-3 py-1.5 text-xs font-mono text-[#F0FAF8] placeholder:text-white/25 focus:outline-none transition-colors ${
+                    searchError
+                      ? 'border-[#FF3B5C]/50 bg-[#FF3B5C]/5'
+                      : 'border-white/[0.08] focus:border-[#34EAB9]/40'
+                  }`}
+                />
+              </form>
+            )}
             {isLanding && (
               <Link
                 href="/dashboard"
