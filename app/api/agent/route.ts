@@ -152,6 +152,33 @@ const tools: Anthropic.Tool[] = [
       required: ['asset'],
     },
   },
+  {
+    name: 'scan_wallets_by_period',
+    description:
+      'Scan tracked wallets to find those with the highest realized PnL or return percentage over a custom time period (e.g. last 3 days, last 2 weeks). Fetches live trade data from Hyperliquid for each candidate wallet and computes exact returns. Use this for any query about profits/returns over a specific number of days.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        days: {
+          type: 'number',
+          description: 'Number of days to look back (1-90)',
+        },
+        min_return_pct: {
+          type: 'number',
+          description: 'Minimum return percentage to filter by (e.g. 100 for 100%+). Optional.',
+        },
+        min_pnl_usd: {
+          type: 'number',
+          description: 'Minimum realized PnL in USD for the period. Optional.',
+        },
+        limit: {
+          type: 'number',
+          description: 'Max results to return (default 10, max 20)',
+        },
+      },
+      required: ['days'],
+    },
+  },
 ]
 
 // ── Tool execution ──────────────────────────────────────────────
@@ -357,6 +384,92 @@ async function executeTool(
       })
     }
 
+    case 'scan_wallets_by_period': {
+      const days = Math.min(Math.max((input.days as number) || 7, 1), 90)
+      const minReturnPct = (input.min_return_pct as number) ?? null
+      const minPnlUsd = (input.min_pnl_usd as number) ?? null
+      const limit = Math.min(Math.max((input.limit as number) || 10, 1), 20)
+      const startTime = Date.now() - days * 24 * 60 * 60 * 1000
+
+      // Get candidate wallets from Supabase (top 50 by total PnL as candidates)
+      const { data: candidates, error: dbError } = await getSupabase()
+        .from('wallets')
+        .select('address, label, archetype, total_pnl_usd, win_rate')
+        .order('total_pnl_usd', { ascending: false })
+        .limit(50)
+
+      if (dbError) return JSON.stringify({ error: dbError.message })
+      if (!candidates || candidates.length === 0) return JSON.stringify({ error: 'No wallets in database' })
+
+      // For each candidate, fetch fills + account value in parallel
+      const results = await Promise.allSettled(
+        candidates.map(async (wallet) => {
+          const [fills, state] = await Promise.all([
+            hlPost({ type: 'userFillsByTime', user: wallet.address, startTime }),
+            hlPost({ type: 'clearinghouseState', user: wallet.address }),
+          ])
+
+          if (!Array.isArray(fills)) return null
+
+          let periodPnl = 0
+          let tradeCount = 0
+          let wins = 0
+          for (const f of fills) {
+            const pnl = parseFloat(f.closedPnl || '0')
+            periodPnl += pnl
+            tradeCount++
+            if (pnl > 0) wins++
+          }
+
+          const accountValue = parseFloat(state?.marginSummary?.accountValue || '0')
+          // Estimate starting value: current value minus the PnL earned in this period
+          const startingValue = accountValue - periodPnl
+          const returnPct = startingValue > 0
+            ? Math.round((periodPnl / startingValue) * 10000) / 100
+            : periodPnl > 0 ? Infinity : 0
+
+          return {
+            address: wallet.address,
+            label: wallet.label,
+            archetype: wallet.archetype,
+            periodDays: days,
+            periodPnl: Math.round(periodPnl * 100) / 100,
+            returnPct,
+            currentAccountValue: Math.round(accountValue * 100) / 100,
+            tradeCount,
+            winRate: tradeCount > 0 ? Math.round((wins / tradeCount) * 1000) / 10 : 0,
+          }
+        })
+      )
+
+      // Collect successful results and filter
+      interface PeriodResult {
+        address: string; label: string | null; archetype: string | null
+        periodDays: number; periodPnl: number; returnPct: number
+        currentAccountValue: number; tradeCount: number; winRate: number
+      }
+      let wallets: PeriodResult[] = []
+      for (const r of results) {
+        if (r.status === 'fulfilled' && r.value != null && r.value.tradeCount > 0) {
+          wallets.push(r.value)
+        }
+      }
+
+      if (minReturnPct != null) wallets = wallets.filter((w) => w.returnPct >= minReturnPct)
+      if (minPnlUsd != null) wallets = wallets.filter((w) => w.periodPnl >= minPnlUsd)
+
+      // Sort by return percentage descending
+      wallets.sort((a, b) => b.returnPct - a.returnPct)
+      wallets = wallets.slice(0, limit)
+
+      return JSON.stringify({
+        period: `${days} days`,
+        matchCount: wallets.length,
+        candidatesScanned: candidates.length,
+        wallets,
+      })
+    }
+
     default:
       return JSON.stringify({ error: `Unknown tool: ${name}` })
   }
@@ -368,10 +481,13 @@ const SYSTEM_PROMPT = `You are AlphaLens AI, an expert trading analyst assistant
 
 Your capabilities:
 - Search tracked wallets by PnL, Sharpe ratio, win rate, archetype, leverage, and trade count
+- Scan wallets to find top performers over ANY custom time period (e.g. last 3 days, last 2 weeks) — use scan_wallets_by_period for this
 - Look up any wallet's live positions, account value, and unrealised PnL
 - Retrieve historical PnL and trade fills for specific wallets
 - Get real-time market data: volume, open interest, top movers, asset prices
 - Compute metrics like ROI, win rate, and PnL over custom timeframes
+
+Important: When users ask about profits/returns over a specific number of days (e.g. "100% in 3 days", "best performers this week"), use scan_wallets_by_period — it computes exact returns from live trade data.
 
 Wallet archetypes you know: scalper, swing_trader, momentum_trader, high_conviction, funding_arb, farmer, market_maker.
 

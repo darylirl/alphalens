@@ -43,6 +43,7 @@ const TOOL_LABELS: Record<string, string> = {
   get_wallet_fills: 'Retrieving trade fills',
   get_market_overview: 'Getting market data',
   get_asset_info: 'Looking up asset',
+  scan_wallets_by_period: 'Scanning wallet returns',
 }
 
 export function AgentChat() {
