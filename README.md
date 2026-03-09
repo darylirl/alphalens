@@ -37,7 +37,10 @@ AlphaLens is a full-stack trading analytics platform built on top of the [Hyperl
 
 - **Wallet Discovery & Leaderboard** — Discovers wallets from recent Hyperliquid trades, computes analytics (Sharpe ratio, win rate, PnL, archetype), and displays a filterable leaderboard. Auto-seeds from the Hyperliquid API via a Vercel cron job every 6 hours.
 
-- **Wallet Profile Pages** — Deep-dive into any wallet: account value, open positions, position heatmap (treemap), cumulative PnL chart with 7D/30D/90D/All timeframes, token-level metrics, strategy summary, archetype classification, and alpha decay score.
+- **Wallet Profile Pages** — Deep-dive into any wallet with three tabs:
+  - **Overview** — Account value, open positions, position heatmap (treemap), cumulative PnL chart with 7D/30D/90D/All timeframes, token-level metrics, strategy summary, archetype classification, and alpha decay score.
+  - **Trade History** — Paginated table of the last 90 days of trades with asset filter, sort toggle, side/PnL coloring, and fee column.
+  - **Funding History** — Paginated table of all funding payments with position size, funding rate, USDC payment, and total funding summary.
 
 - **Smart Money Flow** — Token-centric view showing institutional activity with confidence scores (0-10), equity tier breakdowns (Leviathan to Shrimp), sector analysis, long/short ratios, and per-wallet position details. All data is live from Hyperliquid.
 
@@ -53,7 +56,11 @@ AlphaLens is a full-stack trading analytics platform built on top of the [Hyperl
 
 - **Watchlists** — Client-side watchlist management (create lists, add/remove wallets). Stored in Zustand (browser memory, not persisted to database).
 
-- **AI Agent** — Natural language interface powered by Claude (Anthropic API). Ask questions like "Find me 10 wallets that made 100% profit in the last 3 days" and the agent queries live Hyperliquid and Supabase data using tool calls to return formatted answers. Supports wallet search with filters, live position lookups, PnL history, trade fills, market overview, and asset info. Requires an `ANTHROPIC_API_KEY` environment variable.
+- **AI Agent** — Natural language interface powered by Claude (Anthropic API). Ask questions like "Find me 10 wallets that made 100% profit in the last 3 days" and the agent queries live Hyperliquid and Supabase data using tool calls to return formatted answers. Supports wallet search with filters, live position lookups, PnL history, trade fills, market overview, asset info, and **custom-timeframe return scanning** (scans ALL tracked wallets for any 1-90 day period). Model selector: **Haiku** (default, fast & affordable) or **Sonnet** (deeper analysis) via a drop-up menu. Wallet addresses in responses are clickable (link to wallet detail page) and copyable. Requires an `ANTHROPIC_API_KEY` environment variable.
+
+- **Global Address Search** — Search bar in the Navbar allows looking up any Hyperliquid wallet address from any page. Validates the address format and navigates to the wallet detail page.
+
+- **Copy Address Buttons** — All truncated wallet addresses across the platform (AI Agent, Dashboard, Explorer, Smart Money, Wallet Profile) have a copy-to-clipboard button and link to the wallet detail page.
 
 - **Alerts UI** — Multi-tab alert center: Live Signals, Consensus Alerts, Alert Log, and Settings. Notification delivery scaffolding for Telegram and ntfy.sh is built but signals are currently empty (the WebSocket signal pipeline is not connected).
 
@@ -71,15 +78,15 @@ See the [Placeholder & Mock Data](#placeholder--mock-data) and [Known Limitation
 ┌──────────────────────────────────────────────────────────────────┐
 │                        FRONTEND (Next.js 14)                     │
 │  Landing ─ Dashboard ─ Explorer ─ Smart Money ─ Wallet Profile   │
-│  Copy Trade ─ Pocket Quant ─ Performance ─ Alerts ─ Watchlist    │
+│  AI Agent ─ Copy Trade ─ Pocket Quant ─ Performance ─ Alerts     │
 ├──────────────────────────────────────────────────────────────────┤
 │                      API ROUTES (/app/api/)                      │
 │  /market  /wallets  /hunters  /smart-money  /seed  /copy-trade   │
-│  /signals  /quant/backtest  /quant/rules  /scanner  /stream      │
-├─────────────┬───────────────┬────────────────┬───────────────────┤
-│ Hyperliquid │   Supabase    │  Upstash Redis │    Telegram /     │
-│   REST API  │  (Postgres)   │   (Caching)    │     ntfy.sh      │
-└─────────────┴───────────────┴────────────────┴───────────────────┘
+│  /agent  /signals  /quant/backtest  /quant/rules  /scanner       │
+├──────────┬──────────┬──────────────┬──────────────┬──────────────┤
+│Hyperliquid│ Supabase │ Anthropic    │ Upstash Redis│ Telegram /   │
+│ REST API  │(Postgres)│ Claude API   │  (Caching)   │  ntfy.sh     │
+└──────────┴──────────┴──────────────┴──────────────┴──────────────┘
 
 ┌──────────────────────────────────────────────────────────────────┐
 │               ANALYTICS SERVICE (Python / FastAPI)                │
@@ -105,7 +112,7 @@ See the [Placeholder & Mock Data](#placeholder--mock-data) and [Known Limitation
 | Icons | **Lucide React** | Icon system |
 | AI Agent | **Anthropic Claude API** (`@anthropic-ai/sdk`) | Natural language queries with tool use |
 | Notifications | **Telegram Bot API**, **ntfy.sh** | Alert delivery |
-| Deployment | **Vercel** | Hosting, serverless functions, cron |
+| Deployment | **Vercel** / **Railway** | Hosting, serverless functions, cron |
 | Analytics Service | **FastAPI + Python** | Standalone scoring/ingestion (optional) |
 
 ---
@@ -224,6 +231,7 @@ alphalens/
 │   ├── agent/                    # AgentChat (AI assistant interface)
 │   ├── wallet/                   # WalletProfile, PnLChart, PositionTable,
 │   │                             # PositionHeatmap, TokenMetrics, StrategySummary,
+│   │                             # TradeHistory, FundingHistory,
 │   │                             # WalletCard, ArchetypeBadge, AlphaDecayMeter
 │   ├── hunting/                  # HunterLeaderboard, FilterPanel, WalletScoreCard
 │   ├── market/                   # MarketHeatmap
@@ -233,7 +241,8 @@ alphalens/
 │   ├── quant/                    # SimpleRuleBuilder, RuleBuilder,
 │   │                             # OneClickStrategies, BacktestResult
 │   ├── onboarding/               # OnboardingModal
-│   └── ui/                       # EmptyState, MetricPill, PulseIndicator, SkeletonCard
+│   └── ui/                       # CopyableAddress, EmptyState, MetricPill,
+│                                 # PulseIndicator, SkeletonCard
 │
 ├── lib/
 │   ├── hyperliquid/
@@ -245,7 +254,7 @@ alphalens/
 │   │   ├── archetype.ts          # Wallet archetype classification
 │   │   ├── alphaDecay.ts         # Alpha decay scoring
 │   │   └── indicators.ts         # RSI, EMA, ATR technical indicators
-│   ├── db/supabase.ts            # Supabase client singleton
+│   ├── db/supabase.ts            # Supabase client (lazy-initialized via getSupabase())
 │   ├── cache/redis.ts            # Upstash Redis client singleton
 │   ├── notifications/
 │   │   ├── telegram.ts           # Telegram alert delivery
@@ -286,7 +295,7 @@ alphalens/
 | `/dashboard` | Dashboard | `/api/market`, static signals | Market stats, active signals, quick action cards |
 | `/hunters` | Explorer | `/api/hunters` → Supabase | Filterable wallet leaderboard with archetype/Sharpe/PnL filters |
 | `/smart-money` | Smart Money | `/api/smart-money` → Hyperliquid + Supabase | Token confidence scores, tier breakdowns, sector analysis |
-| `/wallet/[address]` | Wallet Profile | `/api/wallets/[address]` → Hyperliquid | Positions, PnL chart, archetype, token metrics, strategy summary |
+| `/wallet/[address]` | Wallet Profile | `/api/wallets/[address]` → Hyperliquid | Tabbed view: Overview (positions, PnL chart, archetype, token metrics, strategy summary), Trade History (paginated fills), Funding (funding payments) |
 | `/copy-trade` | Copy Trade | `/api/copy-trade` → Supabase | Configure copy-trading relationships (config only, no execution) |
 | `/quant` | Pocket Quant | `/api/quant/backtest` (mock) | Rule builder, strategy templates, mock backtester |
 | `/performance` | Performance | Hardcoded demo data | Copy-trade performance attribution and trade log |
@@ -381,8 +390,11 @@ alphalens/
 
 **Client:** `@anthropic-ai/sdk`
 **Used in:** `app/api/agent/route.ts`
-**Model:** `claude-sonnet-4-20250514`
-**Status:** Fully implemented and connected. The AI Agent uses Claude with tool use to interpret natural language queries and call 6 tools:
+**Models:**
+- **Haiku** (`claude-haiku-4-5-20251001`) — Default. Fast and affordable, ideal for data lookups.
+- **Sonnet** (`claude-sonnet-4-6`) — Optional upgrade via drop-up toggle. Deeper analysis.
+
+**Status:** Fully implemented and connected. The AI Agent uses Claude with tool use to interpret natural language queries and call 7 tools:
 
 | Tool | Description |
 |------|-------------|
@@ -392,8 +404,17 @@ alphalens/
 | `get_wallet_fills` | Get recent trade fills with summary stats (win rate, top assets, PnL) |
 | `get_market_overview` | Get 24h volume, open interest, top gainers/losers |
 | `get_asset_info` | Look up specific asset price, 24h change, volume, funding rate |
+| `scan_wallets_by_period` | Scan ALL tracked wallets to find top performers over a custom time period (1-90 days). Fetches live fills from Hyperliquid for every wallet, computes exact realized PnL and return %. Supports min return % and min PnL filters. Processes wallets in parallel batches of 15. |
 
-The agent runs an agentic loop (up to 10 rounds of tool calls) and returns a formatted answer. Requires `ANTHROPIC_API_KEY` env var. Get one at [console.anthropic.com](https://console.anthropic.com).
+The agent runs an agentic loop (up to 10 rounds of tool calls) and returns a formatted answer with clickable wallet addresses. Requires `ANTHROPIC_API_KEY` env var. Get one at [console.anthropic.com](https://console.anthropic.com).
+
+**Frontend features:**
+- Model selector drop-up (Haiku/Sonnet) with descriptions
+- Tool call badges showing which data sources were queried
+- Wallet addresses displayed as white underlined text, clickable to wallet detail page
+- Copy-to-clipboard button on every address
+- Suggested query cards on empty state
+- Markdown-like formatting: bold, code, tables, lists, headers
 
 ---
 
@@ -660,7 +681,7 @@ There is **no backend authentication**. The wallet address serves as the user id
 
 ## Deployment
 
-### Vercel (Current)
+### Vercel
 
 The project is deployed on Vercel with:
 - Automatic builds from the GitHub repository
@@ -668,13 +689,20 @@ The project is deployed on Vercel with:
 - Cron job running `/api/seed` every 6 hours (configured in `vercel.json`)
 - Environment variables set in Vercel Dashboard
 
+### Railway
+
+Also deployable on Railway:
+- Automatic builds via Railpack (detects Next.js)
+- Set environment variables in Railway Dashboard (Variables tab)
+- **Important:** The Supabase client is lazy-initialized (`getSupabase()`) to avoid `supabaseUrl is required` errors during Railway's build-time static page collection. Do not revert this to eager initialization.
+
 ### Deployment Checklist
 
-1. Set all environment variables in Vercel Dashboard
+1. Set all environment variables in your hosting platform (Vercel Dashboard or Railway Variables)
 2. Run the Supabase migration (`001_init.sql`)
 3. Disable RLS on the `wallets` table (or configure policies)
 4. Trigger an initial seed: visit `/api/seed` after deployment
-5. Verify the cron job is registered in Vercel Dashboard → Settings → Crons
+5. (Vercel only) Verify the cron job is registered in Vercel Dashboard → Settings → Crons
 
 ---
 
@@ -692,7 +720,7 @@ The project is deployed on Vercel with:
 1. Create `app/api/your-route/route.ts`
 2. Use `validateAddress()` from `lib/validation.ts` for any address inputs
 3. Use `validateSortColumn()` and `safeParseInt()` for query parameters
-4. Import `supabase` from `lib/db/supabase.ts` for database access
+4. Import `getSupabase` from `lib/db/supabase.ts` for database access (lazy-initialized to avoid build-time errors)
 5. Use the Hyperliquid client functions from `lib/hyperliquid/client.ts`
 
 ### Extending the Archetype System
@@ -716,6 +744,10 @@ The archetype classifier is in `lib/analytics/archetype.ts`. To add a new archet
 | `lib/wallet/WalletContext.tsx` | Web3 wallet connection state |
 | `lib/store.ts` | All Zustand client state stores |
 | `lib/validation.ts` | Input sanitisation (security) |
+| `components/ui/CopyableAddress.tsx` | Reusable address display with copy + link |
+| `components/wallet/TradeHistory.tsx` | Paginated trade fills table |
+| `components/wallet/FundingHistory.tsx` | Paginated funding payments table |
+| `components/agent/AgentChat.tsx` | AI Agent chat interface with model selector |
 
 ### Security Considerations
 
