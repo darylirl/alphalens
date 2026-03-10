@@ -131,7 +131,7 @@ export async function POST() {
       const batch = upsertRows.slice(i, i + 50)
       const { error } = await supabase
         .from('wallets')
-        .upsert(batch, { onConflict: 'address' })
+        .upsert(batch, { onConflict: 'address', ignoreDuplicates: true })
       if (!error) saved += batch.length
     }
 

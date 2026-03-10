@@ -178,7 +178,7 @@ async function runSeed() {
 
       const { error } = await supabase
         .from('wallets')
-        .upsert(wallet, { onConflict: 'address' })
+        .upsert(wallet, { onConflict: 'address', ignoreDuplicates: true })
 
       if (error) {
         if (errors.length < 5) errors.push(`${address.slice(0, 10)}: ${error.message}`)
