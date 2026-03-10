@@ -5,6 +5,8 @@ import { WalletProfile } from '@/components/wallet/WalletProfile'
 import { SkeletonCard } from '@/components/ui/SkeletonCard'
 import type { WalletDetail, PortfolioEntry } from '@/lib/hyperliquid/types'
 import { Star } from 'lucide-react'
+import { useWalletStream } from '@/lib/hooks/useWalletStream'
+import { PulseIndicator } from '@/components/ui/PulseIndicator'
 
 const PORTFOLIO_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
 
@@ -111,18 +113,40 @@ export default function WalletPage() {
   }
 
   const headlinePnl = getAllTimePnl(detail.portfolio)
+  const { status: streamStatus, liveFills, livePositions } = useWalletStream(address)
+
+  // Merge live data into detail without replacing historical data
+  const mergedDetail = { ...detail }
+  if (liveFills.length > 0) {
+    const existingIds = new Set(detail.fills.map(f => f.tid))
+    const newFills = liveFills.filter(f => !existingIds.has(f.tid))
+    mergedDetail.fills = [...newFills, ...detail.fills].slice(0, 500)
+  }
+  if (livePositions) {
+    const updated = [...detail.state.assetPositions]
+    for (const incoming of livePositions) {
+      const idx = updated.findIndex(p => p.position.coin === incoming.position.coin)
+      if (idx >= 0) {
+        updated[idx] = incoming
+      } else if (parseFloat(incoming.position.szi) !== 0) {
+        updated.push(incoming)
+      }
+    }
+    mergedDetail.state = { ...detail.state, assetPositions: updated.filter(p => parseFloat(p.position.szi) !== 0) }
+  }
 
   return (
     <div>
       <div className="px-4 py-4 lg:px-6">
-        <div className="flex justify-end mb-3">
+        <div className="flex items-center justify-between mb-3">
+          <PulseIndicator active={streamStatus === 'connected'} />
           <button className="flex items-center gap-1.5 text-xs text-white/55 hover:text-[#34EAB9] transition-colors">
             <Star size={14} />
             Add to Watchlist
           </button>
         </div>
         <WalletProfile
-          detail={detail}
+          detail={mergedDetail}
           headlinePnl={headlinePnl}
         />
       </div>

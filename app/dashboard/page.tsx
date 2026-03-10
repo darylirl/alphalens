@@ -10,6 +10,7 @@ import { PulseIndicator } from '@/components/ui/PulseIndicator'
 import { ActiveSignalsFeed, type Signal } from '@/components/signals/ActiveSignalsFeed'
 import { ConsensusAlerts, type ConsensusAlert } from '@/components/signals/ConsensusAlerts'
 import { OnboardingModal } from '@/components/onboarding/OnboardingModal'
+import { SmartMoneyFeed } from '@/components/signals/SmartMoneyFeed'
 import { Crosshair, TrendingUp, Activity, Zap, Search, Copy, DollarSign, BarChart3, Bell, Users } from 'lucide-react'
 import { MarketHeatmap } from '@/components/market/MarketHeatmap'
 import type { WalletAnalytics } from '@/lib/hyperliquid/types'
@@ -193,6 +194,11 @@ export default function DashboardPage() {
             <ConsensusAlerts alerts={consensusAlerts} />
           </motion.div>
         )}
+
+        {/* Smart Money Live Feed */}
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
+          <SmartMoneyFeed />
+        </motion.div>
 
         {marketStats.heatmapAssets.length > 0 && (
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.26 }}>
