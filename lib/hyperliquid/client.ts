@@ -73,6 +73,5 @@ export async function getCandleSnapshot(
   })
 }
 
-export async function getLeaderboard(): Promise<{ leaderboardRows: Array<{ ethAddress: string; accountValue: string; displayName: string | null; windowPerformances: Array<{ window: string; pnl: string; roi: string }> }> }> {
-  return post({ type: 'leaderboard' })
-}
+// NOTE: The Hyperliquid native leaderboard endpoint is deprecated.
+// Use /api/leaderboard which builds a custom leaderboard from tracked Supabase wallets.

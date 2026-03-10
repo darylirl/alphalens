@@ -50,21 +50,19 @@ async function discoverWallets(): Promise<Map<string, { source: string; firstSee
     }
   }
 
-  // Source 2: Hyperliquid leaderboard (top performing traders)
-  // The leaderboard API gives us the best-performing wallets
+  // Source 2: Tracked wallets from Supabase (replaces deprecated leaderboard endpoint)
   try {
-    const leaderboardWindows = ['day', 'week', 'month', 'allTime']
-    const lbResults = await Promise.all(
-      leaderboardWindows.map(window =>
-        hlPost({ type: 'leaderboard', window }).catch(() => null)
-      )
-    )
-    for (const lb of lbResults) {
-      if (!lb?.leaderboardRows) continue
-      for (const row of lb.leaderboardRows) {
-        const addr = row.ethAddress
-        if (addr?.startsWith('0x') && !wallets.has(addr)) {
-          wallets.set(addr, { source: 'leaderboard', firstSeen: now })
+    const supabaseUrl = process.env.SUPABASE_URL
+    const supabaseKey = process.env.SUPABASE_ANON_KEY
+    if (supabaseUrl && supabaseKey && !supabaseUrl.includes('your_')) {
+      const { createClient } = await import('@supabase/supabase-js')
+      const supabase = createClient(supabaseUrl, supabaseKey)
+      const { data } = await supabase.from('wallets').select('address').limit(500)
+      if (data) {
+        for (const row of data) {
+          if (row.address?.startsWith('0x') && !wallets.has(row.address)) {
+            wallets.set(row.address, { source: 'supabase', firstSeen: now })
+          }
         }
       }
     }
