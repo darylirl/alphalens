@@ -6,6 +6,7 @@ export const runtime = 'edge'
 
 // Top markets to monitor for smart money activity
 const COINS = ['BTC', 'ETH', 'SOL', 'HYPE', 'SUI']
+const BATCH_INTERVAL_MS = 250
 
 export async function GET(req: NextRequest) {
   // Load tracked wallet addresses from Supabase
@@ -24,6 +25,30 @@ export async function GET(req: NextRequest) {
   const stream = new ReadableStream({
     async start(controller) {
       const sockets: WebSocket[] = []
+
+      // Server-side trade batch buffer
+      let tradeBatch: Array<{
+        coin: string
+        side: string
+        px: string
+        sz: string
+        time: number
+        wallets: string[]
+      }> = []
+
+      // Flush batch every 250ms
+      const batchInterval = setInterval(() => {
+        if (tradeBatch.length === 0) return
+        const batch = tradeBatch
+        tradeBatch = []
+        try {
+          controller.enqueue(encoder.encode(
+            `data: ${JSON.stringify({ type: 'smart_money_batch', trades: batch })}\n\n`
+          ))
+        } catch {
+          // Controller closed
+        }
+      }, BATCH_INTERVAL_MS)
 
       for (const coin of COINS) {
         try {
@@ -49,7 +74,6 @@ export async function GET(req: NextRequest) {
 
                 if (matchedWallets.length > 0) {
                   const payload = {
-                    type: 'smart_money_trade',
                     coin: trade.coin,
                     side: trade.side,
                     px: trade.px,
@@ -57,7 +81,9 @@ export async function GET(req: NextRequest) {
                     time: trade.time,
                     wallets: matchedWallets,
                   }
-                  controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`))
+
+                  // Push to batch buffer instead of emitting immediately
+                  tradeBatch.push(payload)
 
                   // Generate signal if notional exceeds $50k threshold
                   maybeGenerateSignal({
@@ -79,7 +105,6 @@ export async function GET(req: NextRequest) {
 
           ws.onerror = () => ws.close()
           ws.onclose = () => {
-            // Remove from array on close
             const idx = sockets.indexOf(ws)
             if (idx >= 0) sockets.splice(idx, 1)
           }
@@ -97,6 +122,7 @@ export async function GET(req: NextRequest) {
 
       // Clean up on client disconnect
       req.signal.addEventListener('abort', () => {
+        clearInterval(batchInterval)
         for (const ws of sockets) ws.close()
         try { controller.close() } catch { /* already closed */ }
       })

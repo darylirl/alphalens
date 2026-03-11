@@ -13,7 +13,8 @@ export interface SmartMoneyTrade {
   wallets: string[]
 }
 
-const MAX_TRADES = 100
+const MAX_TRADES = 50
+const FLUSH_INTERVAL = 500
 const MAX_RETRY_DELAY = 30_000
 const BASE_RETRY_DELAY = 2_000
 
@@ -24,6 +25,18 @@ export function useSmartMoneyFeed() {
   const esRef = useRef<EventSource | null>(null)
   const retryRef = useRef(0)
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const bufferRef = useRef<SmartMoneyTrade[]>([])
+
+  // Flush buffer into state on a fixed 500ms interval
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (bufferRef.current.length === 0) return
+      const batch = bufferRef.current
+      bufferRef.current = []
+      setTrades(prev => [...batch, ...prev].slice(0, MAX_TRADES))
+    }, FLUSH_INTERVAL)
+    return () => clearInterval(interval)
+  }, [])
 
   const connect = useCallback(() => {
     setStatus('connecting')
@@ -48,8 +61,25 @@ export function useSmartMoneyFeed() {
           return
         }
 
+        // Handle batched array payloads from server
+        if (data.type === 'smart_money_batch' && Array.isArray(data.trades)) {
+          for (const t of data.trades) {
+            bufferRef.current.push({
+              id: `${t.coin}-${t.time}-${t.px}`,
+              coin: t.coin,
+              side: t.side,
+              px: t.px,
+              sz: t.sz,
+              time: t.time,
+              wallets: t.wallets,
+            })
+          }
+          return
+        }
+
+        // Handle single trade events (backward compat)
         if (data.type === 'smart_money_trade') {
-          const trade: SmartMoneyTrade = {
+          bufferRef.current.push({
             id: `${data.coin}-${data.time}-${data.px}`,
             coin: data.coin,
             side: data.side,
@@ -57,9 +87,7 @@ export function useSmartMoneyFeed() {
             sz: data.sz,
             time: data.time,
             wallets: data.wallets,
-          }
-
-          setTrades((prev) => [trade, ...prev].slice(0, MAX_TRADES))
+          })
 
           if (process.env.NODE_ENV === 'development') {
             console.log(`[SmartMoneyFeed] Smart money ${data.side === 'B' ? 'BUY' : 'SELL'} ${data.sz} ${data.coin} @ ${data.px}`)
@@ -95,6 +123,7 @@ export function useSmartMoneyFeed() {
       if (retryTimerRef.current) clearTimeout(retryTimerRef.current)
       setStatus('disconnected')
       retryRef.current = 0
+      bufferRef.current = []
     }
   }, [connect])
 
