@@ -13,6 +13,7 @@ const navLinks = [
   { href: '/copy-trade', label: 'Copy Trade' },
   { href: '/watchlist', label: 'Watchlist' },
   { href: '/quant', label: 'Strategies' },
+  { href: '/signals', label: 'Signals' },
   { href: '/performance', label: 'Performance' },
   { href: '/alerts', label: 'Alerts' },
   { href: '/learn', label: 'Learn' },
