@@ -33,6 +33,9 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# supabase
+supabase/.temp/
+
 # temp files
 *.pdf
 deck-page-*.jpg
