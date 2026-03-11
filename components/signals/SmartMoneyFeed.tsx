@@ -27,23 +27,39 @@ const TAG_LABELS: Record<string, string> = {
   swing_trader: 'Swing',
 }
 
-// Module-level wallet tag cache
+// Module-level wallet cache (tags + labels)
 let _walletTags: Map<string, string[]> = new Map()
+let _walletLabels: Map<string, string> = new Map()
 let _tagsFetched = false
+
+/** Update a single wallet's label in the SmartMoneyFeed cache. */
+export function updateWalletLabelCache(address: string, label: string | null) {
+  const key = address.toLowerCase()
+  if (label) {
+    _walletLabels.set(key, label)
+  } else {
+    _walletLabels.delete(key)
+  }
+}
+
+/** Update a single wallet's tags in the SmartMoneyFeed cache. */
+export function updateWalletTagsCache(address: string, tags: string[]) {
+  _walletTags.set(address.toLowerCase(), tags)
+}
 
 async function fetchWalletTags() {
   if (_tagsFetched) return
   _tagsFetched = true
   try {
-    const res = await fetch('/api/wallets?fields=tags')
+    const res = await fetch('/api/wallets')
     if (!res.ok) return
     const data = await res.json()
-    const wallets = data.wallets || data.data || data
-    if (Array.isArray(wallets)) {
-      for (const w of wallets) {
-        if (w.address && w.tags?.length) {
-          _walletTags.set(w.address.toLowerCase(), w.tags)
-        }
+    const wallets = Array.isArray(data) ? data : (data.wallets || data.data || [])
+    for (const w of wallets) {
+      if (w.address) {
+        const key = w.address.toLowerCase()
+        if (w.tags?.length) _walletTags.set(key, w.tags)
+        if (w.label) _walletLabels.set(key, w.label)
       }
     }
   } catch { /* ignore */ }

@@ -9,6 +9,7 @@ const navLinks = [
   { href: '/dashboard', label: 'Dashboard' },
   { href: '/hunters', label: 'Explorer' },
   { href: '/smart-money', label: 'Smart Money' },
+  { href: '/wallets', label: 'Wallets' },
   { href: '/agent', label: 'AI Agent' },
   { href: '/copy-trade', label: 'Copy Trade' },
   { href: '/watchlist', label: 'Watchlist' },

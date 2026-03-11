@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { validateAddress } from '@/lib/validation'
 import { getSupabase } from '@/lib/db/supabase'
 
@@ -18,7 +18,7 @@ async function hlPost(payload: Record<string, unknown>) {
   }
 }
 
-export async function GET(req: Request, { params }: { params: { address: string } }) {
+export async function GET(req: NextRequest, { params }: { params: { address: string } }) {
   const address = validateAddress(params.address)
   if (!address) {
     return NextResponse.json({ error: 'Invalid Ethereum address format' }, { status: 400 })
@@ -67,5 +67,84 @@ export async function GET(req: Request, { params }: { params: { address: string 
     })
   } catch {
     return NextResponse.json({ error: 'Failed to fetch wallet data' }, { status: 502 })
+  }
+}
+
+const VALID_ARCHETYPES = ['market_maker', 'momentum_trader', 'basis_trader', 'whale', 'scalper', 'swing_trader']
+
+export async function PATCH(req: NextRequest, { params }: { params: { address: string } }) {
+  const address = validateAddress(params.address)
+  if (!address) {
+    return NextResponse.json({ error: 'Invalid address' }, { status: 400 })
+  }
+
+  try {
+    const body = await req.json()
+    const supabase = getSupabase()
+    const updates: Record<string, unknown> = {}
+
+    if ('label' in body) {
+      updates.label = body.label ? String(body.label).slice(0, 50) : null
+    }
+
+    if ('tags' in body && Array.isArray(body.tags)) {
+      updates.tags = body.tags.filter((t: string) => VALID_ARCHETYPES.includes(t))
+      updates.manually_tagged = true
+    }
+
+    if ('manually_tagged' in body) {
+      updates.manually_tagged = Boolean(body.manually_tagged)
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 })
+    }
+
+    updates.last_updated = new Date().toISOString()
+
+    const { error } = await supabase
+      .from('wallets')
+      .update(updates)
+      .eq('address', address)
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    return NextResponse.json({ success: true, address, ...updates })
+  } catch {
+    return NextResponse.json({ error: 'Failed to update wallet' }, { status: 500 })
+  }
+}
+
+export async function DELETE(req: NextRequest, { params }: { params: { address: string } }) {
+  const address = validateAddress(params.address)
+  if (!address) {
+    return NextResponse.json({ error: 'Invalid address' }, { status: 400 })
+  }
+
+  try {
+    const supabase = getSupabase()
+
+    const { error } = await supabase
+      .from('wallets')
+      .update({ removed_at: new Date().toISOString() })
+      .eq('address', address)
+
+    if (error) {
+      // Fallback: hard delete if removed_at column doesn't exist
+      const { error: deleteError } = await supabase
+        .from('wallets')
+        .delete()
+        .eq('address', address)
+
+      if (deleteError) {
+        return NextResponse.json({ error: deleteError.message }, { status: 500 })
+      }
+    }
+
+    return NextResponse.json({ success: true, address })
+  } catch {
+    return NextResponse.json({ error: 'Failed to remove wallet' }, { status: 500 })
   }
 }
