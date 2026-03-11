@@ -89,10 +89,10 @@ export function BacktestResult({ strategyName, data, totalPnl, winRate, tradeCou
 
       {signals && signals.length > 0 && (
         <div>
-          <h4 className="text-xs text-white/55 mb-2">Signals Fired (last 5)</h4>
-          <div className="overflow-x-auto">
+          <h4 className="text-xs text-white/55 mb-2">Trade Log ({signals.length} trades)</h4>
+          <div className="overflow-x-auto max-h-[300px] overflow-y-auto">
             <table className="w-full text-xs">
-              <thead>
+              <thead className="sticky top-0 bg-[#141E23]">
                 <tr className="text-white/40 border-b border-white/[0.06]">
                   <th className="text-left py-2 pr-3 font-medium">Date</th>
                   <th className="text-left py-2 pr-3 font-medium">Asset</th>
@@ -103,7 +103,7 @@ export function BacktestResult({ strategyName, data, totalPnl, winRate, tradeCou
                 </tr>
               </thead>
               <tbody>
-                {signals.slice(0, 5).map((s, i) => (
+                {signals.map((s, i) => (
                   <tr key={i} className="border-b border-white/[0.04]">
                     <td className="py-2 pr-3 font-mono text-white/55">{s.date}</td>
                     <td className="py-2 pr-3 font-semibold text-[#F0FAF8]">{s.asset}</td>
