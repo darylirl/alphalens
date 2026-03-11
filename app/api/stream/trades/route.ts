@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server'
 import { getSupabase } from '@/lib/db/supabase'
+import { maybeGenerateSignal } from '@/lib/signals/generate'
 
 export const runtime = 'edge'
 
@@ -57,6 +58,18 @@ export async function GET(req: NextRequest) {
                     wallets: matchedWallets,
                   }
                   controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`))
+
+                  // Generate signal if notional exceeds $50k threshold
+                  maybeGenerateSignal({
+                    coin: trade.coin,
+                    side: trade.side,
+                    px: trade.px,
+                    sz: trade.sz,
+                    time: trade.time,
+                    wallets: matchedWallets,
+                  }).catch(() => {
+                    // Signal generation failures should not break the stream
+                  })
                 }
               }
             } catch {
