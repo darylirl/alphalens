@@ -82,6 +82,8 @@ export default function WalletPage() {
     }
   }
 
+  const { status: streamStatus, liveFills, livePositions } = useWalletStream(address)
+
   useEffect(() => {
     if (address) loadWallet()
   }, [address]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -113,7 +115,6 @@ export default function WalletPage() {
   }
 
   const headlinePnl = getAllTimePnl(detail.portfolio)
-  const { status: streamStatus, liveFills, livePositions } = useWalletStream(address)
 
   // Merge live data into detail without replacing historical data
   const mergedDetail = { ...detail }
