@@ -10,6 +10,7 @@ interface CoinWallet {
   address: string
   accountValue: number
   tier: string
+  tags: string[]
   side: 'Long' | 'Short'
   notional: number
   pnl: number
@@ -46,6 +47,7 @@ interface TokenData {
 interface TierWallet {
   address: string
   accountValue: number
+  tags: string[]
   positionCount: number
   totalLong: number
   totalShort: number
@@ -79,6 +81,26 @@ interface SectorInsight {
   narrative: string
   topToken: string
   topTokenConfidence: number
+}
+
+const ARCHETYPE_STYLES: Record<string, string> = {
+  market_maker: 'bg-violet-500/10 text-violet-400',
+  momentum_trader: 'bg-blue-500/10 text-blue-400',
+  basis_trader: 'bg-amber-500/10 text-amber-400',
+  whale: 'bg-cyan-500/10 text-cyan-400',
+  scalper: 'bg-pink-500/10 text-pink-400',
+  swing_trader: 'bg-emerald-500/10 text-emerald-400',
+  unclassified: 'bg-white/[0.04] text-white/30',
+}
+
+const ARCHETYPE_LABELS: Record<string, string> = {
+  market_maker: 'MM',
+  momentum_trader: 'Momentum',
+  basis_trader: 'Basis',
+  whale: 'Whale',
+  scalper: 'Scalper',
+  swing_trader: 'Swing',
+  unclassified: 'Unclassified',
 }
 
 const formatUsd = (n: number) => {
@@ -311,7 +333,14 @@ export default function SmartMoneyPage() {
                             {tier.wallets.map(w => (
                               <tr key={w.address} className="border-t border-[#0F1A1E] hover:bg-[#0F1A1E] transition-colors">
                                 <td className="py-2.5">
-                                  <CopyableAddress address={w.address} />
+                                  <div className="flex items-center gap-1.5">
+                                    <CopyableAddress address={w.address} />
+                                    {w.tags?.filter(t => t !== 'unclassified').slice(0, 1).map(t => (
+                                      <span key={t} className={`text-[8px] font-semibold px-1 py-0.5 rounded ${ARCHETYPE_STYLES[t] || ARCHETYPE_STYLES.unclassified}`}>
+                                        {ARCHETYPE_LABELS[t] || t}
+                                      </span>
+                                    ))}
+                                  </div>
                                 </td>
                                 <td className="py-2.5 text-right font-mono font-semibold">
                                   {formatUsd(w.accountValue)}
@@ -637,7 +666,16 @@ export default function SmartMoneyPage() {
                                 <tbody>
                                   {token.wallets.map(w => (
                                     <tr key={w.address} className="border-t border-white/[0.08]">
-                                      <td className="py-2"><CopyableAddress address={w.address} /></td>
+                                      <td className="py-2">
+                                        <div className="flex items-center gap-1.5">
+                                          <CopyableAddress address={w.address} />
+                                          {w.tags?.filter(t => t !== 'unclassified').slice(0, 1).map(t => (
+                                            <span key={t} className={`text-[8px] font-semibold px-1 py-0.5 rounded ${ARCHETYPE_STYLES[t] || ARCHETYPE_STYLES.unclassified}`}>
+                                              {ARCHETYPE_LABELS[t] || t}
+                                            </span>
+                                          ))}
+                                        </div>
+                                      </td>
                                       <td className="py-2 text-[10px] text-white/55">{w.tier}</td>
                                       <td className="py-2">
                                         <span className={`inline-flex items-center gap-0.5 font-semibold ${w.side === 'Long' ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>

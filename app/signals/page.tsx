@@ -8,6 +8,7 @@ interface Signal {
   signal_id: string
   wallet_address: string
   wallet_label: string | null
+  wallet_tags: string[]
   coin: string
   side: 'long' | 'short'
   entry_price: number
@@ -32,6 +33,23 @@ type SideFilter = 'all' | 'long' | 'short'
 type ConfidenceFilter = 'all' | 'high' | 'medium' | 'low'
 
 const POLL_INTERVAL = 30_000
+const ARCHETYPE_STYLES: Record<string, string> = {
+  market_maker: 'bg-violet-500/10 text-violet-400',
+  momentum_trader: 'bg-blue-500/10 text-blue-400',
+  basis_trader: 'bg-amber-500/10 text-amber-400',
+  whale: 'bg-cyan-500/10 text-cyan-400',
+  scalper: 'bg-pink-500/10 text-pink-400',
+  swing_trader: 'bg-emerald-500/10 text-emerald-400',
+}
+const ARCHETYPE_LABELS: Record<string, string> = {
+  market_maker: 'Market Maker',
+  momentum_trader: 'Momentum',
+  basis_trader: 'Basis',
+  whale: 'Whale',
+  scalper: 'Scalper',
+  swing_trader: 'Swing',
+}
+
 const CONFIDENCE_COLORS: Record<string, string> = {
   high: 'bg-[#34EAB9]/15 text-[#34EAB9]',
   medium: 'bg-amber-500/15 text-amber-400',
@@ -310,6 +328,11 @@ export default function SignalsPage() {
                       ) : (
                         <CopyableAddress address={signal.wallet_address} mono className="text-[10px]" />
                       )}
+                      {signal.wallet_tags?.filter(t => t !== 'unclassified').slice(0, 1).map(t => (
+                        <span key={t} className={`text-[8px] font-semibold px-1 py-0.5 rounded ${ARCHETYPE_STYLES[t] || ''}`}>
+                          {ARCHETYPE_LABELS[t] || t}
+                        </span>
+                      ))}
                     </div>
                   </div>
 

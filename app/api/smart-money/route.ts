@@ -80,6 +80,7 @@ interface SmartMoneyWallet {
   address: string
   accountValue: number
   tier: string
+  tags: string[]
   positions: WalletPosition[]
   totalLong: number
   totalShort: number
@@ -250,6 +251,7 @@ export async function GET() {
 
     // Step 1: Gather wallet addresses
     const addresses = new Set<string>()
+    const walletTagsMap = new Map<string, string[]>()
 
     const supabaseUrl = process.env.SUPABASE_URL
     const supabaseKey = process.env.SUPABASE_ANON_KEY
@@ -258,8 +260,11 @@ export async function GET() {
       try {
         const { createClient } = await import('@supabase/supabase-js')
         const supabase = createClient(supabaseUrl, supabaseKey)
-        const { data: wallets } = await supabase.from('wallets').select('address').limit(300)
-        if (wallets) for (const w of wallets) addresses.add(w.address)
+        const { data: wallets } = await supabase.from('wallets').select('address, tags').limit(300)
+        if (wallets) for (const w of wallets) {
+          addresses.add(w.address)
+          if (w.tags?.length) walletTagsMap.set(w.address.toLowerCase(), w.tags)
+        }
       } catch {}
     }
 
@@ -341,6 +346,7 @@ export async function GET() {
 
         walletData.push({
           address: batch[j], accountValue, tier: getTierName(accountValue),
+          tags: walletTagsMap.get(batch[j].toLowerCase()) || [],
           positions, totalLong, totalShort, positionCount: positions.length,
           cumulativePnl: Math.round(cumulativePnl * 100) / 100,
           unrealizedPnl: Math.round(unrealizedPnl * 100) / 100,
@@ -400,6 +406,7 @@ export async function GET() {
             const coinLeverage = coinPositions.length > 0 ? coinPositions[0].leverage : 0
             return {
               address: w.address, accountValue: w.accountValue, tier: w.tier,
+              tags: w.tags,
               side: coinSide, notional: coinNotional, pnl: Math.round(coinPnl * 100) / 100,
               leverage: coinLeverage, totalPnl: w.totalPnl,
               cumulativePnl: w.cumulativePnl, fundingPnl: w.fundingPnl,
@@ -487,6 +494,7 @@ export async function GET() {
         .map(w => ({
           address: w.address,
           accountValue: Math.round(w.accountValue * 100) / 100,
+          tags: w.tags,
           positionCount: w.positionCount,
           totalLong: Math.round(w.totalLong),
           totalShort: Math.round(w.totalShort),

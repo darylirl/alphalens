@@ -1,5 +1,5 @@
 'use client'
-import { memo, type CSSProperties } from 'react'
+import { memo, useEffect, useRef, type CSSProperties } from 'react'
 import { useSmartMoneyFeed, type SmartMoneyTrade } from '@/lib/hooks/useSmartMoneyFeed'
 import { PulseIndicator } from '@/components/ui/PulseIndicator'
 import { CopyableAddress } from '@/components/ui/CopyableAddress'
@@ -9,9 +9,52 @@ const ROW_HEIGHT = 36
 const VISIBLE_ROWS = 9
 const LIST_HEIGHT = ROW_HEIGHT * VISIBLE_ROWS
 
+const TAG_STYLES: Record<string, string> = {
+  market_maker: 'bg-violet-500/10 text-violet-400',
+  momentum_trader: 'bg-blue-500/10 text-blue-400',
+  basis_trader: 'bg-amber-500/10 text-amber-400',
+  whale: 'bg-cyan-500/10 text-cyan-400',
+  scalper: 'bg-pink-500/10 text-pink-400',
+  swing_trader: 'bg-emerald-500/10 text-emerald-400',
+}
+
+const TAG_LABELS: Record<string, string> = {
+  market_maker: 'MM',
+  momentum_trader: 'Mom',
+  basis_trader: 'Basis',
+  whale: 'Whale',
+  scalper: 'Scalp',
+  swing_trader: 'Swing',
+}
+
+// Module-level wallet tag cache
+let _walletTags: Map<string, string[]> = new Map()
+let _tagsFetched = false
+
+async function fetchWalletTags() {
+  if (_tagsFetched) return
+  _tagsFetched = true
+  try {
+    const res = await fetch('/api/wallets?fields=tags')
+    if (!res.ok) return
+    const data = await res.json()
+    const wallets = data.wallets || data.data || data
+    if (Array.isArray(wallets)) {
+      for (const w of wallets) {
+        if (w.address && w.tags?.length) {
+          _walletTags.set(w.address.toLowerCase(), w.tags)
+        }
+      }
+    }
+  } catch { /* ignore */ }
+}
+
 const TradeRow = memo(function TradeRow({ trade }: { trade: SmartMoneyTrade }) {
   const isBuy = trade.side === 'B'
   const notional = parseFloat(trade.px) * parseFloat(trade.sz)
+  const walletAddr = trade.wallets[0]?.toLowerCase()
+  const tags = walletAddr ? _walletTags.get(walletAddr) : undefined
+  const primaryTag = tags?.find(t => t !== 'unclassified')
 
   return (
     <div className="flex items-center justify-between py-1.5 px-2 rounded bg-white/[0.03] hover:bg-white/[0.06] transition-colors">
@@ -27,6 +70,11 @@ const TradeRow = memo(function TradeRow({ trade }: { trade: SmartMoneyTrade }) {
         </span>
       </div>
       <div className="flex items-center gap-2">
+        {primaryTag && (
+          <span className={`text-[8px] font-semibold px-1 py-0.5 rounded ${TAG_STYLES[primaryTag] || ''}`}>
+            {TAG_LABELS[primaryTag] || primaryTag}
+          </span>
+        )}
         {trade.wallets.slice(0, 1).map((addr) => (
           <CopyableAddress key={addr} address={addr} mono className="text-[10px]" />
         ))}
@@ -57,6 +105,14 @@ function VirtualRow({ index, style }: {
 
 export function SmartMoneyFeed() {
   const { status, trades, trackedCount } = useSmartMoneyFeed()
+  const fetched = useRef(false)
+
+  useEffect(() => {
+    if (!fetched.current) {
+      fetched.current = true
+      fetchWalletTags()
+    }
+  }, [])
 
   // Update module-level ref for the virtual row renderer
   _tradesRef = trades

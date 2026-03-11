@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { validateAddress } from '@/lib/validation'
+import { getSupabase } from '@/lib/db/supabase'
 
 const HL_URL = 'https://api.hyperliquid.xyz/info'
 
@@ -44,12 +45,25 @@ export async function GET(req: Request, { params }: { params: { address: string 
       withdrawable: '0'
     }
 
+    // Fetch tags from Supabase
+    let tags: string[] = []
+    try {
+      const supabase = getSupabase()
+      const { data: walletRow } = await supabase
+        .from('wallets')
+        .select('tags')
+        .eq('address', address.toLowerCase())
+        .single()
+      tags = walletRow?.tags || []
+    } catch { /* Supabase unavailable */ }
+
     return NextResponse.json({
       state: state || defaultState,
       portfolio: Array.isArray(portfolio) ? portfolio : [],
       fundings,
       fills,
       address,
+      tags,
     })
   } catch {
     return NextResponse.json({ error: 'Failed to fetch wallet data' }, { status: 502 })

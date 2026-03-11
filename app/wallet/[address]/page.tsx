@@ -4,9 +4,29 @@ import { useParams } from 'next/navigation'
 import { WalletProfile } from '@/components/wallet/WalletProfile'
 import { SkeletonCard } from '@/components/ui/SkeletonCard'
 import type { WalletDetail, PortfolioEntry } from '@/lib/hyperliquid/types'
-import { Star } from 'lucide-react'
+import { Star, RefreshCw } from 'lucide-react'
 import { useWalletStream } from '@/lib/hooks/useWalletStream'
 import { PulseIndicator } from '@/components/ui/PulseIndicator'
+
+const ARCHETYPE_STYLES: Record<string, string> = {
+  market_maker: 'bg-violet-500/10 text-violet-400',
+  momentum_trader: 'bg-blue-500/10 text-blue-400',
+  basis_trader: 'bg-amber-500/10 text-amber-400',
+  whale: 'bg-cyan-500/10 text-cyan-400',
+  scalper: 'bg-pink-500/10 text-pink-400',
+  swing_trader: 'bg-emerald-500/10 text-emerald-400',
+  unclassified: 'bg-white/[0.04] text-white/30',
+}
+
+const ARCHETYPE_LABELS: Record<string, string> = {
+  market_maker: 'Market Maker',
+  momentum_trader: 'Momentum',
+  basis_trader: 'Basis Trader',
+  whale: 'Whale',
+  scalper: 'Scalper',
+  swing_trader: 'Swing Trader',
+  unclassified: 'Unclassified',
+}
 
 const PORTFOLIO_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
 
@@ -51,6 +71,8 @@ export default function WalletPage() {
   const [detail, setDetail] = useState<WalletDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [walletTags, setWalletTags] = useState<string[]>([])
+  const [classifying, setClassifying] = useState(false)
 
   const loadWallet = async () => {
     setLoading(true)
@@ -72,6 +94,7 @@ export default function WalletPage() {
         }
 
         setDetail({ ...walletData, portfolio })
+        if (data.tags) setWalletTags(data.tags)
       } else {
         setError(data.error || 'Could not load wallet data')
       }
@@ -80,6 +103,18 @@ export default function WalletPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const reclassify = async () => {
+    setClassifying(true)
+    try {
+      const res = await fetch(`/api/wallets/classify?address=${address}`, { method: 'POST' })
+      const data = await res.json()
+      if (data.success && data.data?.results?.[0]?.tags) {
+        setWalletTags(data.data.results[0].tags)
+      }
+    } catch { /* ignore */ }
+    finally { setClassifying(false) }
   }
 
   const { status: streamStatus, liveFills, livePositions } = useWalletStream(address)
@@ -140,11 +175,28 @@ export default function WalletPage() {
     <div>
       <div className="px-4 py-4 lg:px-6">
         <div className="flex items-center justify-between mb-3">
-          <PulseIndicator active={streamStatus === 'connected'} />
-          <button className="flex items-center gap-1.5 text-xs text-white/55 hover:text-[#34EAB9] transition-colors">
-            <Star size={14} />
-            Add to Watchlist
-          </button>
+          <div className="flex items-center gap-2">
+            <PulseIndicator active={streamStatus === 'connected'} />
+            {walletTags.filter(t => t !== 'unclassified').map(t => (
+              <span key={t} className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${ARCHETYPE_STYLES[t] || ARCHETYPE_STYLES.unclassified}`}>
+                {ARCHETYPE_LABELS[t] || t}
+              </span>
+            ))}
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={reclassify}
+              disabled={classifying}
+              className="flex items-center gap-1 text-[10px] text-white/40 hover:text-[#34EAB9] transition-colors disabled:opacity-50"
+            >
+              <RefreshCw size={10} className={classifying ? 'animate-spin' : ''} />
+              {classifying ? 'Classifying...' : 'Reclassify'}
+            </button>
+            <button className="flex items-center gap-1.5 text-xs text-white/55 hover:text-[#34EAB9] transition-colors">
+              <Star size={14} />
+              Add to Watchlist
+            </button>
+          </div>
         </div>
         <WalletProfile
           detail={mergedDetail}

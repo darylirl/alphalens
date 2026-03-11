@@ -15,6 +15,7 @@ interface GeneratedSignal {
   signal_id: string
   wallet_address: string
   wallet_label: string | null
+  wallet_tags: string[]
   coin: string
   side: 'long' | 'short'
   entry_price: number
@@ -52,19 +53,19 @@ async function getWalletConfidence(address: string): Promise<'high' | 'medium' |
 }
 
 /**
- * Get wallet label from the wallets table.
+ * Get wallet label and tags from the wallets table.
  */
-async function getWalletLabel(address: string): Promise<string | null> {
+async function getWalletInfo(address: string): Promise<{ label: string | null; tags: string[] }> {
   try {
     const supabase = getSupabase()
     const { data } = await supabase
       .from('wallets')
-      .select('label')
+      .select('label, tags')
       .eq('address', address.toLowerCase())
       .single()
-    return data?.label || null
+    return { label: data?.label || null, tags: data?.tags || [] }
   } catch {
-    return null
+    return { label: null, tags: [] }
   }
 }
 
@@ -84,15 +85,16 @@ export async function maybeGenerateSignal(trade: TradeEvent): Promise<GeneratedS
   const supabase = getSupabase()
 
   for (const wallet of trade.wallets) {
-    const [confidence, label] = await Promise.all([
+    const [confidence, walletInfo] = await Promise.all([
       getWalletConfidence(wallet),
-      getWalletLabel(wallet),
+      getWalletInfo(wallet),
     ])
 
     const signal: GeneratedSignal = {
       signal_id: crypto.randomUUID(),
       wallet_address: wallet.toLowerCase(),
-      wallet_label: label,
+      wallet_label: walletInfo.label,
+      wallet_tags: walletInfo.tags,
       coin: trade.coin,
       side: trade.side === 'B' ? 'long' : 'short',
       entry_price: price,
@@ -107,6 +109,7 @@ export async function maybeGenerateSignal(trade: TradeEvent): Promise<GeneratedS
         signal_id: signal.signal_id,
         wallet_address: signal.wallet_address,
         wallet_label: signal.wallet_label,
+        wallet_tags: signal.wallet_tags,
         coin: signal.coin,
         side: signal.side,
         entry_price: signal.entry_price,
