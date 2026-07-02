@@ -60,6 +60,19 @@ const formatUsd = (n: number) => {
 
 const EXAMPLE_ADDRESS = '0x010461C14e146ac35Fe42271BDC1134EE31C703a'
 
+/** Pull a human-readable error out of a failed API response. */
+async function extractError(res: Response): Promise<string> {
+  try {
+    const body = await res.json()
+    if (body?.error) return String(body.error)
+  } catch { /* non-JSON body */ }
+  return `HTTP ${res.status}`
+}
+
+function errMessage(err: unknown): string {
+  return err instanceof Error && err.message ? err.message : 'network error'
+}
+
 // ─── Component ──────────────────────────────────────────────────────────────
 
 export default function WalletsPage() {
@@ -88,6 +101,9 @@ export default function WalletsPage() {
 
   // Remove confirmation state
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null)
+
+  // Mutation failure feedback — set when a PATCH/DELETE fails and the UI reverts
+  const [mutationError, setMutationError] = useState<string | null>(null)
 
   // ─── Data fetching ──────────────────────────────────────────────────
 
@@ -184,6 +200,10 @@ export default function WalletsPage() {
     const label = editLabelValue.trim() || null
     setEditingLabel(null)
 
+    const previous = wallets.find(w => w.address === address)
+    // No-op guard: also prevents the duplicate PATCH when Enter triggers blur
+    if (!previous || previous.label === label) return
+
     // Optimistic update
     setWallets(prev => prev.map(w =>
       w.address === address ? { ...w, label } : w
@@ -191,12 +211,20 @@ export default function WalletsPage() {
     updateWalletLabelCache(address, label)
 
     try {
-      await fetch(`/api/wallets/${address}`, {
+      const res = await fetch(`/api/wallets/${address}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ label }),
       })
-    } catch { /* revert on error would go here */ }
+      if (!res.ok) throw new Error(await extractError(res))
+    } catch (err) {
+      // Revert optimistic update and surface the failure
+      setWallets(prev => prev.map(w =>
+        w.address === address ? { ...w, label: previous.label } : w
+      ))
+      updateWalletLabelCache(address, previous.label)
+      setMutationError(`Label update failed: ${errMessage(err)}`)
+    }
   }
 
   // ─── Tag editing ────────────────────────────────────────────────────
@@ -216,6 +244,9 @@ export default function WalletsPage() {
     const tags = tagDraft.length > 0 ? tagDraft : ['unclassified']
     setEditingTags(null)
 
+    const previous = wallets.find(w => w.address === address)
+    if (!previous) return
+
     // Optimistic update
     setWallets(prev => prev.map(w =>
       w.address === address ? { ...w, tags, manually_tagged: true } : w
@@ -223,24 +254,46 @@ export default function WalletsPage() {
     updateWalletTagsCache(address, tags)
 
     try {
-      await fetch(`/api/wallets/${address}`, {
+      const res = await fetch(`/api/wallets/${address}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tags }),
       })
-    } catch { /* ignore */ }
+      if (!res.ok) throw new Error(await extractError(res))
+    } catch (err) {
+      setWallets(prev => prev.map(w =>
+        w.address === address
+          ? { ...w, tags: previous.tags, manually_tagged: previous.manually_tagged }
+          : w
+      ))
+      updateWalletTagsCache(address, previous.tags)
+      setMutationError(`Tag update failed: ${errMessage(err)}`)
+    }
   }
 
   // ─── Remove wallet ──────────────────────────────────────────────────
 
   const removeWallet = async (address: string) => {
+    const index = wallets.findIndex(w => w.address === address)
+    const previous = wallets[index]
+    setConfirmRemove(null)
+    if (!previous) return
+
     // Optimistic remove
     setWallets(prev => prev.filter(w => w.address !== address))
-    setConfirmRemove(null)
 
     try {
-      await fetch(`/api/wallets/${address}`, { method: 'DELETE' })
-    } catch { /* ignore */ }
+      const res = await fetch(`/api/wallets/${address}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error(await extractError(res))
+    } catch (err) {
+      // Restore the wallet at its original position
+      setWallets(prev => {
+        const next = [...prev]
+        next.splice(Math.min(index, next.length), 0, previous)
+        return next
+      })
+      setMutationError(`Remove failed: ${errMessage(err)}`)
+    }
   }
 
   // ─── Reclassify all ─────────────────────────────────────────────────
@@ -322,6 +375,28 @@ export default function WalletsPage() {
                     </span>
                   ))}
                 </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Mutation error banner — shown when a save/remove failed and was reverted */}
+        <AnimatePresence>
+          {mutationError && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="overflow-hidden"
+            >
+              <div className="card p-3 border-l-2 border-l-[#FF3B5C] flex items-start justify-between gap-2">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle size={12} className="text-[#FF3B5C] mt-0.5 shrink-0" />
+                  <p className="text-xs text-[#FF3B5C]">{mutationError} Your change was not saved and has been reverted.</p>
+                </div>
+                <button onClick={() => setMutationError(null)} className="text-white/30 hover:text-white/60 shrink-0">
+                  <X size={12} />
+                </button>
               </div>
             </motion.div>
           )}

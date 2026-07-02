@@ -102,10 +102,21 @@ export async function PATCH(req: NextRequest, { params }: { params: { address: s
 
     updates.last_updated = new Date().toISOString()
 
-    const { error } = await supabase
+    let { error } = await supabase
       .from('wallets')
       .update(updates)
       .eq('address', address)
+
+    // Migration 005 may not be applied yet — retry without manually_tagged so
+    // label/tag edits still persist, rather than failing the whole update.
+    if (error && 'manually_tagged' in updates && error.message.includes('manually_tagged')) {
+      delete updates.manually_tagged
+      const retry = await supabase
+        .from('wallets')
+        .update(updates)
+        .eq('address', address)
+      error = retry.error
+    }
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 })
