@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabase } from '@/lib/db/supabase'
 import { validateAddress } from '@/lib/validation'
+import { isAuthorized, unauthorizedResponse } from '@/lib/auth/admin'
 
 export async function GET() {
   try {
@@ -32,6 +33,8 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  if (!isAuthorized(req)) return unauthorizedResponse()
+
   try {
     const body = await req.json()
     const address = validateAddress(body.address)
@@ -101,12 +104,19 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Trigger classification
+    // Trigger classification — forward the caller's credentials since the
+    // classify endpoint is also behind the admin gate
     let tags: string[] = ['unclassified']
     try {
+      const authHeaders: Record<string, string> = {}
+      const authHeader = req.headers.get('authorization')
+      const cookieHeader = req.headers.get('cookie')
+      if (authHeader) authHeaders['authorization'] = authHeader
+      if (cookieHeader) authHeaders['cookie'] = cookieHeader
+
       const classifyRes = await fetch(
         `${req.nextUrl.origin}/api/wallets/classify?address=${address}`,
-        { method: 'POST' }
+        { method: 'POST', headers: authHeaders }
       )
       if (classifyRes.ok) {
         const classifyData = await classifyRes.json()

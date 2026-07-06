@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { validateAddress } from '@/lib/validation'
 import { getSupabase } from '@/lib/db/supabase'
+import { isAuthorized, unauthorizedResponse } from '@/lib/auth/admin'
 
 const HL_URL = 'https://api.hyperliquid.xyz/info'
 
@@ -73,6 +74,8 @@ export async function GET(req: NextRequest, { params }: { params: { address: str
 const VALID_ARCHETYPES = ['market_maker', 'momentum_trader', 'basis_trader', 'whale', 'scalper', 'swing_trader']
 
 export async function PATCH(req: NextRequest, { params }: { params: { address: string } }) {
+  if (!isAuthorized(req)) return unauthorizedResponse()
+
   const address = validateAddress(params.address)
   if (!address) {
     return NextResponse.json({ error: 'Invalid address' }, { status: 400 })
@@ -129,6 +132,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { address: s
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: { address: string } }) {
+  if (!isAuthorized(req)) return unauthorizedResponse()
+
   const address = validateAddress(params.address)
   if (!address) {
     return NextResponse.json({ error: 'Invalid address' }, { status: 400 })

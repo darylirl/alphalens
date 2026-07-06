@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabase } from '@/lib/db/supabase'
 import { classifyWallet, type Archetype } from '@/lib/wallets/classify'
+import { isAuthorized, unauthorizedResponse } from '@/lib/auth/admin'
 
 const BATCH_SIZE = 10
 
@@ -11,6 +12,8 @@ const BATCH_SIZE = 10
  * If no address, classify all wallets in batches of 10.
  */
 export async function POST(req: NextRequest) {
+  if (!isAuthorized(req)) return unauthorizedResponse()
+
   try {
     const supabase = getSupabase()
     const address = req.nextUrl.searchParams.get('address')

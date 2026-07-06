@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { CopyableAddress } from '@/components/ui/CopyableAddress'
 import { SkeletonCard } from '@/components/ui/SkeletonCard'
-import { Search, Plus, RefreshCw, Trash2, Tag, Check, X, AlertTriangle } from 'lucide-react'
+import { Search, Plus, RefreshCw, Trash2, Tag, Check, X, AlertTriangle, Lock } from 'lucide-react'
 import { updateWalletLabelCache, updateWalletTagsCache } from '@/components/signals/SmartMoneyFeed'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -105,6 +105,13 @@ export default function WalletsPage() {
   // Mutation failure feedback — set when a PATCH/DELETE fails and the UI reverts
   const [mutationError, setMutationError] = useState<string | null>(null)
 
+  // Admin auth state — mutations require unlock when ADMIN_API_TOKEN is set
+  const [authLocked, setAuthLocked] = useState(false)
+  const [authorized, setAuthorized] = useState(true)
+  const [unlockValue, setUnlockValue] = useState('')
+  const [unlocking, setUnlocking] = useState(false)
+  const [unlockError, setUnlockError] = useState<string | null>(null)
+
   // ─── Data fetching ──────────────────────────────────────────────────
 
   const fetchWallets = useCallback(async () => {
@@ -131,6 +138,42 @@ export default function WalletsPage() {
   }, [])
 
   useEffect(() => { fetchWallets() }, [fetchWallets])
+
+  // Check whether the mutation API is locked behind an admin token
+  useEffect(() => {
+    fetch('/api/auth/unlock')
+      .then(r => r.json())
+      .then(d => {
+        setAuthLocked(Boolean(d.locked))
+        setAuthorized(Boolean(d.authorized))
+      })
+      .catch(() => { /* status check is best-effort; server still enforces */ })
+  }, [])
+
+  const handleUnlock = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!unlockValue.trim()) return
+    setUnlocking(true)
+    setUnlockError(null)
+    try {
+      const res = await fetch('/api/auth/unlock', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: unlockValue }),
+      })
+      if (res.ok) {
+        setAuthorized(true)
+        setUnlockValue('')
+      } else {
+        const data = await res.json().catch(() => null)
+        setUnlockError(data?.error || 'Invalid token')
+      }
+    } catch {
+      setUnlockError('Network error')
+    } finally {
+      setUnlocking(false)
+    }
+  }
 
   // ─── Filtered list ──────────────────────────────────────────────────
 
@@ -379,6 +422,33 @@ export default function WalletsPage() {
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* Admin unlock banner — shown when mutations require a token and this session lacks one */}
+        {authLocked && !authorized && (
+          <div className="card p-3 border-l-2 border-l-amber-400">
+            <div className="flex items-center gap-2 mb-2">
+              <Lock size={12} className="text-amber-400 shrink-0" />
+              <p className="text-xs text-amber-400">Wallet management is locked. Enter the admin token to add, edit, or remove wallets.</p>
+            </div>
+            <form onSubmit={handleUnlock} className="flex gap-2">
+              <input
+                type="password"
+                value={unlockValue}
+                onChange={e => setUnlockValue(e.target.value)}
+                placeholder="Admin token"
+                className="flex-1 bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-1.5 text-xs font-mono text-[#F0FAF8] placeholder:text-white/25 focus:outline-none focus:border-amber-400/40"
+              />
+              <button
+                type="submit"
+                disabled={unlocking}
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-400/10 text-amber-400 hover:bg-amber-400/20 transition-colors disabled:opacity-50"
+              >
+                {unlocking ? 'Unlocking...' : 'Unlock'}
+              </button>
+            </form>
+            {unlockError && <p className="text-[10px] text-[#FF3B5C] mt-1.5">{unlockError}</p>}
+          </div>
+        )}
 
         {/* Mutation error banner — shown when a save/remove failed and was reverted */}
         <AnimatePresence>

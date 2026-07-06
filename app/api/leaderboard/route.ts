@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server'
 import { getSupabase } from '@/lib/db/supabase'
 import { getRedis } from '@/lib/cache/redis'
 
+// Live data endpoint — must never be executed at build time
+export const dynamic = 'force-dynamic'
+
 const HL_URL = 'https://api.hyperliquid.xyz/info'
 const CACHE_KEY = 'leaderboard:v1'
 const CACHE_TTL = 60 // seconds
