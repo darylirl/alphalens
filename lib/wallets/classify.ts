@@ -29,8 +29,11 @@ export interface TradeGroup {
 }
 
 /**
- * Classify a wallet into one or more trader archetypes based on
- * 90 days of fills and current positions.
+ * Classify a wallet into one or more trader archetypes from its fills and
+ * current positions. The fills endpoint serves at most ~2000 of the wallet's
+ * most recent fills (older history is not queryable), so for hyperactive
+ * wallets this is a recent-activity sample rather than the full 90 days —
+ * computeTags detects the truncation and rate-normalizes accordingly.
  */
 export async function classifyWallet(address: string): Promise<ClassificationResult> {
   const ninetyDaysAgo = Date.now() - 90 * 24 * 60 * 60 * 1000
@@ -52,15 +55,51 @@ export function computeTags(fills: Fill[], state: ClearinghouseState): Archetype
 
   // --- Derived metrics ---
   const now = Date.now()
-  const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000
+  const dayMs = 24 * 60 * 60 * 1000
+  const thirtyDaysAgo = now - 30 * dayMs
+
+  // The fills endpoint serves at most ~2000 of a wallet's MOST RECENT fills;
+  // older history is not queryable (verified empirically — endTime paging
+  // returns nothing beyond the retained set). For hyperactive wallets the
+  // sample can span mere hours, so frequency metrics must be rate-based over
+  // the actually-covered window, not naively counted against "30 days".
+  const FILL_CAP = 2000
+  const capped = fills.length >= FILL_CAP
+  let newestFill = -Infinity
+  let oldestFill = Infinity
+  for (const f of fills) {
+    if (f.time > newestFill) newestFill = f.time
+    if (f.time < oldestFill) oldestFill = f.time
+  }
+  const coveredDays = Math.max((newestFill - oldestFill) / dayMs, 1 / 24) // ≥1h floor
+  const windowCovers30d = oldestFill <= thirtyDaysAgo
 
   // Fills in last 30 days for frequency metrics
   const recentFills = fills.filter(f => f.time >= thirtyDaysAgo)
-  const tradeCount30d = recentFills.length
 
-  // Unique coins traded
-  const uniqueCoins = new Set(fills.map(f => f.coin))
+  // 30d-equivalent trade count: direct count when the sample fully covers the
+  // last 30 days; rate-extrapolated when the cap truncated the window.
+  const tradeCount30d = (!capped || windowCovers30d)
+    ? recentFills.length
+    : Math.round((fills.length / coveredDays) * 30)
+
+  // Unique coins traded recently
   const uniqueCoinsRecent = new Set(recentFills.map(f => f.coin))
+
+  // Two-sided trading share: of recently active coins (≥4 fills), the share
+  // the wallet traded on BOTH sides — the market-maker signature that needs
+  // no hold-time evidence (a real MM measured 93% here).
+  const coinSideMap = new Map<string, { sides: Set<string>; count: number }>()
+  for (const f of recentFills) {
+    let e = coinSideMap.get(f.coin)
+    if (!e) { e = { sides: new Set(), count: 0 }; coinSideMap.set(f.coin, e) }
+    e.sides.add(f.side)
+    e.count++
+  }
+  const activeCoins = [...coinSideMap.values()].filter(e => e.count >= 4)
+  const twoSidedShare = activeCoins.length > 0
+    ? activeCoins.filter(e => e.sides.size === 2).length / activeCoins.length
+    : 0
 
   // Average notional per trade
   const notionals = fills.map(f => Math.abs(parseFloat(f.px) * parseFloat(f.sz)))
@@ -76,6 +115,11 @@ export function computeTags(fills: Fill[], state: ClearinghouseState): Archetype
     .filter(g => !g.truncated)
     .map(g => (g.exitTime! - g.entryTime) / 1000) // seconds
 
+  // Hold-time rules need real evidence: at least 3 measured round trips.
+  // Without it, avgHold defaults are meaningless — the old behavior of
+  // defaulting to 0 silently satisfied every "hold < X" condition.
+  const MIN_HOLD_SAMPLES = 3
+  const holdKnown = holdTimes.length >= MIN_HOLD_SAMPLES
   const avgHoldSeconds = holdTimes.length > 0
     ? holdTimes.reduce((a, b) => a + b, 0) / holdTimes.length
     : 0
@@ -108,28 +152,34 @@ export function computeTags(fills: Fill[], state: ClearinghouseState): Archetype
     tags.push('whale')
   }
 
-  // market_maker: 200+ trades/30d, avg hold < 30min, 5+ coins
-  if (tradeCount30d >= 200 && avgHoldMinutes < 30 && uniqueCoinsRecent.size >= 5) {
+  // market_maker: 200+ trades/30d across 5+ coins, evidenced by either
+  // two-sided quoting (works even when positions never go flat) or a
+  // measured sub-30-minute average hold
+  if (
+    tradeCount30d >= 200 &&
+    uniqueCoinsRecent.size >= 5 &&
+    (twoSidedShare >= 0.6 || (holdKnown && avgHoldMinutes < 30))
+  ) {
     tags.push('market_maker')
   }
 
-  // scalper: avg hold < 15min, 100+ trades/30d, high frequency in single coin
-  if (avgHoldMinutes < 15 && tradeCount30d >= 100) {
+  // scalper: measured avg hold < 15min, 100+ trades/30d
+  if (holdKnown && avgHoldMinutes < 15 && tradeCount30d >= 100) {
     tags.push('scalper')
   }
 
-  // momentum_trader: avg hold 4-72h, win rate > 55%, concentrated in 1-3 coins
-  if (avgHoldHours >= 4 && avgHoldHours <= 72 && winRate > 0.55 && topCoinsCount <= 3) {
+  // momentum_trader: measured avg hold 4-72h, win rate > 55%, 1-3 coins
+  if (holdKnown && avgHoldHours >= 4 && avgHoldHours <= 72 && winRate > 0.55 && topCoinsCount <= 3) {
     tags.push('momentum_trader')
   }
 
-  // basis_trader: funding > 20% of total PnL, avg hold > 7 days
-  if (fundingRatio >= 0.2 && fundingPnl > 0 && avgHoldDays >= 7) {
+  // basis_trader: funding > 20% of total PnL, measured avg hold > 7 days
+  if (holdKnown && fundingRatio >= 0.2 && fundingPnl > 0 && avgHoldDays >= 7) {
     tags.push('basis_trader')
   }
 
-  // swing_trader: avg hold 3-14 days, < 50 trades/30d
-  if (avgHoldDays >= 3 && avgHoldDays <= 14 && tradeCount30d < 50) {
+  // swing_trader: measured avg hold 3-14 days, < 50 trades/30d
+  if (holdKnown && avgHoldDays >= 3 && avgHoldDays <= 14 && tradeCount30d < 50) {
     tags.push('swing_trader')
   }
 
