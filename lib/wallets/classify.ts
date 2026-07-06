@@ -1,5 +1,5 @@
-import { getUserFills, getClearinghouseState } from '@/lib/hyperliquid/client'
-import type { Fill, ClearinghouseState } from '@/lib/hyperliquid/types'
+import { getUserFills, getClearinghouseState } from '../hyperliquid/client'
+import type { Fill, ClearinghouseState } from '../hyperliquid/types'
 
 export type Archetype =
   | 'market_maker'
@@ -15,14 +15,17 @@ export interface ClassificationResult {
   tags: Archetype[]
 }
 
-interface TradeGroup {
+export interface TradeGroup {
   coin: string
+  /** Direction of the position: 'B' = long, 'A' = short */
   side: 'B' | 'A'
   entryTime: number
   exitTime: number | null
   entryPx: number
   closedPnl: number
   notional: number
+  /** Entry predates the fill window, so the hold time is a lower bound only */
+  truncated: boolean
 }
 
 /**
@@ -65,8 +68,12 @@ export function computeTags(fills: Fill[], state: ClearinghouseState): Archetype
 
   // Trade grouping for hold time calculation
   const tradeGroups = computeTradeGroups(fills)
-  const holdTimes = tradeGroups
-    .filter(g => g.exitTime !== null)
+  const closedTrades = tradeGroups.filter(g => g.exitTime !== null)
+
+  // Truncated trips entered before the fill window — their duration is a
+  // lower bound, so exclude them from hold-time stats (PnL is still valid).
+  const holdTimes = closedTrades
+    .filter(g => !g.truncated)
     .map(g => (g.exitTime! - g.entryTime) / 1000) // seconds
 
   const avgHoldSeconds = holdTimes.length > 0
@@ -77,7 +84,6 @@ export function computeTags(fills: Fill[], state: ClearinghouseState): Archetype
   const avgHoldDays = avgHoldHours / 24
 
   // Win rate
-  const closedTrades = tradeGroups.filter(g => g.exitTime !== null)
   const wins = closedTrades.filter(g => g.closedPnl > 0).length
   const winRate = closedTrades.length > 0 ? wins / closedTrades.length : 0
 
@@ -134,67 +140,108 @@ export function computeTags(fills: Fill[], state: ClearinghouseState): Archetype
   return tags
 }
 
-/**
- * Group fills into trade entries/exits by coin and direction.
- * A trade group is opened when a position increases and closed when it decreases.
- */
-function computeTradeGroups(fills: Fill[]): TradeGroup[] {
-  const groups: TradeGroup[] = []
+const POSITION_EPS = 1e-9
 
-  // Sort by time ascending
+/**
+ * Reconstruct round-trip trades from fills by tracking the signed position
+ * per coin. A trade spans from the fill that takes the position off flat
+ * (or through a direction flip) to the fill that returns it to flat (or
+ * flips it again). Hyperliquid reports the signed pre-fill position on every
+ * fill (`startPosition`, negative for shorts), which both self-corrects any
+ * drift and lets us detect positions whose entries predate the fill window.
+ */
+export function computeTradeGroups(fills: Fill[]): TradeGroup[] {
+  const groups: TradeGroup[] = []
   const sorted = [...fills].sort((a, b) => a.time - b.time)
 
-  // Track open positions per coin
-  const openPositions = new Map<string, { entryTime: number; totalPnl: number; notional: number; entryPx: number; side: 'B' | 'A' }>()
+  interface OpenTrip {
+    entryTime: number
+    entryPx: number
+    closedPnl: number
+    notional: number
+    truncated: boolean
+  }
+
+  const running = new Map<string, number>() // signed position per coin
+  const open = new Map<string, OpenTrip>()
 
   for (const fill of sorted) {
-    const key = `${fill.coin}_${fill.side}`
-    const closedPnl = parseFloat(fill.closedPnl || '0')
-    const notional = Math.abs(parseFloat(fill.px) * parseFloat(fill.sz))
+    const coin = fill.coin
+    const sz = parseFloat(fill.sz)
+    const px = parseFloat(fill.px)
+    if (!isFinite(sz) || !isFinite(px) || sz === 0) continue
 
-    if (closedPnl !== 0) {
-      // This fill is closing a position
-      const opposite = `${fill.coin}_${fill.side === 'B' ? 'A' : 'B'}`
-      const open = openPositions.get(opposite)
-      if (open) {
-        groups.push({
-          coin: fill.coin,
-          side: open.side,
-          entryTime: open.entryTime,
-          exitTime: fill.time,
-          entryPx: open.entryPx,
-          closedPnl: open.totalPnl + closedPnl,
-          notional: open.notional,
-        })
-        openPositions.delete(opposite)
-      } else {
-        // No matching open — treat as standalone closed trade
-        groups.push({
-          coin: fill.coin,
-          side: fill.side,
+    const delta = fill.side === 'B' ? sz : -sz
+    const reported = parseFloat(fill.startPosition)
+    const prev = isFinite(reported) ? reported : (running.get(coin) ?? 0)
+    const next = prev + delta
+    running.set(coin, Math.abs(next) < POSITION_EPS ? 0 : next)
+
+    const pnl = parseFloat(fill.closedPnl || '0') || 0
+    const notional = Math.abs(px * sz)
+
+    const prevFlat = Math.abs(prev) < POSITION_EPS
+    const nextFlat = Math.abs(next) < POSITION_EPS
+    const flipped = !prevFlat && !nextFlat && Math.sign(prev) !== Math.sign(next)
+
+    if (prevFlat && !nextFlat) {
+      // Position opened from flat
+      open.set(coin, { entryTime: fill.time, entryPx: px, closedPnl: pnl, notional, truncated: false })
+      continue
+    }
+    if (prevFlat && nextFlat) continue // no position change (defensive)
+
+    let trip = open.get(coin)
+    if (!trip) {
+      // The fill window starts mid-position: track the remainder as a
+      // truncated trip so partial closes aggregate into one trade instead of
+      // becoming spurious zero-duration trades.
+      trip = { entryTime: fill.time, entryPx: px, closedPnl: 0, notional: 0, truncated: true }
+      open.set(coin, trip)
+    }
+
+    trip.closedPnl += pnl
+    trip.notional += notional
+
+    if (nextFlat || flipped) {
+      groups.push({
+        coin,
+        side: prev > 0 ? 'B' : 'A',
+        entryTime: trip.entryTime,
+        exitTime: fill.time,
+        entryPx: trip.entryPx,
+        closedPnl: trip.closedPnl,
+        notional: trip.notional,
+        truncated: trip.truncated,
+      })
+      open.delete(coin)
+      if (flipped) {
+        // The residual becomes a fresh position in the opposite direction
+        open.set(coin, {
           entryTime: fill.time,
-          exitTime: fill.time,
-          entryPx: parseFloat(fill.px),
-          closedPnl,
-          notional,
-        })
-      }
-    } else {
-      // Opening or adding to position
-      const existing = openPositions.get(key)
-      if (existing) {
-        existing.totalPnl += closedPnl
-        existing.notional += notional
-      } else {
-        openPositions.set(key, {
-          entryTime: fill.time,
-          totalPnl: 0,
-          notional,
-          entryPx: parseFloat(fill.px),
-          side: fill.side,
+          entryPx: px,
+          closedPnl: 0,
+          notional: Math.abs(px * next),
+          truncated: false,
         })
       }
     }
+  }
+
+  // Positions still open at the end have no exit; report them so callers can
+  // see activity, but with exitTime null they are excluded from hold/win stats.
+  for (const [coin, trip] of open) {
+    const pos = running.get(coin) ?? 0
+    groups.push({
+      coin,
+      side: pos >= 0 ? 'B' : 'A',
+      entryTime: trip.entryTime,
+      exitTime: null,
+      entryPx: trip.entryPx,
+      closedPnl: trip.closedPnl,
+      notional: trip.notional,
+      truncated: trip.truncated,
+    })
   }
 
   return groups
