@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { computeWalletMetrics } from '@/lib/wallets/classify'
+import { computeSharpe } from '@/lib/analytics/pnl'
+import type { Fill, ClearinghouseState } from '@/lib/hyperliquid/types'
 
 const HL_URL = 'https://api.hyperliquid.xyz/info'
 
@@ -15,6 +18,47 @@ async function hlPost(payload: Record<string, unknown>) {
   })
   if (!res.ok) return null
   return res.json()
+}
+
+/** Convert a cumulative PnL curve into per-calendar-day PnL deltas so
+ *  computeSharpe's daily-period assumption actually holds. */
+function dailyPnlsFromCurve(history: [number, string][] | undefined): number[] {
+  if (!history || history.length < 2) return []
+  const lastByDay = new Map<string, number>()
+  for (const [ts, v] of history) {
+    lastByDay.set(new Date(ts).toISOString().slice(0, 10), parseFloat(v) || 0)
+  }
+  const vals = [...lastByDay.values()]
+  const out: number[] = []
+  for (let i = 1; i < vals.length; i++) out.push(vals[i] - vals[i - 1])
+  return out
+}
+
+interface PortfolioDerived {
+  totalPnl: number | null
+  sharpe7d: number | null
+  sharpe30d: number | null
+}
+
+/** Real PnL and risk metrics from the exchange-computed portfolio curves. */
+async function fetchPortfolioMetrics(address: string): Promise<PortfolioDerived> {
+  const data = await hlPost({ type: 'portfolio', user: address }).catch(() => null)
+  if (!Array.isArray(data)) return { totalPnl: null, sharpe7d: null, sharpe30d: null }
+
+  const byName = new Map<string, { pnlHistory?: [number, string][] }>(data as [string, { pnlHistory?: [number, string][] }][])
+  const allTime = byName.get('allTime')?.pnlHistory
+  const totalPnl = allTime && allTime.length > 0
+    ? parseFloat(allTime[allTime.length - 1][1]) || 0
+    : null
+
+  const s7 = computeSharpe(dailyPnlsFromCurve(byName.get('week')?.pnlHistory))
+  const s30 = computeSharpe(dailyPnlsFromCurve(byName.get('month')?.pnlHistory))
+
+  return {
+    totalPnl: totalPnl !== null ? Math.round(totalPnl * 100) / 100 : null,
+    sharpe7d: isNaN(s7) ? null : s7,
+    sharpe30d: isNaN(s30) ? null : s30,
+  }
 }
 
 // Also support GET for Vercel cron jobs
@@ -55,11 +99,9 @@ async function runSeed() {
   // Step 1: Discover active wallet addresses from recent trades across top coins
   const discoveredAddresses = new Set<string>()
 
-  const tradePromises = TOP_COINS.map(coin =>
-    hlPost({ type: 'recentTrades', coin }).catch(() => null)
+  const allTrades = await Promise.all(
+    TOP_COINS.map(coin => hlPost({ type: 'recentTrades', coin }).catch(() => null))
   )
-
-  const allTrades = await Promise.all(tradePromises)
 
   for (const trades of allTrades) {
     if (!Array.isArray(trades)) continue
@@ -79,106 +121,89 @@ async function runSeed() {
     return NextResponse.json({ error: 'No wallets discovered from recent trades' }, { status: 502 })
   }
 
-  // Step 2: For each discovered wallet, fetch account state and compute metrics
+  // Step 2: For each discovered wallet, compute REAL metrics. Every stored
+  // value is derived from exchange data (fills, positions, portfolio curves)
+  // or stored as null when the evidence doesn't exist — nothing is fabricated.
   const addresses = Array.from(discoveredAddresses).slice(0, 100)
-  const archetypes = ['scalper', 'swing_trader', 'momentum_trader', 'high_conviction', 'funding_arb', 'farmer', 'market_maker']
+  const ninetyDaysAgo = Date.now() - 90 * 24 * 60 * 60 * 1000
   let seeded = 0
   const errors: string[] = []
+  let tagsColumnMissing = false
 
   // Process in batches of 10 to avoid rate limits
-  for (let batch = 0; batch < addresses.length; batch += 10) {
-    const batchAddrs = addresses.slice(batch, batch + 10)
+  for (let batchStart = 0; batchStart < addresses.length; batchStart += 10) {
+    const batchAddrs = addresses.slice(batchStart, batchStart + 10)
 
-    const statePromises = batchAddrs.map(addr =>
-      hlPost({ type: 'clearinghouseState', user: addr }).catch(() => null)
-    )
-
-    const states = await Promise.all(statePromises)
+    const [states, fillsResults, portfolios] = await Promise.all([
+      Promise.all(batchAddrs.map(addr => hlPost({ type: 'clearinghouseState', user: addr }).catch(() => null))),
+      Promise.all(batchAddrs.map(addr =>
+        hlPost({ type: 'userFillsByTime', user: addr, startTime: ninetyDaysAgo })
+          .then(d => (Array.isArray(d) ? (d as Fill[]) : []))
+          .catch(() => [] as Fill[])
+      )),
+      Promise.all(batchAddrs.map(addr => fetchPortfolioMetrics(addr))),
+    ])
 
     for (let j = 0; j < batchAddrs.length; j++) {
       const address = batchAddrs[j]
-      const state = states[j]
-      if (!state) continue
+      const state = states[j] as ClearinghouseState | null
+      if (!state?.crossMarginSummary) continue
 
-      const accountValue = parseFloat(state?.crossMarginSummary?.accountValue || '0')
+      const accountValue = parseFloat(state.crossMarginSummary.accountValue || '0')
 
       // Skip wallets with very low account value
       if (accountValue < 100) continue
 
-      const positions = state?.assetPositions || []
+      // Real leverage from current positions
       let totalLeverage = 0
       let posCount = 0
-      let mostTraded = 'BTC'
-      let totalNotional = 0
-
-      for (const ap of positions) {
+      for (const ap of state.assetPositions || []) {
         const pos = ap?.position
         if (pos && parseFloat(pos.szi || '0') !== 0) {
-          totalLeverage += pos.leverage?.value || 5
+          totalLeverage += pos.leverage?.value || 0
           posCount++
-          mostTraded = pos.coin || mostTraded
-          totalNotional += Math.abs(parseFloat(pos.positionValue || '0'))
         }
       }
+      const avgLeverage = posCount > 0 ? Math.round((totalLeverage / posCount) * 100) / 100 : null
 
-      const avgLeverage = posCount > 0 ? totalLeverage / posCount : 5
-      const isLargeAccount = accountValue > 50000
-      const isActive = posCount > 0
+      const metrics = computeWalletMetrics(fillsResults[j], state)
+      const portfolio = portfolios[j]
+      const primaryTag = metrics.tags.find(t => t !== 'unclassified') || null
 
-      // Detect delta-neutral (farmer) positions
-      let hasLong = false
-      let hasSht = false
-      let longNotional = 0
-      let shortNotional = 0
-      for (const ap of positions) {
-        const pos = ap?.position
-        const size = parseFloat(pos?.szi || '0')
-        const val = Math.abs(parseFloat(pos?.positionValue || '0'))
-        if (size > 0) { hasLong = true; longNotional += val }
-        else if (size < 0) { hasSht = true; shortNotional += val }
-      }
-      const netDelta = totalNotional > 0 ? Math.abs(longNotional - shortNotional) / totalNotional : 1
-
-      // Classify archetype based on real metrics
-      let archetype: string
-      if (hasLong && hasSht && netDelta < 0.25 && avgLeverage <= 5) {
-        archetype = 'farmer'
-      } else if (avgLeverage > 10 && posCount > 0) {
-        archetype = 'scalper'
-      } else if (avgLeverage <= 5 && accountValue > 100000) {
-        archetype = 'high_conviction'
-      } else if (posCount > 3) {
-        archetype = 'momentum_trader'
-      } else if (avgLeverage >= 3 && avgLeverage <= 10) {
-        archetype = 'swing_trader'
-      } else {
-        archetype = archetypes[(batch + j) % archetypes.length]
-      }
-
-      const baseSharpe = isLargeAccount ? 1.0 + Math.random() * 1.5 : 0.3 + Math.random() * 1.0
-      const baseWinRate = isActive ? 0.48 + Math.random() * 0.22 : 0.4 + Math.random() * 0.15
-
-      const wallet = {
+      const wallet: Record<string, unknown> = {
         address,
         label: null,
-        archetype,
-        archetype_confidence: Math.round((0.55 + Math.random() * 0.4) * 100) / 100,
-        sharpe_7d: Math.round(baseSharpe * (0.7 + Math.random() * 0.6) * 1000) / 1000,
-        sharpe_30d: Math.round(baseSharpe * (0.8 + Math.random() * 0.5) * 1000) / 1000,
-        sharpe_90d: Math.round(baseSharpe * (0.85 + Math.random() * 0.3) * 1000) / 1000,
-        alpha_decay_score: Math.round(Math.random() * 0.4 * 1000) / 1000,
-        win_rate: Math.round(baseWinRate * 1000) / 1000,
-        total_pnl_usd: Math.round(accountValue * (0.05 + Math.random() * 0.5) * (Math.random() > 0.35 ? 1 : -1) * 100) / 100,
-        trade_count_30d: Math.floor(15 + Math.random() * 200),
-        avg_hold_seconds: Math.floor(300 + Math.random() * 172800),
-        avg_leverage: Math.round(avgLeverage * 100) / 100,
-        most_traded_asset: mostTraded,
+        archetype: primaryTag,
+        archetype_confidence: null, // no principled confidence measure yet
+        sharpe_7d: portfolio.sharpe7d,
+        sharpe_30d: portfolio.sharpe30d,
+        sharpe_90d: null, // allTime curve is too coarse for a 90d estimate
+        alpha_decay_score: null,
+        win_rate: metrics.winRate !== null ? Math.round(metrics.winRate * 1000) / 1000 : null,
+        total_pnl_usd: portfolio.totalPnl,
+        trade_count_30d: metrics.tradeCount30d,
+        avg_hold_seconds: metrics.avgHoldSeconds,
+        avg_leverage: avgLeverage,
+        most_traded_asset: metrics.mostTradedCoin,
         is_seeded: true,
+        last_updated: new Date().toISOString(),
+        tags: metrics.tags,
       }
 
-      const { error } = await supabase
+      // Merge on conflict so re-seeding REPAIRS previously fabricated rows
+      // (the old ignoreDuplicates:true made bad data permanent).
+      let { error } = await supabase
         .from('wallets')
-        .upsert(wallet, { onConflict: 'address', ignoreDuplicates: true })
+        .upsert(wallet, { onConflict: 'address' })
+
+      // The tags column ships in migration 002; retry without it when the
+      // migration has not been applied yet.
+      if (error && error.message.includes('tags')) {
+        tagsColumnMissing = true
+        delete wallet.tags
+        const retry = await supabase.from('wallets').upsert(wallet, { onConflict: 'address' })
+        error = retry.error
+      }
 
       if (error) {
         if (errors.length < 5) errors.push(`${address.slice(0, 10)}: ${error.message}`)
@@ -192,6 +217,7 @@ async function runSeed() {
     success: seeded > 0,
     seeded,
     discovered: discoveredAddresses.size,
+    tagsColumnMissing: tagsColumnMissing || undefined,
     errors: errors.length > 0 ? errors : undefined
   })
 }

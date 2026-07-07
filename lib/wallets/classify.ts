@@ -48,8 +48,35 @@ export async function classifyWallet(address: string): Promise<ClassificationRes
   return { address: address.toLowerCase(), tags }
 }
 
+/** Honestly-derived wallet metrics: values are null when the fill sample
+ *  provides no real evidence for them — callers must not fabricate defaults. */
+export interface WalletMetrics {
+  tags: Archetype[]
+  /** 30d-equivalent fill count (rate-extrapolated when the sample is capped) */
+  tradeCount30d: number
+  /** null when fewer than MIN_HOLD_SAMPLES measured round trips */
+  avgHoldSeconds: number | null
+  /** null when no completed round trips exist in the sample */
+  winRate: number | null
+  closedTradeCount: number
+  uniqueCoins: number
+  /** Coin with the most fills in the sample */
+  mostTradedCoin: string | null
+  twoSidedShare: number
+}
+
 export function computeTags(fills: Fill[], state: ClearinghouseState): Archetype[] {
-  if (!fills || fills.length === 0) return ['unclassified']
+  return computeWalletMetrics(fills, state).tags
+}
+
+export function computeWalletMetrics(fills: Fill[], state: ClearinghouseState): WalletMetrics {
+  if (!fills || fills.length === 0) {
+    return {
+      tags: ['unclassified'], tradeCount30d: 0, avgHoldSeconds: null,
+      winRate: null, closedTradeCount: 0, uniqueCoins: 0,
+      mostTradedCoin: null, twoSidedShare: 0,
+    }
+  }
 
   const tags: Archetype[] = []
 
@@ -127,9 +154,10 @@ export function computeTags(fills: Fill[], state: ClearinghouseState): Archetype
   const avgHoldHours = avgHoldMinutes / 60
   const avgHoldDays = avgHoldHours / 24
 
-  // Win rate
+  // Win rate — null (unknown) when no round trips completed in the sample
   const wins = closedTrades.filter(g => g.closedPnl > 0).length
-  const winRate = closedTrades.length > 0 ? wins / closedTrades.length : 0
+  const winRateOrNull = closedTrades.length > 0 ? wins / closedTrades.length : null
+  const winRate = winRateOrNull ?? 0
 
   // Funding income estimation from positions
   const fundingPnl = estimateFundingPnl(state)
@@ -187,7 +215,16 @@ export function computeTags(fills: Fill[], state: ClearinghouseState): Archetype
     tags.push('unclassified')
   }
 
-  return tags
+  return {
+    tags,
+    tradeCount30d,
+    avgHoldSeconds: holdKnown ? Math.round(avgHoldSeconds) : null,
+    winRate: winRateOrNull,
+    closedTradeCount: closedTrades.length,
+    uniqueCoins: coinCounts.size,
+    mostTradedCoin: sortedCoins[0]?.[0] ?? null,
+    twoSidedShare: Math.round(twoSidedShare * 100) / 100,
+  }
 }
 
 const POSITION_EPS = 1e-9
