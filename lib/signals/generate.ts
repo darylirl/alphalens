@@ -1,4 +1,4 @@
-import { getSupabase } from '@/lib/db/supabase'
+import { getSupabase } from '../db/supabase'
 
 const NOTIONAL_THRESHOLD = 50_000
 
@@ -25,53 +25,45 @@ interface GeneratedSignal {
 }
 
 /**
- * Determine confidence level based on wallet's historical win rate.
- * Queries the fills table for past fills from this wallet.
+ * Fetch label, tags, and confidence for a wallet in a single query.
+ * Confidence derives from the measured win rate (real round trips only —
+ * the seed pipeline stores null when there is no evidence).
  */
-async function getWalletConfidence(address: string): Promise<'high' | 'medium' | 'low'> {
-  try {
-    const supabase = getSupabase()
-
-    // Check wallet analytics for win rate
-    const { data: wallet } = await supabase
-      .from('wallets')
-      .select('win_rate, label')
-      .eq('address', address.toLowerCase())
-      .single()
-
-    if (wallet?.win_rate) {
-      const winRate = Number(wallet.win_rate)
-      if (winRate >= 0.6) return 'high'
-      if (winRate >= 0.45) return 'medium'
-      return 'low'
-    }
-
-    return 'medium' // default when no history available
-  } catch {
-    return 'medium'
-  }
-}
-
-/**
- * Get wallet label and tags from the wallets table.
- */
-async function getWalletInfo(address: string): Promise<{ label: string | null; tags: string[] }> {
+async function getWalletProfile(address: string): Promise<{
+  label: string | null
+  tags: string[]
+  confidence: 'high' | 'medium' | 'low'
+}> {
   try {
     const supabase = getSupabase()
     const { data } = await supabase
       .from('wallets')
-      .select('label, tags')
-      .eq('address', address.toLowerCase())
+      .select('win_rate, label, tags')
+      .eq('address', address)
       .single()
-    return { label: data?.label || null, tags: data?.tags || [] }
+
+    let confidence: 'high' | 'medium' | 'low' = 'medium'
+    if (data?.win_rate !== null && data?.win_rate !== undefined) {
+      const winRate = Number(data.win_rate)
+      if (winRate >= 0.6) confidence = 'high'
+      else if (winRate >= 0.45) confidence = 'medium'
+      else confidence = 'low'
+    }
+
+    return { label: data?.label || null, tags: data?.tags || [], confidence }
   } catch {
-    return { label: null, tags: [] }
+    return { label: null, tags: [], confidence: 'medium' }
   }
 }
 
 /**
  * Check if a trade event qualifies as a signal and generate + store it.
- * Returns the generated signals, or empty array if none qualified.
+ * Returns only the signals that were actually persisted.
+ *
+ * Rate control: at most ONE active signal per wallet+coin+side. Checked
+ * here before inserting, and guaranteed under concurrency by the partial
+ * unique index idx_signals_one_active (migration 006) — a duplicate
+ * insert from a racing stream fails and is skipped, never double-counted.
  */
 export async function maybeGenerateSignal(trade: TradeEvent): Promise<GeneratedSignal[]> {
   const price = parseFloat(trade.px)
@@ -81,49 +73,65 @@ export async function maybeGenerateSignal(trade: TradeEvent): Promise<GeneratedS
   // Only generate signals for trades above the notional threshold
   if (notional < NOTIONAL_THRESHOLD) return []
 
+  const side: 'long' | 'short' = trade.side === 'B' ? 'long' : 'short'
   const signals: GeneratedSignal[] = []
   const supabase = getSupabase()
 
   for (const wallet of trade.wallets) {
-    const [confidence, walletInfo] = await Promise.all([
-      getWalletConfidence(wallet),
-      getWalletInfo(wallet),
-    ])
+    const address = wallet.toLowerCase()
+
+    // Dedup pre-check (cheap common path): skip when an active signal for
+    // this wallet+coin+side already exists.
+    const { data: existing } = await supabase
+      .from('signals')
+      .select('signal_id')
+      .eq('wallet_address', address)
+      .eq('coin', trade.coin)
+      .eq('side', side)
+      .eq('status', 'active')
+      .limit(1)
+
+    if (existing && existing.length > 0) continue
+
+    const profile = await getWalletProfile(address)
 
     const signal: GeneratedSignal = {
       signal_id: crypto.randomUUID(),
-      wallet_address: wallet.toLowerCase(),
-      wallet_label: walletInfo.label,
-      wallet_tags: walletInfo.tags,
+      wallet_address: address,
+      wallet_label: profile.label,
+      wallet_tags: profile.tags,
       coin: trade.coin,
-      side: trade.side === 'B' ? 'long' : 'short',
+      side,
       entry_price: price,
       notional_usd: Math.round(notional * 100) / 100,
-      confidence,
+      confidence: profile.confidence,
       source: 'hyperliquid_smart_money',
     }
 
-    // Persist to Supabase
-    try {
-      await supabase.from('signals').insert({
-        signal_id: signal.signal_id,
-        wallet_address: signal.wallet_address,
-        wallet_label: signal.wallet_label,
-        wallet_tags: signal.wallet_tags,
-        coin: signal.coin,
-        side: signal.side,
-        entry_price: signal.entry_price,
-        notional_usd: signal.notional_usd,
-        confidence: signal.confidence,
-        source: signal.source,
-        status: 'active',
-        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-      })
-    } catch {
-      // Log but don't fail the stream if insert fails
-      if (process.env.NODE_ENV === 'development') {
-        console.error(`[Signals] Failed to persist signal for ${wallet}`)
+    const { error } = await supabase.from('signals').insert({
+      signal_id: signal.signal_id,
+      wallet_address: signal.wallet_address,
+      wallet_label: signal.wallet_label,
+      wallet_tags: signal.wallet_tags,
+      coin: signal.coin,
+      side: signal.side,
+      entry_price: signal.entry_price,
+      notional_usd: signal.notional_usd,
+      confidence: signal.confidence,
+      source: signal.source,
+      status: 'active',
+      expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+    })
+
+    if (error) {
+      // Unique-index violation = a racing stream inserted first — expected,
+      // skip quietly. Anything else is a real persistence failure: do NOT
+      // report the signal as generated (the old code pushed it regardless).
+      const isDuplicate = /duplicate|unique|23505/i.test(error.message || '')
+      if (!isDuplicate && process.env.NODE_ENV === 'development') {
+        console.error(`[Signals] Failed to persist signal for ${address}: ${error.message}`)
       }
+      continue
     }
 
     signals.push(signal)
