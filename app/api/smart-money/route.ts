@@ -92,38 +92,26 @@ interface SmartMoneyWallet {
   firstTradeTime: number | null
 }
 
-// ── Fetch all-time fills with pagination ──
-async function fetchAllTimeFills(address: string): Promise<{ cumulativePnl: number; firstTradeTime: number | null }> {
-  let cumulativePnl = 0
-  let firstTradeTime: number | null = null
+// ── Fetch true all-time PnL and account age from the portfolio endpoint ──
+// The fills endpoint retains only a wallet's most recent ~2000 fills, so
+// summing closedPnl over fills wildly understates all-time PnL for active
+// wallets (measured on a live market maker: $2.3K from fills vs the true
+// $4.4M) and dates "Since" to hours ago instead of years. The portfolio
+// endpoint reports the exchange-computed all-time PnL curve, inclusive of
+// realized, unrealized, and funding PnL.
+async function fetchAllTimePnl(address: string): Promise<{ allTimePnl: number; firstTradeTime: number | null }> {
+  const data = await hlPost({ type: 'portfolio', user: address }).catch(() => null)
+  if (!Array.isArray(data)) return { allTimePnl: 0, firstTradeTime: null }
 
-  // Use userFillsByTime starting from epoch 0 (all-time)
-  // Hyperliquid returns max 2000 fills per call, so paginate
-  let startTime = 0
-  const MAX_PAGES = 5 // Up to 10,000 fills
+  const allTimeEntry = data.find((e: [string, unknown]) => e?.[0] === 'allTime')
+  const allTime = allTimeEntry?.[1] as { pnlHistory?: [number, string][] } | undefined
+  const history = allTime?.pnlHistory
+  if (!history || history.length === 0) return { allTimePnl: 0, firstTradeTime: null }
 
-  for (let page = 0; page < MAX_PAGES; page++) {
-    const data = await hlPost({ type: 'userFillsByTime', user: address, startTime, aggregateByTime: false })
-    if (!Array.isArray(data) || data.length === 0) break
-
-    for (const fill of data) {
-      cumulativePnl += parseFloat(fill.closedPnl || '0')
-      const t = fill.time
-      if (t && (firstTradeTime === null || t < firstTradeTime)) {
-        firstTradeTime = t
-      }
-    }
-
-    // If we got fewer than 2000, we have all fills
-    if (data.length < 2000) break
-
-    // Move startTime forward past the last fill for next page
-    const lastTime = data[data.length - 1].time
-    if (lastTime) startTime = lastTime + 1
-    else break
+  return {
+    allTimePnl: parseFloat(history[history.length - 1][1]) || 0,
+    firstTradeTime: history[0][0] || null,
   }
-
-  return { cumulativePnl, firstTradeTime }
 }
 
 // ── Fetch lifetime funding PnL ──
@@ -299,12 +287,12 @@ export async function GET() {
     for (let i = 0; i < allAddrs.length; i += 20) {
       const batch = allAddrs.slice(i, i + 20)
 
-      // Fetch state, all-time fills, and funding in parallel per batch
+      // Fetch state, all-time PnL, and funding in parallel per batch
       const stateResults = await Promise.all(
         batch.map(addr => hlPost({ type: 'clearinghouseState', user: addr }).catch(() => null))
       )
-      const fillResults = await Promise.all(
-        batch.map(addr => fetchAllTimeFills(addr))
+      const pnlResults = await Promise.all(
+        batch.map(addr => fetchAllTimePnl(addr))
       )
       const fundingResults = await Promise.all(
         batch.map(addr => fetchFundingPnl(addr))
@@ -339,18 +327,21 @@ export async function GET() {
           positions.push({ coin: pos.coin, size: Math.abs(size), side, notional, leverage, pnl, entryPx })
         }
 
-        const { cumulativePnl, firstTradeTime } = fillResults[j]
+        const { allTimePnl, firstTradeTime } = pnlResults[j]
         const fundingPnl = fundingResults[j]
 
         positions.sort((a, b) => b.notional - a.notional)
 
+        // The portfolio all-time PnL already includes realized, unrealized,
+        // and funding PnL — so it IS the total, and realized is derived as
+        // total minus current unrealized (no double counting).
         walletData.push({
           address: batch[j], accountValue, tier: getTierName(accountValue),
           tags: walletTagsMap.get(batch[j].toLowerCase()) || [],
           positions, totalLong, totalShort, positionCount: positions.length,
-          cumulativePnl: Math.round(cumulativePnl * 100) / 100,
+          cumulativePnl: Math.round((allTimePnl - unrealizedPnl) * 100) / 100,
           unrealizedPnl: Math.round(unrealizedPnl * 100) / 100,
-          totalPnl: Math.round((cumulativePnl + unrealizedPnl + fundingPnl) * 100) / 100,
+          totalPnl: Math.round(allTimePnl * 100) / 100,
           fundingPnl: Math.round(fundingPnl * 100) / 100,
           firstTradeTime,
         })
