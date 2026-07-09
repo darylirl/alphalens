@@ -11,7 +11,7 @@ export async function GET(req: Request) {
   }
 
   const supabaseUrl = process.env.SUPABASE_URL
-  const supabaseKey = process.env.SUPABASE_ANON_KEY
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY
 
   if (!supabaseUrl || !supabaseKey || supabaseUrl.includes('your_')) {
     return NextResponse.json({ configs: [] })
@@ -53,7 +53,7 @@ export async function POST(req: Request) {
     const enabled = typeof body.enabled === 'boolean' ? body.enabled : true
 
     const supabaseUrl = process.env.SUPABASE_URL
-    const supabaseKey = process.env.SUPABASE_ANON_KEY
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY
 
     if (!supabaseUrl || !supabaseKey || supabaseUrl.includes('your_')) {
       return NextResponse.json({ error: 'Supabase not configured' }, { status: 400 })

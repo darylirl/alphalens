@@ -42,7 +42,8 @@ export async function getUserFills(address: string, startTime?: number): Promise
 
 export async function getUserFundings(address: string, startTime?: number): Promise<UserFunding[]> {
   const st = startTime ?? 1
-  return post({ type: 'userFundings', user: address, startTime: st })
+  // NB: the Hyperliquid type name is singular — 'userFundings' returns 422
+  return post({ type: 'userFunding', user: address, startTime: st })
 }
 
 export async function getOpenOrders(address: string): Promise<OpenOrder[]> {

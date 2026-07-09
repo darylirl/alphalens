@@ -144,7 +144,7 @@ function computeFundingSummary(fundings: UserFunding[]) {
   let paid = 0
 
   for (const f of fundings) {
-    const amt = parseFloat(f.usdc)
+    const amt = parseFloat(f.delta?.usdc || '0')
     total += amt
     if (amt >= 0) received += amt
     else paid += Math.abs(amt)

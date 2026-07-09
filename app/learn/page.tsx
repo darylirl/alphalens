@@ -47,7 +47,9 @@ function Term({ name, children, explorerType }: { name: string; children: React.
   return (
     <div className="bg-[#0F1A1E] rounded p-4 border border-white/[0.08]">
       <p className="text-[#F0FAF8] font-medium mb-1.5">{name}</p>
-      <p className="text-white/55 text-xs leading-relaxed">{children}</p>
+      {/* div, not p: several callers nest <div><Badge/></div> in children,
+          and a div inside a p is invalid HTML that breaks hydration */}
+      <div className="text-white/55 text-xs leading-relaxed">{children}</div>
       {explorerType && (
         <Link
           href={`/hunters?type=${encodeURIComponent(explorerType)}`}

@@ -4,7 +4,7 @@ import { sanitizeString } from '@/lib/validation'
 export async function GET() {
   try {
     const supabaseUrl = process.env.SUPABASE_URL
-    const supabaseKey = process.env.SUPABASE_ANON_KEY
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY
 
     if (supabaseUrl && supabaseKey && supabaseUrl !== 'your_supabase_project_url') {
       const { createClient } = await import('@supabase/supabase-js')
@@ -50,7 +50,7 @@ export async function POST(req: Request) {
     }
 
     const supabaseUrl = process.env.SUPABASE_URL
-    const supabaseKey = process.env.SUPABASE_ANON_KEY
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY
 
     if (supabaseUrl && supabaseKey && supabaseUrl !== 'your_supabase_project_url') {
       const { createClient } = await import('@supabase/supabase-js')

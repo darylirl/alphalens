@@ -31,7 +31,7 @@ export async function GET(req: NextRequest, { params }: { params: { address: str
     const [state, portfolio, fundings, fills] = await Promise.all([
       hlPost({ type: 'clearinghouseState', user: address }),
       hlPost({ type: 'portfolio', user: address }),
-      hlPost({ type: 'userFundings', user: address, startTime: 1 }).then(
+      hlPost({ type: 'userFunding', user: address, startTime: 1 }).then(
         data => Array.isArray(data) ? data : []
       ),
       hlPost({ type: 'userFillsByTime', user: address, startTime: ninetyDaysAgo }).then(

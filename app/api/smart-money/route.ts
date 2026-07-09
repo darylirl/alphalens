@@ -117,9 +117,9 @@ async function fetchAllTimePnl(address: string): Promise<{ allTimePnl: number; f
 // ── Fetch lifetime funding PnL ──
 async function fetchFundingPnl(address: string): Promise<number> {
   let total = 0
-  const data = await hlPost({ type: 'userFundings', user: address, startTime: 0 }).catch(() => null)
+  const data = await hlPost({ type: 'userFunding', user: address, startTime: 0 }).catch(() => null)
   if (Array.isArray(data)) {
-    for (const f of data) total += parseFloat(f.usdc || '0')
+    for (const f of data) total += parseFloat(f?.delta?.usdc || '0')
   }
   return total
 }
@@ -242,7 +242,7 @@ export async function GET() {
     const walletTagsMap = new Map<string, string[]>()
 
     const supabaseUrl = process.env.SUPABASE_URL
-    const supabaseKey = process.env.SUPABASE_ANON_KEY
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY
 
     if (supabaseUrl && supabaseKey && !supabaseUrl.includes('your_')) {
       try {

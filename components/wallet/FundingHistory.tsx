@@ -18,7 +18,7 @@ export function FundingHistory({ fundings }: FundingHistoryProps) {
 
   // Summary stats
   const totalFunding = useMemo(() => {
-    return fundings.reduce((sum, f) => sum + parseFloat(f.usdc || '0'), 0)
+    return fundings.reduce((sum, f) => sum + parseFloat(f.delta?.usdc || '0'), 0)
   }, [fundings])
 
   const totalPages = Math.ceil(sorted.length / PAGE_SIZE)
@@ -54,20 +54,21 @@ export function FundingHistory({ fundings }: FundingHistoryProps) {
           </thead>
           <tbody>
             {pageData.map((f, i) => {
-              const payment = parseFloat(f.usdc || '0')
-              const rate = parseFloat(f.fundingRate || '0')
-              const size = parseFloat(f.szi || '0')
+              const payment = parseFloat(f.delta?.usdc || '0')
+              const rate = parseFloat(f.delta?.fundingRate || '0')
+              const size = parseFloat(f.delta?.szi || '0')
+              const coin = f.delta?.coin || ''
               const time = new Date(f.time)
               return (
                 <tr
-                  key={`${f.time}-${f.coin}-${i}`}
+                  key={`${f.time}-${coin}-${i}`}
                   className="border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors"
                 >
                   <td className="py-2 pr-3 text-white/50 font-mono whitespace-nowrap">
                     {time.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}{' '}
                     {time.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}
                   </td>
-                  <td className="py-2 pr-3 font-medium text-[#F0FAF8]">{f.coin}</td>
+                  <td className="py-2 pr-3 font-medium text-[#F0FAF8]">{coin}</td>
                   <td className="py-2 pr-3 text-right font-mono text-white/70">
                     <span className={size > 0 ? 'text-[#34EAB9]' : size < 0 ? 'text-[#FF3B5C]' : ''}>
                       {size > 0 ? 'L ' : size < 0 ? 'S ' : ''}{Math.abs(size).toLocaleString(undefined, { maximumFractionDigits: 4 })}

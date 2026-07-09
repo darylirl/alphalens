@@ -62,10 +62,15 @@ export interface Funding {
 
 export interface UserFunding {
   time: number
-  coin: string
-  usdc: string
-  szi: string
-  fundingRate: string
+  hash: string
+  delta: {
+    type: string
+    coin: string
+    usdc: string
+    szi: string
+    fundingRate: string
+    nSamples: number | null
+  }
 }
 
 export interface OpenOrder {

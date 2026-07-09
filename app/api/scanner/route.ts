@@ -53,7 +53,7 @@ async function discoverWallets(): Promise<Map<string, { source: string; firstSee
   // Source 2: Tracked wallets from Supabase (replaces deprecated leaderboard endpoint)
   try {
     const supabaseUrl = process.env.SUPABASE_URL
-    const supabaseKey = process.env.SUPABASE_ANON_KEY
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY
     if (supabaseUrl && supabaseKey && !supabaseUrl.includes('your_')) {
       const { createClient } = await import('@supabase/supabase-js')
       const supabase = createClient(supabaseUrl, supabaseKey)
@@ -183,7 +183,7 @@ export async function GET() {
     // Save to Supabase if configured
     let savedToDb = 0
     const supabaseUrl = process.env.SUPABASE_URL
-    const supabaseKey = process.env.SUPABASE_ANON_KEY
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY
     if (supabaseUrl && supabaseKey && !supabaseUrl.includes('your_')) {
       try {
         const { createClient } = await import('@supabase/supabase-js')

@@ -83,22 +83,32 @@ export async function GET() {
       }
     }
 
-    // Fetch all tracked wallets from Supabase
+    // Fetch the top tracked wallets from Supabase. The table holds thousands
+    // of discovered wallets and this route makes 2 Hyperliquid calls per
+    // wallet — scanning them all meant ~12K upstream calls and multi-minute
+    // hangs. Rank by the stored (real, portfolio-derived) all-time PnL and
+    // refresh live numbers for the top slice only.
+    const MAX_WALLETS = 100
     const supabase = getSupabase()
-    const allWallets: Array<{ address: string; label: string | null }> = []
-    const PAGE_SIZE = 1000
-    let offset = 0
+    let allWallets: Array<{ address: string; label: string | null }> = []
 
-    while (true) {
-      const { data, error } = await supabase
+    const { data, error } = await supabase
+      .from('wallets')
+      .select('address, label')
+      .is('removed_at', null)
+      .order('total_pnl_usd', { ascending: false, nullsFirst: false })
+      .limit(MAX_WALLETS)
+
+    if (!error && data) {
+      allWallets = data
+    } else {
+      // Fallback for databases without the removed_at column
+      const retry = await supabase
         .from('wallets')
         .select('address, label')
-        .range(offset, offset + PAGE_SIZE - 1)
-
-      if (error || !data || data.length === 0) break
-      allWallets.push(...data)
-      if (data.length < PAGE_SIZE) break
-      offset += PAGE_SIZE
+        .order('total_pnl_usd', { ascending: false, nullsFirst: false })
+        .limit(MAX_WALLETS)
+      allWallets = retry.data || []
     }
 
     if (allWallets.length === 0) {
