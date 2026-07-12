@@ -1,24 +1,33 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { Search } from 'lucide-react'
+import { Search, ChevronDown } from 'lucide-react'
 
-const navLinks = [
+// Core destinations stay visible; everything else lives in the More menu.
+// Twelve flat links overflowed the bar at common desktop widths (the search
+// box rendered on top of the last links) and gave the nav no hierarchy.
+const primaryLinks = [
   { href: '/dashboard', label: 'Dashboard' },
-  { href: '/hunters', label: 'Explorer' },
   { href: '/smart-money', label: 'Smart Money' },
   { href: '/wallets', label: 'Wallets' },
+  { href: '/signals', label: 'Signals' },
+  { href: '/hunters', label: 'Explorer' },
+  { href: '/performance', label: 'Performance' },
+]
+
+const moreLinks = [
   { href: '/agent', label: 'AI Agent' },
   { href: '/copy-trade', label: 'Copy Trade' },
   { href: '/watchlist', label: 'Watchlist' },
   { href: '/quant', label: 'Strategies' },
-  { href: '/signals', label: 'Signals' },
-  { href: '/performance', label: 'Performance' },
   { href: '/alerts', label: 'Alerts' },
   { href: '/learn', label: 'Learn' },
 ]
+
+// Mobile drawer lists everything
+const navLinks = [...primaryLinks, ...moreLinks]
 
 export function Navbar() {
   const path = usePathname()
@@ -27,6 +36,8 @@ export function Navbar() {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [searchError, setSearchError] = useState(false)
+  const [moreOpen, setMoreOpen] = useState(false)
+  const moreRef = useRef<HTMLDivElement>(null)
 
   const handleSearch = useCallback((e: React.FormEvent) => {
     e.preventDefault()
@@ -43,7 +54,20 @@ export function Navbar() {
 
   useEffect(() => {
     setDrawerOpen(false)
+    setMoreOpen(false)
   }, [path])
+
+  // Close the More menu on outside click
+  useEffect(() => {
+    if (!moreOpen) return
+    const handler = (e: MouseEvent) => {
+      if (moreRef.current && !moreRef.current.contains(e.target as Node)) {
+        setMoreOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [moreOpen])
 
   useEffect(() => {
     if (drawerOpen) {
@@ -73,7 +97,7 @@ export function Navbar() {
             <Link href="/" className="flex items-center shrink-0">
               <Image src="/logo.png" alt="Alpha Lens" width={220} height={44} className="h-11 w-auto" />
             </Link>
-            {!isLanding && navLinks.map(({ href, label }) => {
+            {!isLanding && primaryLinks.map(({ href, label }) => {
               const active = path.startsWith(href)
               return (
                 <Link
@@ -92,6 +116,64 @@ export function Navbar() {
                 </Link>
               )
             })}
+            {!isLanding && (() => {
+              const moreActive = moreLinks.some(l => path.startsWith(l.href))
+              return (
+                <div ref={moreRef} className="relative">
+                  <button
+                    onClick={() => setMoreOpen(prev => !prev)}
+                    className="flex items-center gap-1 text-sm transition-colors duration-150 ease-out whitespace-nowrap"
+                    style={{
+                      fontFamily: 'Inter, sans-serif',
+                      fontWeight: 400,
+                      color: moreActive ? '#34EAB9' : '#8AADA9',
+                    }}
+                    onMouseEnter={e => { if (!moreActive) (e.currentTarget as HTMLElement).style.color = '#F0FAF8' }}
+                    onMouseLeave={e => { if (!moreActive) (e.currentTarget as HTMLElement).style.color = '#8AADA9' }}
+                    aria-expanded={moreOpen}
+                    aria-haspopup="menu"
+                  >
+                    More
+                    <ChevronDown
+                      size={13}
+                      className="transition-transform duration-150"
+                      style={{ transform: moreOpen ? 'rotate(180deg)' : 'none' }}
+                    />
+                  </button>
+                  {moreOpen && (
+                    <div
+                      role="menu"
+                      className="absolute left-0 top-full mt-3 min-w-[160px] rounded-lg py-1.5 shadow-xl"
+                      style={{
+                        background: '#072724',
+                        border: '1px solid rgba(255,255,255,0.08)',
+                      }}
+                    >
+                      {moreLinks.map(({ href, label }) => {
+                        const active = path.startsWith(href)
+                        return (
+                          <Link
+                            key={href}
+                            href={href}
+                            role="menuitem"
+                            className="block px-4 py-2 text-sm transition-colors duration-150"
+                            style={{
+                              fontFamily: 'Inter, sans-serif',
+                              fontWeight: 400,
+                              color: active ? '#34EAB9' : '#8AADA9',
+                            }}
+                            onMouseEnter={e => { if (!active) (e.target as HTMLElement).style.color = '#F0FAF8' }}
+                            onMouseLeave={e => { if (!active) (e.target as HTMLElement).style.color = '#8AADA9' }}
+                          >
+                            {label}
+                          </Link>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
           </div>
 
           {/* Mobile left side */}
