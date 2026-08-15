@@ -43,10 +43,12 @@ Usage:   python3 backtest_copy.py   (reads SUPABASE_URL / SUPABASE_ANON_KEY from
          env or .env.local in the repo root)
 """
 
+import argparse
 import csv
 import json
 import math
 import os
+import statistics
 import sys
 import time
 import urllib.request
@@ -57,7 +59,15 @@ from pathlib import Path
 
 # ── Config ──────────────────────────────────────────────────────────────────
 NOTIONAL_USD = 1_000.0
-DELAY_MS = 60_000
+DELAY_MS = 60_000                      # baseline delay (comparable to run 1)
+SENSITIVITY_DELAYS_MS = [60_000, 300_000, 900_000]
+
+# Copyability cohort gates (--cohort copyability)
+COPY_ARCHETYPES = ("swing_trader", "momentum_trader")
+COPY_MAX_TRADES_30D = 500
+COPY_MIN_MEDIAN_HOLD_S = 4 * 3600
+COPY_MIN_SPAN_DAYS = 90
+COPY_MIN_ROUND_TRIPS = 3               # a median over fewer is degenerate
 SLIPPAGE = 0.0005            # 5 bps
 TAKER_FEE = 0.00045          # 0.045% per side
 CAPITAL_BASE = 10_000.0      # stated assumption for drawdown %
@@ -211,30 +221,104 @@ def mirror_to_supabase(address: str, fills: list[dict]) -> None:
         print(f"  (fills mirror to Supabase failed for {address[:10]}…: {e})")
 
 
+def pick_cohort_copyability() -> list[dict]:
+    """Copyability-first cohort: swing/momentum wallets, trade_count_30d<=500,
+    then fill-level qualification — median source hold >= 4h and >= 90 days of
+    COMPLETE replayable history (startPosition-validated). Ranked by 30d
+    Sharpe; top 10 of the qualifiers."""
+    candidates = sb_get(
+        "wallets?select=address,archetype,tags,win_rate,sharpe_30d,trade_count_30d,avg_hold_seconds"
+        f"&archetype=in.({','.join(COPY_ARCHETYPES)})"
+        f"&trade_count_30d=lte.{COPY_MAX_TRADES_30D}"
+        "&sharpe_30d=not.is.null"
+        "&order=sharpe_30d.desc&limit=200"
+    ) or []
+    print(f"DB candidates (swing/momentum, <= {COPY_MAX_TRADES_30D} trades/30d, "
+          f"Sharpe present): {len(candidates)}")
+
+    qualified: list[dict] = []
+    for w in candidates:
+        addr = w["address"]
+        fills = fetch_fills(addr)
+        if not fills:
+            print(f"  {addr[:10]}… no fills retrievable — disqualified")
+            continue
+        trips, truncated, span_days = source_round_trips(fills)
+        if len(trips) < COPY_MIN_ROUND_TRIPS:
+            print(f"  {addr[:10]}… only {len(trips)} complete round trips — disqualified")
+            continue
+        med_hold = statistics.median(t["hold_s"] for t in trips)
+        if med_hold < COPY_MIN_MEDIAN_HOLD_S:
+            print(f"  {addr[:10]}… median hold {med_hold/3600:.1f}h < 4h — disqualified")
+            continue
+        if span_days < COPY_MIN_SPAN_DAYS:
+            print(f"  {addr[:10]}… replayable span {span_days:.0f}d < {COPY_MIN_SPAN_DAYS}d — disqualified")
+            continue
+        w["_median_hold_s"] = med_hold
+        w["_span_days"] = span_days
+        w["_round_trips"] = len(trips)
+        w["_truncated_coins"] = len(truncated)
+        qualified.append(w)
+        print(f"  {addr[:10]}… QUALIFIED: median hold {med_hold/3600:.1f}h, "
+              f"span {span_days:.0f}d, {len(trips)} trips, sharpe30d={w['sharpe_30d']}")
+
+    print(f"\nQUALIFIED BEFORE TOP-10 CUT: {len(qualified)} wallet(s)")
+    cohort = qualified[:TOP_N]  # candidates were already Sharpe-ordered
+    print(f"Cohort: {len(cohort)} wallet(s)")
+    for w in cohort:
+        print(f"  {w['address']}  {w['archetype']:<16} sharpe30d={w['sharpe_30d']:>8} "
+              f"medHold={w['_median_hold_s']/3600:.1f}h span={w['_span_days']:.0f}d "
+              f"trips={w['_round_trips']}")
+    return cohort
+
+
 # ── Candles ─────────────────────────────────────────────────────────────────
+# Hyperliquid retains only ~5000 bars PER INTERVAL (measured live: 1m→3.5d,
+# 5m→17.4d, 15m→52.1d, 1h→208.4d, 4h→833d). The spec's "next 1m candle open"
+# is therefore physically impossible for history older than ~3.5 days: fills
+# use the FINEST interval whose retention covers the timestamp, and every
+# trade records the granularity it was filled at.
+CANDLE_INTERVALS = [  # (name, bar_ms) finest → coarsest
+    ("1m", 60_000),
+    ("5m", 300_000),
+    ("15m", 900_000),
+    ("1h", 3_600_000),
+    ("4h", 14_400_000),
+    ("1d", 86_400_000),
+]
+RETENTION_BARS = 4_900          # conservative vs the ~5000 measured
+CHUNK_BARS = 4_000              # bars per candleSnapshot request (< 5000 cap)
+RUN_NOW_MS = int(time.time() * 1000)
+
+
+def interval_for(ts: int):
+    """Finest interval whose retention window still covers ts."""
+    for name, ms in CANDLE_INTERVALS:
+        if ts >= RUN_NOW_MS - RETENTION_BARS * ms:
+            return name, ms
+    return CANDLE_INTERVALS[-1]
+
 
 class CandleStore:
-    """1m candle opens per coin, fetched in chunks and cached on disk."""
+    """Candle opens per (coin, interval), fetched in chunks, cached on disk."""
 
     def __init__(self):
-        self.opens: dict[str, dict[int, float]] = defaultdict(dict)
-        self.fetched: dict[str, set[int]] = defaultdict(set)  # chunk start ts
-        self.dead: dict[str, set[int]] = defaultdict(set)     # chunks with no data
+        self.opens: dict[tuple, dict[int, float]] = defaultdict(dict)
+        self.fetched: dict[tuple, set[int]] = defaultdict(set)
+        self.dead: dict[tuple, set[int]] = defaultdict(set)
 
-    def _chunk_of(self, ts: int) -> int:
-        chunk_ms = CANDLE_CHUNK_MIN * MINUTE_MS
-        return (ts // chunk_ms) * chunk_ms
-
-    def _ensure_chunk(self, coin: str, chunk_start: int) -> None:
-        if chunk_start in self.fetched[coin] or chunk_start in self.dead[coin]:
+    def _ensure_chunk(self, coin: str, iname: str, ims: int, chunk_start: int):
+        key = (coin, iname)
+        if chunk_start in self.fetched[key] or chunk_start in self.dead[key]:
             return
-        cache_file = CACHE / f"candles_{coin}_{chunk_start}.json"
+        safe_coin = coin.replace(":", "_").replace("/", "_")
+        cache_file = CACHE / f"candles2_{safe_coin}_{iname}_{chunk_start}.json"
         if cache_file.exists():
             data = json.loads(cache_file.read_text())
         else:
-            end = chunk_start + CANDLE_CHUNK_MIN * MINUTE_MS
+            end = chunk_start + CHUNK_BARS * ims
             data = hl({"type": "candleSnapshot",
-                       "req": {"coin": coin, "interval": "1m",
+                       "req": {"coin": coin, "interval": iname,
                                "startTime": chunk_start, "endTime": end}})
             if not isinstance(data, list):
                 data = []
@@ -242,47 +326,93 @@ class CandleStore:
                 [{"t": c["t"], "o": c["o"]} for c in data]))
             data = json.loads(cache_file.read_text())
         if not data:
-            self.dead[coin].add(chunk_start)
+            self.dead[key].add(chunk_start)
             return
         for c in data:
-            self.opens[coin][int(c["t"])] = float(c["o"])
-        self.fetched[coin].add(chunk_start)
+            self.opens[key][int(c["t"])] = float(c["o"])
+        self.fetched[key].add(chunk_start)
 
-    def open_at_or_after(self, coin: str, target_minute: int, max_minutes: int):
-        """Open price of the first candle at or after target_minute, searching
-        forward up to max_minutes. Returns (ts, open) or None."""
-        t = target_minute
-        end = target_minute + max_minutes * MINUTE_MS
+    def open_at_or_after(self, coin: str, target: int, max_search_ms: int):
+        """(bar_ts, open, interval_name) of the first bar at or after target on
+        the finest retained interval, searching forward at least 3 bars and up
+        to max_search_ms. None if no bar found."""
+        iname, ims = interval_for(target)
+        key = (coin, iname)
+        chunk_ms = CHUNK_BARS * ims
+        t = ((target + ims - 1) // ims) * ims          # next bar boundary
+        end = target + max(max_search_ms, 3 * ims)
         while t < end:
-            self._ensure_chunk(coin, self._chunk_of(t))
-            opens = self.opens[coin]
-            # scan within the current chunk
-            chunk_end = self._chunk_of(t) + CANDLE_CHUNK_MIN * MINUTE_MS
+            self._ensure_chunk(coin, iname, ims, (t // chunk_ms) * chunk_ms)
+            opens = self.opens[key]
+            chunk_end = (t // chunk_ms) * chunk_ms + chunk_ms
             while t < min(end, chunk_end):
                 if t in opens:
-                    return t, opens[t]
-                t += MINUTE_MS
+                    return t, opens[t], iname
+                t += ims
         return None
 
 
 def copy_fill_price(candles: CandleStore, coin: str, source_time: int,
-                    is_buy: bool, max_minutes: int):
-    """Price for a copy fill: open of the next 1m candle after source_time+60s,
-    with 5 bps adverse slippage. Returns (fill_ts, price) or None."""
-    decision = source_time + DELAY_MS
-    target_minute = ((decision + MINUTE_MS - 1) // MINUTE_MS) * MINUTE_MS
-    hit = candles.open_at_or_after(coin, target_minute, max_minutes)
+                    is_buy: bool, max_minutes: int, delay_ms: int = DELAY_MS):
+    """Price for a copy fill: open of the next retained candle after
+    source_time+delay, with 5 bps adverse slippage.
+    Returns (fill_ts, price, granularity) or None."""
+    decision = source_time + delay_ms
+    hit = candles.open_at_or_after(coin, decision, max_minutes * MINUTE_MS)
     if hit is None:
         return None
-    ts, px = hit
+    ts, px, gran = hit
     px = px * (1 + SLIPPAGE) if is_buy else px * (1 - SLIPPAGE)
-    return ts, px
+    return ts, px, gran
 
 
 # ── Replay ──────────────────────────────────────────────────────────────────
 
+def source_round_trips(fills: list[dict]):
+    """Reconstruct the SOURCE wallet's closed round trips (no frictions).
+    Returns (trips, truncated_coins, replayable_span_days) where trips are
+    dicts {coin, open_ts, close_ts, hold_s} over non-truncated coins only."""
+    by_coin: dict[str, list[dict]] = defaultdict(list)
+    for f in fills:
+        by_coin[f["coin"]].append(f)
+
+    trips: list[dict] = []
+    truncated: list[str] = []
+    span_min, span_max = None, None
+
+    for coin, cfills in by_coin.items():
+        cfills.sort(key=lambda f: f["time"])
+        if abs(float(cfills[0].get("startPosition") or 0)) > POSITION_EPS:
+            truncated.append(coin)
+            continue
+        span_min = cfills[0]["time"] if span_min is None else min(span_min, cfills[0]["time"])
+        span_max = cfills[-1]["time"] if span_max is None else max(span_max, cfills[-1]["time"])
+
+        pos = 0.0
+        open_ts = None
+        for f in cfills:
+            delta = float(f["sz"]) * (1 if f["side"] == "B" else -1)
+            reported = f.get("startPosition")
+            prev = float(reported) if reported is not None else pos
+            new = prev + delta
+            pos = 0.0 if abs(new) < POSITION_EPS else new
+            prev_flat = abs(prev) < POSITION_EPS
+            new_flat = abs(new) < POSITION_EPS
+            flipped = not prev_flat and not new_flat and (prev > 0) != (new > 0)
+            if prev_flat and not new_flat:
+                open_ts = f["time"]
+            elif (new_flat or flipped) and open_ts is not None:
+                trips.append({"coin": coin, "open_ts": open_ts, "close_ts": f["time"],
+                              "hold_s": (f["time"] - open_ts) / 1000})
+                open_ts = f["time"] if flipped else None
+
+    span_days = ((span_max - span_min) / 86_400_000) if span_min is not None else 0.0
+    return trips, truncated, span_days
+
+
 def replay_wallet(address: str, archetype: str, fills: list[dict],
-                  candles: CandleStore, log: list[str]) -> list[dict]:
+                  candles: CandleStore, log: list[str],
+                  delay_ms: int = DELAY_MS) -> list[dict]:
     trades: list[dict] = []
     by_coin: dict[str, list[dict]] = defaultdict(list)
     for f in fills:
@@ -307,13 +437,13 @@ def replay_wallet(address: str, archetype: str, fills: list[dict],
             qty = copy["qty"] * frac
             exit_is_buy = copy["dir"] == "short"
             hit = copy_fill_price(candles, coin, source_time, exit_is_buy,
-                                  EXIT_CANDLE_SEARCH_MIN)
+                                  EXIT_CANDLE_SEARCH_MIN, delay_ms)
             if hit is None:
                 log.append(f"{address[:10]}… {coin}: no exit candle within 7d "
                            f"of {source_time}; position abandoned unpriced")
                 copy = None
                 return
-            exit_ts, exit_px = hit
+            exit_ts, exit_px, exit_gran = hit
             sign = 1 if copy["dir"] == "long" else -1
             gross = qty * (exit_px - copy["entry_px"]) * sign
             fee = qty * exit_px * TAKER_FEE
@@ -327,6 +457,7 @@ def replay_wallet(address: str, archetype: str, fills: list[dict],
                 "net_pnl": gross - entry_fee_part - fee,
                 "hold_s": (exit_ts - copy["entry_ts"]) / 1000,
                 "exit_reason": exit_reason,
+                "entry_gran": copy["entry_gran"], "exit_gran": exit_gran,
             })
             copy["qty"] -= qty
             if copy["qty"] * copy["entry_px"] < 0.01 or frac >= 1.0:
@@ -336,16 +467,17 @@ def replay_wallet(address: str, archetype: str, fills: list[dict],
             nonlocal copy
             entry_is_buy = direction == "long"
             hit = copy_fill_price(candles, coin, source_time, entry_is_buy,
-                                  ENTRY_CANDLE_SEARCH_MIN)
+                                  ENTRY_CANDLE_SEARCH_MIN, delay_ms)
             if hit is None:
                 log.append(f"{address[:10]}… {coin}: no entry candle within "
                            f"{ENTRY_CANDLE_SEARCH_MIN}m of {source_time}; trade skipped")
                 copy = None
                 return
-            entry_ts, entry_px = hit
+            entry_ts, entry_px, entry_gran = hit
             qty = NOTIONAL_USD / entry_px
             copy = {"qty": qty, "entry_px": entry_px, "entry_ts": entry_ts,
-                    "dir": direction, "entry_fee": qty * entry_px * TAKER_FEE}
+                    "dir": direction, "entry_fee": qty * entry_px * TAKER_FEE,
+                    "entry_gran": entry_gran}
 
         for f in cfills:
             sz = float(f["sz"])
@@ -418,8 +550,9 @@ def fmt_hold(seconds) -> str:
     return f"{seconds/86400:.1f}d"
 
 
-def write_csvs(trades: list[dict], by_wallet: dict, by_arch: dict, monthly: dict):
-    with open(RESULTS / "trades.csv", "w", newline="") as fh:
+def write_csvs(trades: list[dict], by_wallet: dict, by_arch: dict, monthly: dict,
+               prefix: str = ""):
+    with open(RESULTS / f"{prefix}trades.csv", "w", newline="") as fh:
         w = csv.DictWriter(fh, fieldnames=list(trades[0].keys()) if trades else
                            ["wallet", "archetype", "coin"])
         w.writeheader()
@@ -439,10 +572,10 @@ def write_csvs(trades: list[dict], by_wallet: dict, by_arch: dict, monthly: dict
                             f"{s['max_dd_usd']:.2f}", f"{s['max_dd_pct']:.2f}",
                             fmt_hold(s["avg_hold_s"])])
 
-    dump_summary(RESULTS / "summary_by_wallet.csv", by_wallet, "wallet")
-    dump_summary(RESULTS / "summary_by_archetype.csv", by_arch, "archetype")
+    dump_summary(RESULTS / f"{prefix}summary_by_wallet.csv", by_wallet, "wallet")
+    dump_summary(RESULTS / f"{prefix}summary_by_archetype.csv", by_arch, "archetype")
 
-    with open(RESULTS / "monthly_pnl.csv", "w", newline="") as fh:
+    with open(RESULTS / f"{prefix}monthly_pnl.csv", "w", newline="") as fh:
         w = csv.writer(fh)
         w.writerow(["month", "trades", "net_pnl_usd"])
         for month in sorted(monthly):
@@ -450,15 +583,24 @@ def write_csvs(trades: list[dict], by_wallet: dict, by_arch: dict, monthly: dict
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--cohort", choices=["sharpe", "copyability"],
+                        default="sharpe",
+                        help="sharpe = run-1 cohort rule; copyability = "
+                             "swing/momentum, hold/history gated")
+    args = parser.parse_args()
+    prefix = "v2_" if args.cohort == "copyability" else ""
+
     t0 = time.time()
     print("=" * 72)
-    print("COPY-TRADING BACKTEST — naive, honest, unoptimized")
+    print(f"COPY-TRADING BACKTEST — naive, honest, unoptimized [{args.cohort}]")
     print("=" * 72)
 
-    cohort = pick_cohort()
+    cohort = pick_cohort_copyability() if args.cohort == "copyability" else pick_cohort()
     candles = CandleStore()
     log: list[str] = []
     all_trades: list[dict] = []
+    sensitivity: dict[int, dict] = {}
 
     for w in cohort:
         addr = w["address"]
@@ -477,6 +619,22 @@ def main():
         print(f"  copied trades: {s['trades']}, net PnL ${s['net_pnl']:.2f}")
         all_trades.extend(trades)
 
+    # Delay sensitivity (copyability mode): identical replay at 60/300/900s.
+    if args.cohort == "copyability" and all_trades:
+        for delay in SENSITIVITY_DELAYS_MS:
+            if delay == DELAY_MS:
+                sensitivity[delay] = summarize(all_trades)
+                continue
+            delay_trades: list[dict] = []
+            dlog: list[str] = []
+            for w in cohort:
+                fills = fetch_fills(w["address"])
+                if fills:
+                    delay_trades.extend(
+                        replay_wallet(w["address"], w["archetype"], fills,
+                                      candles, dlog, delay_ms=delay))
+            sensitivity[delay] = summarize(delay_trades)
+
     if not all_trades:
         sys.exit("\nNo trades could be copied — nothing to report.")
 
@@ -494,7 +652,18 @@ def main():
     overall = summarize(all_trades)
     by_wallet = {k: summarize(v) for k, v in by_wallet_trades.items()}
     by_arch = {k: summarize(v) for k, v in by_arch_trades.items()}
-    write_csvs(all_trades, by_wallet, by_arch, monthly)
+    write_csvs(all_trades, by_wallet, by_arch, monthly, prefix)
+
+    if sensitivity:
+        with open(RESULTS / f"{prefix}delay_sensitivity.csv", "w", newline="") as fh:
+            cw = csv.writer(fh)
+            cw.writerow(["delay_s", "trades", "net_pnl_usd", "win_rate", "profit_factor"])
+            for delay in SENSITIVITY_DELAYS_MS:
+                s = sensitivity[delay]
+                pf = s["profit_factor"]
+                cw.writerow([delay // 1000, s["trades"], f"{s['net_pnl']:.2f}",
+                             f"{s['win_rate']:.3f}" if s["win_rate"] is not None else "",
+                             f"{pf:.3f}" if pf not in (None, math.inf) else "inf"])
 
     forced = sum(1 for t in all_trades if t["exit_reason"] == "end_of_data")
 
@@ -527,6 +696,26 @@ def main():
         bar = "█" * min(40, int(abs(m["pnl"]) / 25)) if m["pnl"] else ""
         sign = "+" if m["pnl"] >= 0 else "-"
         print(f"  {month}  {m['trades']:>5} trades  {sign}${abs(m['pnl']):>9.2f}  {bar}")
+
+    gran_mix = defaultdict(int)
+    for t in all_trades:
+        gran_mix[t.get("entry_gran", "?")] += 1
+    print("\nFILL GRANULARITY MIX (candle retention forces coarser bars on older history)")
+    for g, n in sorted(gran_mix.items(), key=lambda kv: -kv[1]):
+        print(f"  {g:>3}: {n} trades ({n/len(all_trades)*100:.0f}%)")
+
+    if sensitivity:
+        print("\nDELAY SENSITIVITY (same cohort, same frictions, only delay varies)")
+        for delay in SENSITIVITY_DELAYS_MS:
+            s = sensitivity[delay]
+            pf = s["profit_factor"]
+            pf_s = "inf" if pf == math.inf else ("—" if pf is None else f"{pf:.3f}")
+            wr_s = "—" if s["win_rate"] is None else f"{s['win_rate']*100:.1f}%"
+            print(f"  {delay//1000:>4}s delay:  net ${s['net_pnl']:>10.2f}  "
+                  f"trades={s['trades']}  wr={wr_s}  pf={pf_s}")
+        print("  NOTE: on bars coarser than 1m, delays shorter than the bar mostly")
+        print("  land on the SAME next bar open — differences are diluted by the")
+        print("  granularity mix above, so read this as a lower bound on delay cost.")
 
     if log:
         print(f"\nSKIPPED / WARNINGS ({len(log)}):")
