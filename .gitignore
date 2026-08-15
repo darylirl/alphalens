@@ -48,3 +48,6 @@ __pycache__/
 dist/
 .venv/
 venv/
+
+# backtest local cache
+data/backtest_cache/
