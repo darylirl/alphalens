@@ -11,7 +11,7 @@ import { ActiveSignalsFeed, type Signal } from '@/components/signals/ActiveSigna
 import { ConsensusAlerts, type ConsensusAlert } from '@/components/signals/ConsensusAlerts'
 import { OnboardingModal } from '@/components/onboarding/OnboardingModal'
 import { SmartMoneyFeed } from '@/components/signals/SmartMoneyFeed'
-import { Crosshair, TrendingUp, Activity, Zap, Search, Copy, DollarSign, BarChart3, Bell, Users } from 'lucide-react'
+import { Crosshair, TrendingUp, Activity, Zap, Search, DollarSign, BarChart3, Bell, Users } from 'lucide-react'
 import { MarketHeatmap } from '@/components/market/MarketHeatmap'
 import type { WalletAnalytics } from '@/lib/hyperliquid/types'
 
@@ -292,7 +292,9 @@ export default function DashboardPage() {
 
         <div className="card p-4">
           <h3 className="font-semibold text-sm mb-2">Quick Actions</h3>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+          {/* /copy-trade tile removed: quarantined pending repositioning —
+              our own backtests showed naive copy-trading loses money. */}
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <Link href="/hunters" className="bg-[#0F1A1E] rounded p-3 text-center hover:bg-white/[0.06] transition-colors">
               <Crosshair size={18} className="mx-auto mb-1 text-[#34EAB9]" />
               <span className="text-xs">Hunt Alpha</span>
@@ -300,10 +302,6 @@ export default function DashboardPage() {
             <Link href="/smart-money" className="bg-[#0F1A1E] rounded p-3 text-center hover:bg-white/[0.06] transition-colors">
               <DollarSign size={18} className="mx-auto mb-1 text-[#34EAB9]" />
               <span className="text-xs">Smart Money</span>
-            </Link>
-            <Link href="/copy-trade" className="bg-[#0F1A1E] rounded p-3 text-center hover:bg-white/[0.06] transition-colors">
-              <Copy size={18} className="mx-auto mb-1 text-[#34EAB9]" />
-              <span className="text-xs">Copy Trade</span>
             </Link>
             <Link href="/quant" className="bg-[#0F1A1E] rounded p-3 text-center hover:bg-white/[0.06] transition-colors">
               <Zap size={18} className="mx-auto mb-1 text-[#34EAB9]" />

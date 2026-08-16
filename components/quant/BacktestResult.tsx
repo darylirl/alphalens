@@ -26,6 +26,16 @@ export function BacktestResult({ strategyName, data, totalPnl, winRate, tradeCou
 
   return (
     <div className="card p-4 space-y-4">
+      {/* Persistent honesty label: the client-side engine is real (EMA/RSI on
+          live OHLCV with taker fees) but simplified — it must never be
+          mistaken for a verified result. */}
+      <div className="flex items-start gap-2 rounded border border-amber-400/25 bg-amber-400/[0.06] px-3 py-2">
+        <span className="text-amber-400 text-xs leading-4 shrink-0" aria-hidden>⚠</span>
+        <p className="text-[11px] leading-4 text-amber-400/90">
+          Sandbox — simplified model, no slippage or delay. Not a verified result.
+        </p>
+      </div>
+
       {strategyName && (
         <div className="flex items-center justify-between">
           <h4 className="text-sm font-semibold">Backtest Results — {strategyName}</h4>

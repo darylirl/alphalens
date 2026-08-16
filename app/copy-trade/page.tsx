@@ -1,4 +1,18 @@
 'use client'
+/**
+ * QUARANTINED — not linked from any navigation (Navbar, Sidebar, BottomNav,
+ * mobile drawer) as of the Phase 0 honesty cleanup.
+ *
+ * Our own replay backtests (backtest_copy.py, runs 1 and 2: 28k+ copied
+ * trades with real frictions) showed naive copy-trading loses money — the
+ * HFT cohort is unmirrorable and the slow-wallet cohort had no aggregate
+ * edge after 60s delay, 5 bps slippage, and taker fees. Shipping this page
+ * as-is would contradict that evidence.
+ *
+ * Kept pending repositioning as the entry point to the copy-trading autopsy
+ * content (see the Evolution build brief). Do not re-add navigation links
+ * without a decision from Daryl.
+ */
 import { Suspense, useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import Link from 'next/link'

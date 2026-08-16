@@ -60,12 +60,27 @@ function formatHoldTime(seconds: number): string {
   return `${(seconds / 86400).toFixed(1)}d`
 }
 
+interface CaptureStatus {
+  live: boolean
+  lastHeartbeat: string | null
+  captureSince: string | null
+  walletsTracked: number | null
+}
+
 export default function PerformancePage() {
   const { address, connect, connecting } = useWallet()
   const [range, setRange] = useState<TimeRange>(30)
   const [data, setData] = useState<PerformanceData | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [capture, setCapture] = useState<CaptureStatus | null>(null)
+
+  useEffect(() => {
+    fetch('/api/capture/health')
+      .then(r => r.json())
+      .then(setCapture)
+      .catch(() => setCapture({ live: false, lastHeartbeat: null, captureSince: null, walletsTracked: null }))
+  }, [])
 
   const fetchData = useCallback(async (addr: string, days: TimeRange) => {
     setLoading(true)
@@ -92,6 +107,14 @@ export default function PerformancePage() {
   }, [address, range, fetchData])
 
   if (!address) {
+    // Honest empty state: no fabricated numbers. Shows the real status of the
+    // forward-capture pipeline (capture_health heartbeats) and nothing else.
+    const sinceDate = capture?.captureSince
+      ? new Date(capture.captureSince).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+      : null
+    const lastBeat = capture?.lastHeartbeat
+      ? new Date(capture.lastHeartbeat).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+      : null
     return (
       <div>
         <div className="px-4 py-16 text-center">
@@ -99,10 +122,38 @@ export default function PerformancePage() {
             <div className="w-16 h-16 mx-auto mb-4 rounded-lg bg-[#0F1A1E] flex items-center justify-center">
               <BarChart3 size={28} className="text-[#34EAB9]" />
             </div>
-            <h2 className="text-lg font-bold mb-2">Performance Attribution</h2>
+            <h2 className="text-lg font-bold mb-2">Forward tracking begins from live capture</h2>
             <p className="text-white/55 text-sm mb-6 max-w-sm mx-auto">
-              Connect your wallet to track how Alpha Lens intelligence has impacted your trading performance.
+              Performance here is computed only from data we actually captured.
+              Connect a wallet to view its real Hyperliquid trading history.
             </p>
+
+            {/* Real capture status — reads capture_health, never invents */}
+            <div className="card p-4 max-w-sm mx-auto mb-6 text-left">
+              <div className="flex items-center gap-2 mb-3">
+                <span className={`w-2 h-2 rounded-full ${capture?.live ? 'bg-[#34EAB9] animate-pulse' : 'bg-[#FF3B5C]'}`} />
+                <span className="text-xs font-semibold">
+                  {capture === null ? 'Checking capture status…' : capture.live ? 'Capture running' : 'Capture offline'}
+                </span>
+              </div>
+              <div className="space-y-1.5 text-xs text-white/55">
+                <div className="flex justify-between">
+                  <span>Capturing since</span>
+                  <span className="font-mono text-white/80">{sinceDate ?? '—'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Last heartbeat</span>
+                  <span className="font-mono text-white/80">{lastBeat ?? '—'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Wallets tracked</span>
+                  <span className="font-mono text-white/80">
+                    {capture?.walletsTracked != null ? capture.walletsTracked.toLocaleString() : '—'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
             <button
               onClick={connect}
               disabled={connecting}

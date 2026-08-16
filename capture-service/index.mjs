@@ -58,6 +58,15 @@ const BACKFILL_MAX_PAGES = 30             // initial per-wallet history cap
 
 const log = (...a) => console.log(new Date().toISOString(), ...a)
 
+// Instance identity: concurrent daemon instances (e.g. a deployed one plus a
+// local one) must be distinguishable in capture_health.
+import { hostname } from 'node:os'
+const INSTANCE_ID =
+  process.env.RAILWAY_SERVICE_ID ||
+  process.env.RAILWAY_REPLICA_ID ||
+  process.env.FLY_MACHINE_ID ||
+  hostname()
+
 // ── Counters / state ────────────────────────────────────────────────────────
 const state = {
   wsConnected: false,
@@ -242,15 +251,18 @@ async function refreshWallets() {
 }
 
 async function refreshCoins() {
+  // Coin universe comes from the recent_fill_coins MATERIALIZED view
+  // (refreshed server-side by pg_cron every 30 min). The naive approach —
+  // fetching raw fill rows and distinct-counting client side — was broken
+  // three ways: PostgREST silently caps responses at ~1000 rows, an
+  // unordered query returns an arbitrary slice, and the live aggregate
+  // takes 11s+ at capture volume anyway.
   try {
     const rows = await sb(
-      `fills?select=asset&timestamp=gte.${new Date(Date.now() - 7 * 86_400_000).toISOString()}&limit=10000`
+      `recent_fill_coins?select=coin,fills&order=fills.desc&limit=${CANDLE_COIN_LIMIT}`
     )
-    const counts = new Map()
-    for (const r of rows || []) counts.set(r.asset, (counts.get(r.asset) || 0) + 1)
-    const coins = [...counts.entries()].sort((a, b) => b[1] - a[1])
-      .slice(0, CANDLE_COIN_LIMIT).map(([c]) => c)
-    const next = new Set(coins)
+    const next = new Set((rows || []).map(r => r.coin))
+    if (next.size === 0) return // matview empty/unrefreshed: keep current set
     const changed = next.size !== activeCoins.size || [...next].some(c => !activeCoins.has(c))
     activeCoins = next
     state.coinsTracked = activeCoins.size
@@ -426,6 +438,7 @@ async function heartbeat() {
     wallets_ws: state.walletsWs,
     wallets_polled: state.walletsPolled,
     coins_tracked: state.coinsTracked,
+    note: `instance=${INSTANCE_ID}`,
   }
   state.fillsLastMin = 0
   state.candlesLastMin = 0

@@ -17,9 +17,10 @@ const primaryLinks = [
   { href: '/performance', label: 'Performance' },
 ]
 
+// /copy-trade is intentionally absent: quarantined pending repositioning —
+// our own backtests showed naive copy-trading loses money (see app/copy-trade).
 const moreLinks = [
   { href: '/agent', label: 'AI Agent' },
-  { href: '/copy-trade', label: 'Copy Trade' },
   { href: '/watchlist', label: 'Watchlist' },
   { href: '/quant', label: 'Strategies' },
   { href: '/alerts', label: 'Alerts' },
