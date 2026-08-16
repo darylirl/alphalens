@@ -1,0 +1,19 @@
+# fly launch --no-deploy inside capture-service/, then:
+#   fly secrets set SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... \
+#     TELEGRAM_BOT_TOKEN=... TELEGRAM_CHAT_ID=...
+#   fly deploy
+app = "alphalens-capture"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  WS_WALLET_LIMIT = "300"
+  SWEEP_WALLETS_PER_MIN = "30"
+
+# No HTTP service: this is a background worker. Keep exactly one machine
+# running at all times (auto_stop would kill capture).
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
