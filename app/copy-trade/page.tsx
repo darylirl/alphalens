@@ -1,21 +1,96 @@
 'use client'
 /**
- * QUARANTINED — not linked from any navigation (Navbar, Sidebar, BottomNav,
- * mobile drawer) as of the Phase 0 honesty cleanup.
+ * QUARANTINED FEATURE — copy trading was removed from the product.
  *
- * Our own replay backtests (backtest_copy.py, runs 1 and 2: 28k+ copied
- * trades with real frictions) showed naive copy-trading loses money — the
- * HFT cohort is unmirrorable and the slow-wallet cohort had no aggregate
- * edge after 60s delay, 5 bps slippage, and taker fees. Shipping this page
- * as-is would contradict that evidence.
+ * Our own replay backtests (backtest_copy.py, two runs: 28,318 copied trades
+ * with real frictions — 60s delay, 5 bps slippage, 0.045% taker per side)
+ * showed naive copy-trading loses money. Gross PnL was negative BEFORE fees:
+ * the HFT cohort is structurally unmirrorable, and the slow-wallet cohort had
+ * no aggregate edge to copy. Full findings live in /learn ("Why we killed
+ * copy trading") and backtest_results/ in the repo.
  *
- * Kept pending repositioning as the entry point to the copy-trading autopsy
- * content (see the Evolution build brief). Do not re-add navigation links
- * without a decision from Daryl.
+ * This page is now a static explainer. The legacy configuration UI is
+ * preserved below as _LegacyCopyTradePage (unreferenced, never rendered) per
+ * the honesty-remediation spec; the /api/copy-trade endpoints return 410.
+ * Do not re-link this page to execution flows without a decision from Daryl.
  */
+import Link from 'next/link'
+import { FlaskConical, TrendingUp, BookOpen } from 'lucide-react'
+
+export default function CopyTradeRetiredPage() {
+  return (
+    <div className="px-4 py-10 lg:px-6 max-w-2xl mx-auto space-y-6">
+      <div>
+        <p className="font-mono text-[11px] tracking-widest text-white/40 mb-3">RETIRED FEATURE</p>
+        <h1 className="text-2xl font-bold mb-3">We removed copy trading. On purpose.</h1>
+        <p className="text-white/55 text-sm leading-relaxed">
+          Before shipping it, we tested it: 28,318 smart-money trades replayed
+          across two cohorts and 13 months of history, executed the way a real
+          copier would — 60 seconds late, with 5 bps slippage and 0.045% taker
+          fees per side.
+        </p>
+      </div>
+
+      <div className="card p-4 space-y-3">
+        <p className="text-xs font-semibold text-white/70">What the replay showed</p>
+        <ul className="space-y-2 text-sm text-white/55">
+          <li className="flex gap-2">
+            <span className="text-[#FF3B5C] shrink-0">—</span>
+            Gross PnL was negative before a single fee was charged: the delay
+            alone destroys short-horizon edges.
+          </li>
+          <li className="flex gap-2">
+            <span className="text-[#FF3B5C] shrink-0">—</span>
+            The most profitable wallets are high-frequency traders whose maker
+            flow cannot be mirrored with taker orders at any delay.
+          </li>
+          <li className="flex gap-2">
+            <span className="text-[#FF3B5C] shrink-0">—</span>
+            Slow "copyable" wallets selected by trailing performance showed no
+            persistent aggregate edge: monthly PnL alternated sign around a
+            negative mean.
+          </li>
+        </ul>
+        <p className="text-[11px] text-white/40 pt-1">
+          Full methodology and per-trade results are in the repo
+          (backtest_copy.py, backtest_results/).
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <Link href="/learn" className="card p-4 hover:border-white/[0.16] transition-colors">
+          <BookOpen size={16} className="text-[#34EAB9] mb-2" />
+          <p className="text-xs font-semibold mb-1">Read the autopsy</p>
+          <p className="text-[10px] text-white/40">Why we killed copy trading, with numbers</p>
+        </Link>
+        <Link href="/pulse" className="card p-4 hover:border-white/[0.16] transition-colors">
+          <TrendingUp size={16} className="text-[#34EAB9] mb-2" />
+          <p className="text-xs font-semibold mb-1">Watch the cohort</p>
+          <p className="text-[10px] text-white/40">Real aggregated positioning, no promises</p>
+        </Link>
+        <Link href="/quant" className="card p-4 hover:border-white/[0.16] transition-colors">
+          <FlaskConical size={16} className="text-[#34EAB9] mb-2" />
+          <p className="text-xs font-semibold mb-1">Test your own idea</p>
+          <p className="text-[10px] text-white/40">Backtest with real frictions included</p>
+        </Link>
+      </div>
+
+      <p className="text-[10px] text-white/30">
+        Nothing on this page is financial advice. We publish what we tested and
+        what it showed; the decision stays yours.
+      </p>
+    </div>
+  )
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   LEGACY CODE BELOW — quarantined, unreferenced, never rendered.
+   Kept for potential repositioning as an autopsy artifact per the build
+   brief. The API endpoints it calls return 410 Gone.
+   ════════════════════════════════════════════════════════════════════════ */
+
 import { Suspense, useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { useWallet } from '@/lib/wallet/WalletContext'
 import { Copy, Wallet, Plus, ToggleLeft, ToggleRight, ExternalLink, Clock, Shield, ChevronDown, Zap, SlidersHorizontal, BarChart3 } from 'lucide-react'
@@ -39,7 +114,7 @@ interface CopyConfig {
   enabled: boolean
 }
 
-export default function CopyTradePage() {
+function _LegacyCopyTradePage() {
   return (
     <Suspense fallback={<div className="px-4 py-8 text-center text-white/55 text-sm">Loading...</div>}>
       <CopyTradeContent />
@@ -155,11 +230,9 @@ function CopyTradeContent() {
   }
 
   if (!address) {
-    const previewWallets = [
-      { addr: '0x348e...50ef', name: 'Apex Momentum', type: 'Momentum', pnl: '+$834,134', win: '49%', sharpe: '3.03' },
-      { addr: '0x7a23...e91f', name: 'Ghost Trader', type: 'Momentum', pnl: '+$284,291', win: '71%', sharpe: '2.41' },
-      { addr: '0xa33a...1ff8', name: 'Whale #2', type: 'Momentum', pnl: '+$148,442', win: '50%', sharpe: '3.02' },
-    ]
+    // Fabricated preview wallets removed in the honesty remediation: no
+    // invented trading data anywhere, even inside quarantined code.
+    const previewWallets: Array<{ addr: string; name: string; type: string; pnl: string; win: string; sharpe: string }> = []
 
     return (
       <div>

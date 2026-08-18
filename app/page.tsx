@@ -2,6 +2,11 @@
 import { motion } from 'framer-motion'
 import Link from 'next/link'
 
+// Honesty contract for this page: no invented trading data, ever. The only
+// numbers shown are (a) real results from our published copy-trading
+// backtests, or (b) obviously schematic shapes inside blocks explicitly
+// captioned "Illustration". No fabricated wallets, PnL, or "live" claims.
+
 const fadeUp = {
   hidden: { opacity: 0, y: 20 },
   visible: (i: number) => ({
@@ -13,28 +18,34 @@ const fadeUp = {
 const features = [
   {
     num: '01',
-    label: 'WALLET INTELLIGENCE',
-    title: 'Decode any trader on Hyperliquid.',
-    desc: 'Real-time behavioral analysis of on-chain activity. See positions, PnL, leverage patterns, and trading style — all from a single wallet address. Understand what the best traders are doing before the market reacts.',
+    label: 'LIVE COHORT POSITIONING',
+    title: 'See what tracked wallets are actually doing.',
+    desc: 'Pulse aggregates the real fills of thousands of tracked Hyperliquid wallets into a rolling 24-hour positioning view: long/short skew per coin, new positions versus additions, traded notional in USD. Captured from the exchange, never estimated, and honest about its own coverage.',
+    href: '/pulse',
+    cta: 'Open Pulse',
   },
   {
     num: '02',
-    label: 'STRATEGY CLUSTERING',
-    title: 'Wallets grouped by trading DNA.',
-    desc: 'Our algorithms classify every active wallet into behavioral archetypes — scalpers, momentum traders, delta-neutral farmers, market makers. Spot patterns across thousands of wallets instantly.',
+    label: 'HYPOTHESIS TESTING',
+    title: 'Test ideas with real frictions before risking money.',
+    desc: 'Every backtest on AlphaLens models the costs that kill strategies in practice: execution delay, slippage, and taker fees. We built this engine to test our own copy-trading thesis — and it failed. That engine is the product.',
+    href: '/quant',
+    cta: 'Try the sandbox',
   },
   {
     num: '03',
-    label: 'QUANT FRAMEWORK',
-    title: 'Build strategies from real signals.',
-    desc: 'Turn wallet intelligence into systematic edge. Define entry rules, risk parameters, and backtest against historical Hyperliquid data. Copy trade the wallets that match your thesis.',
+    label: 'VERIFIED VERDICTS',
+    title: 'Verdicts you can share — including the failures.',
+    desc: 'A tested idea gets a verdict with receipts: the full parameter set, the frictions applied, and the result. Failed hypotheses are first-class research here, because knowing what loses money is the cheapest edge there is.',
+    href: '/learn',
+    cta: 'Read our copy-trading autopsy',
   },
 ]
 
 const steps = [
-  { num: '01', title: 'Input a wallet', desc: 'Paste any Hyperliquid address or browse our discovered wallets.' },
-  { num: '02', title: 'See behavioral patterns', desc: 'Archetype classification, confidence scoring, and PnL breakdown.' },
-  { num: '03', title: 'Build your strategy', desc: 'Copy their trades, set alerts for their next move, or build your own rules — signal to position in under 30 seconds.' },
+  { num: '01', title: 'Watch the cohort', desc: 'Pulse shows real aggregated positioning from captured fills. Form a hypothesis from what wallets do, not what anyone claims.' },
+  { num: '02', title: 'Test with frictions', desc: 'Run the idea through the backtester with delay, slippage, and fees included. No cost-free fantasy results.' },
+  { num: '03', title: 'Keep the verdict', desc: 'Win or lose, the result is the asset. We publish our failures with the same weight as our wins.' },
 ]
 
 export default function LandingPage() {
@@ -55,7 +66,7 @@ export default function LandingPage() {
             transition={{ duration: 0.6, ease: [0.25, 0.4, 0.25, 1] }}
             className="font-display italic font-normal text-4xl md:text-6xl lg:text-[84px] lg:leading-[92px] tracking-tight mb-6 text-white"
           >
-            Trading Intelligence for Hyperliquid Traders
+            Stop copy trading. Start knowing.
           </motion.h1>
 
           <motion.p
@@ -64,7 +75,10 @@ export default function LandingPage() {
             transition={{ delay: 0.15, duration: 0.5 }}
             className="text-white/40 text-base md:text-lg max-w-2xl mx-auto mb-8 leading-relaxed"
           >
-            Decode the wallets beating the market. Track their edge, copy their trades, build your system.
+            We replayed 28,318 smart-money trades with real frictions to test
+            the promise every terminal sells. It lost money. AlphaLens is the
+            place to test your ideas before they cost you — on real
+            Hyperliquid data, with the costs included.
           </motion.p>
 
           <motion.div
@@ -73,46 +87,39 @@ export default function LandingPage() {
             transition={{ delay: 0.3, duration: 0.4 }}
           >
             <Link
-              href="/dashboard"
+              href="/pulse"
               className="inline-block bg-[#34EAB9] text-[#0F1A1E] font-semibold text-sm px-8 py-3.5 rounded hover:brightness-110 transition-all duration-150"
             >
               Launch App
             </Link>
           </motion.div>
 
-          {/* Social Proof Row */}
+          {/* The real evidence row — every number here comes from our two
+              published backtest runs (backtest_results/ in the repo). */}
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.4, duration: 0.5 }}
             className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-3 max-w-3xl mx-auto"
           >
-            {/* Card 1 — Live Trader Performance */}
             <div className="bg-[#0F1A1E] border border-white/[0.08] rounded-lg p-4 text-left">
-              <p className="text-[10px] text-white/40 mb-1">#1 Wallet — 30d</p>
-              <p className="font-mono text-lg font-bold text-[#34EAB9]">+$834,134</p>
-              <p className="text-[11px] text-white/55 mt-1">Momentum Trader · Sharpe 3.03</p>
-              <span className="inline-block mt-2 text-[9px] font-mono px-2 py-0.5 rounded bg-[#34EAB9]/10 text-[#34EAB9]">Low Decay</span>
+              <p className="text-[10px] text-white/40 mb-1">Copy-trades we replayed</p>
+              <p className="font-mono text-lg font-bold text-[#F0FAF8]">28,318</p>
+              <p className="text-[11px] text-white/55 mt-1">13 months of history, two independent cohorts</p>
             </div>
-            {/* Card 2 — Platform Scale */}
             <div className="bg-[#0F1A1E] border border-white/[0.08] rounded-lg p-4 text-left">
-              <p className="text-[10px] text-white/40 mb-1">Wallets Analyzed</p>
-              <p className="font-mono text-lg font-bold text-[#F0FAF8]">10,000+</p>
-              <p className="text-[11px] text-white/55 mt-1">Across 189 active assets on Hyperliquid</p>
+              <p className="text-[10px] text-white/40 mb-1">Frictions we modeled</p>
+              <p className="font-mono text-lg font-bold text-[#F0FAF8]">3</p>
+              <p className="text-[11px] text-white/55 mt-1">60s delay · 5 bps slippage · 0.045% taker per side</p>
             </div>
-            {/* Card 3 — Volume Tracked */}
             <div className="bg-[#0F1A1E] border border-white/[0.08] rounded-lg p-4 text-left">
-              <p className="text-[10px] text-white/40 mb-1">24h Volume Tracked</p>
-              <p className="font-mono text-lg font-bold text-[#F0FAF8]">$4.28B</p>
-              <p className="text-[11px] text-white/55 mt-1">Live data · Updated every block</p>
-              <span className="inline-flex items-center gap-1 mt-2 text-[9px] font-mono px-2 py-0.5 rounded bg-[#34EAB9]/10 text-[#34EAB9]">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#34EAB9] animate-pulse" />
-                Live
-              </span>
+              <p className="text-[10px] text-white/40 mb-1">The verdict</p>
+              <p className="font-mono text-lg font-bold text-[#FF3B5C]">Negative</p>
+              <p className="text-[11px] text-white/55 mt-1">Gross was negative before a single fee</p>
             </div>
           </motion.div>
 
-          {/* Product mockup */}
+          {/* Product illustration */}
           <motion.div
             initial={{ opacity: 0, y: 40 }}
             animate={{ opacity: 1, y: 0 }}
@@ -120,133 +127,76 @@ export default function LandingPage() {
             className="mt-10 relative"
           >
             <div className="bg-[#0F1A1E] border border-white/[0.08] rounded-lg overflow-hidden shadow-2xl shadow-[#34EAB9]/5">
-              {/* Fake browser chrome */}
               <div className="flex items-center gap-2 px-4 py-3 bg-[#0F1A1E] border-b border-white/[0.08]">
                 <div className="w-2.5 h-2.5 rounded-full bg-[#FF3B5C] opacity-60" />
                 <div className="w-2.5 h-2.5 rounded-full bg-white/40 opacity-40" />
                 <div className="w-2.5 h-2.5 rounded-full bg-[#34EAB9] opacity-40" />
                 <div className="flex-1 ml-3 bg-[#0F1A1E] rounded px-3 py-1 text-[10px] font-mono text-white/40">
-                  alphalens-taupe.vercel.app/dashboard
+                  /pulse
                 </div>
+                <span className="text-[9px] font-mono px-2 py-0.5 rounded bg-white/[0.06] text-white/40">
+                  Illustration
+                </span>
               </div>
-              {/* Dashboard preview */}
-              <div className="p-6 space-y-4">
-                <div className="grid grid-cols-4 gap-3">
-                  {['24h Volume', 'Open Interest', 'Top Gainer', 'Tracked'].map((label, i) => (
-                    <div key={label} className="bg-[#0F1A1E] border border-white/[0.08] rounded p-3">
-                      <p className="text-[9px] text-white/40 mb-1">{label}</p>
-                      <p className="font-mono text-sm font-semibold text-[#F0FAF8]">
-                        {['$4.28B', '$2.91B', 'HYPE', '847'][i]}
-                      </p>
-                      {i === 2 && <p className="text-[9px] font-mono text-[#34EAB9]">+18.4%</p>}
+              {/* Schematic pulse view: shapes only, no invented figures */}
+              <div className="p-6 space-y-3">
+                {[
+                  { coin: 'Coin A', long: 62 },
+                  { coin: 'Coin B', long: 48 },
+                  { coin: 'Coin C', long: 55 },
+                ].map(row => (
+                  <div key={row.coin} className="bg-[#0F1A1E] border border-white/[0.08] rounded p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-bold text-white/70">{row.coin}</span>
+                      <span className="text-[9px] text-white/30 font-mono">24h skew</span>
                     </div>
-                  ))}
-                </div>
-                <div className="grid grid-cols-3 gap-3">
-                  {[
-                    { addr: '0x7a23...e91f', pnl: '+$284,291', type: 'Momentum', s: '2.41' },
-                    { addr: '0x3f8b...22a4', pnl: '+$156,830', type: 'Farmer', s: '1.87' },
-                    { addr: '0xd1e4...cc07', pnl: '+$91,445', type: 'Scalper', s: '3.12' },
-                  ].map(w => (
-                    <div key={w.addr} className="bg-[#0F1A1E] border border-white/[0.08] rounded p-3">
-                      <p className="font-mono text-[10px] text-white/55 mb-1">{w.addr}</p>
-                      <p className="font-mono text-sm font-semibold text-[#34EAB9]">{w.pnl}</p>
-                      <div className="flex items-center justify-between mt-1">
-                        <span className="text-[8px] px-1.5 py-0.5 rounded bg-[#0F1A1E] text-[#34EAB9]">{w.type}</span>
-                        <span className="font-mono text-[9px] text-white/55">Sharpe {w.s}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-[#34EAB9] w-8">{row.long}%L</span>
+                      <div className="flex-1 h-1.5 bg-[#FF3B5C]/30 rounded-full overflow-hidden">
+                        <div className="h-full bg-[#34EAB9] rounded-full" style={{ width: `${row.long}%` }} />
                       </div>
+                      <span className="text-[10px] text-[#FF3B5C] w-8 text-right">{100 - row.long}%S</span>
                     </div>
-                  ))}
-                </div>
+                  </div>
+                ))}
+                <p className="text-center text-[9px] text-white/30 pt-1">
+                  Illustration — the live view at /pulse renders only captured data
+                </p>
               </div>
             </div>
           </motion.div>
         </div>
       </section>
 
-      {/* Live Leaderboard Preview */}
+      {/* Why we exist */}
       <section className="border-y border-white/[0.08] bg-[#0F1A1E]">
-        <div className="max-w-4xl mx-auto px-6 py-8">
+        <div className="max-w-4xl mx-auto px-6 py-12">
           <motion.div
             initial="hidden"
             whileInView="visible"
             viewport={{ once: true }}
             variants={fadeUp}
             custom={0}
-            className="text-center mb-8"
+            className="text-center"
           >
-            <h2 className="font-display text-2xl md:text-3xl font-medium tracking-tight text-[#F0FAF8] mb-2">
-              Who&apos;s printing right now
+            <h2 className="font-display text-2xl md:text-3xl font-medium tracking-tight text-[#F0FAF8] mb-3">
+              Every terminal sells the same promise
             </h2>
-            <p className="text-sm text-white/55">
-              Top wallets on Hyperliquid by 30-day performance. Updated live.
+            <p className="text-sm text-white/55 max-w-2xl mx-auto leading-relaxed">
+              Follow smart money and win. We tested that promise with our own
+              replay engine: full fill histories, verified complete, executed
+              with the delay, slippage, and fees a real copier pays. The
+              aggregate edge was not there. So we built the opposite product —
+              one where claims come with receipts, failed ideas are published,
+              and nothing is sold as a signal.
             </p>
-          </motion.div>
-          <div className="space-y-2">
-            {[
-              { rank: 1, addr: '0x348e...50ef', type: 'Momentum', pnl: '+$834,134', win: '49%', sharpe: '3.03' },
-              { rank: 2, addr: '0x7a23...e91f', type: 'Momentum', pnl: '+$284,291', win: '71%', sharpe: '2.41' },
-              { rank: 3, addr: '0xa33a...1ff8', type: 'Momentum', pnl: '+$148,442', win: '50%', sharpe: '3.02' },
-            ].map((w, i) => (
-              <motion.div
-                key={w.rank}
-                custom={i + 1}
-                initial="hidden"
-                whileInView="visible"
-                viewport={{ once: true }}
-                variants={fadeUp}
-                className="bg-[#0F1A1E] border border-white/[0.08] rounded-lg p-4 flex items-center gap-4"
-              >
-                <div className="w-8 h-8 rounded bg-white/[0.06] flex items-center justify-center text-[#34EAB9] font-mono text-sm font-bold flex-shrink-0">
-                  #{w.rank}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-mono text-sm text-[#F0FAF8]">{w.addr}</p>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#34EAB9]/10 text-[#34EAB9]">{w.type}</span>
-                </div>
-                <div className="hidden sm:flex items-center gap-6 flex-shrink-0">
-                  <div className="text-right">
-                    <p className="font-mono text-sm font-semibold text-[#34EAB9]">{w.pnl}</p>
-                    <p className="text-[9px] text-white/40">30d PnL</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-mono text-sm text-[#F0FAF8]">{w.win}</p>
-                    <p className="text-[9px] text-white/40">Win Rate</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-mono text-sm text-[#F0FAF8]">{w.sharpe}</p>
-                    <p className="text-[9px] text-white/40">Sharpe</p>
-                  </div>
-                </div>
-                {/* Mobile: compact stats */}
-                <div className="flex sm:hidden flex-col items-end flex-shrink-0">
-                  <p className="font-mono text-sm font-semibold text-[#34EAB9]">{w.pnl}</p>
-                  <p className="font-mono text-[10px] text-white/55">{w.win} · Sharpe {w.sharpe}</p>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-          <motion.div
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true }}
-            variants={fadeUp}
-            custom={4}
-            className="text-center mt-6"
-          >
-            <Link href="/dashboard" className="text-[#34EAB9] text-sm font-medium hover:underline">
-              View full leaderboard →
-            </Link>
           </motion.div>
         </div>
       </section>
 
       {/* Features */}
       {features.map((f, i) => (
-        <section
-          key={f.num}
-          className="bg-[#0F1A1E]"
-        >
+        <section key={f.num} className="bg-[#0F1A1E]">
           <div className="max-w-5xl mx-auto px-6 py-14 lg:py-20">
             <motion.div
               custom={0}
@@ -271,9 +221,12 @@ export default function LandingPage() {
                 <h2 className="font-display text-2xl md:text-3xl font-medium tracking-tight mb-4 text-[#F0FAF8]">
                   {f.title}
                 </h2>
-                <p className="text-white/55 leading-relaxed text-sm md:text-base">
+                <p className="text-white/55 leading-relaxed text-sm md:text-base mb-5">
                   {f.desc}
                 </p>
+                <Link href={f.href} className="text-[#34EAB9] text-sm font-medium hover:underline">
+                  {f.cta} →
+                </Link>
               </motion.div>
               <motion.div
                 custom={2}
@@ -283,100 +236,60 @@ export default function LandingPage() {
                 variants={fadeUp}
                 className={i % 2 !== 0 ? 'lg:col-start-1 lg:row-start-1' : ''}
               >
-                <div className="bg-[#0F1A1E] border border-white/[0.08] rounded-lg p-5">
-                  {/* Feature visual placeholder based on section */}
+                <div className="bg-[#0F1A1E] border border-white/[0.08] rounded-lg p-5 relative">
+                  <span className="absolute top-3 right-3 text-[9px] font-mono px-2 py-0.5 rounded bg-white/[0.06] text-white/40">
+                    Illustration
+                  </span>
                   {i === 0 && (
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-3 bg-[#0F1A1E] rounded p-3 border border-white/[0.08]">
-                        <div className="w-8 h-8 rounded bg-white/[0.06] flex items-center justify-center text-[#34EAB9] font-mono text-xs">#1</div>
-                        <div className="flex-1">
-                          <p className="font-mono text-xs text-[#F0FAF8]">0x7a23...e91f</p>
-                          <p className="text-[9px] text-white/40">Momentum Trader</p>
+                    <div className="space-y-3 pt-4">
+                      {[70, 45, 58].map((pct, j) => (
+                        <div key={j} className="flex items-center gap-2">
+                          <div className="w-10 h-3 rounded bg-white/[0.08]" />
+                          <div className="flex-1 h-2 bg-[#FF3B5C]/25 rounded-full overflow-hidden">
+                            <div className="h-full bg-[#34EAB9]/70 rounded-full" style={{ width: `${pct}%` }} />
+                          </div>
                         </div>
-                        <div className="text-right">
-                          <p className="font-mono text-xs text-[#34EAB9]">+$284K</p>
-                          <p className="font-mono text-[9px] text-white/55">71% win</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3 bg-[#0F1A1E] rounded p-3 border border-white/[0.08]">
-                        <div className="w-8 h-8 rounded bg-white/[0.06] flex items-center justify-center text-[#34EAB9] font-mono text-xs">#2</div>
-                        <div className="flex-1">
-                          <p className="font-mono text-xs text-[#F0FAF8]">0x3f8b...22a4</p>
-                          <p className="text-[9px] text-white/40">Farmer (Delta-Neutral)</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-mono text-xs text-[#34EAB9]">+$156K</p>
-                          <p className="font-mono text-[9px] text-white/55">Sharpe 1.87</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3 bg-[#0F1A1E] rounded p-3 border border-white/[0.08]">
-                        <div className="w-8 h-8 rounded bg-white/[0.06] flex items-center justify-center text-[#34EAB9] font-mono text-xs">#3</div>
-                        <div className="flex-1">
-                          <p className="font-mono text-xs text-[#F0FAF8]">0xd1e4...cc07</p>
-                          <p className="text-[9px] text-white/40">Scalper</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-mono text-xs text-[#34EAB9]">+$91K</p>
-                          <p className="font-mono text-[9px] text-white/55">3.12 Sharpe</p>
-                        </div>
-                      </div>
+                      ))}
+                      <p className="text-[9px] text-white/30 text-center pt-1">
+                        Long/short skew per coin, from captured fills
+                      </p>
                     </div>
                   )}
                   {i === 1 && (
-                    <div className="space-y-3">
-                      {['Scalper', 'Momentum', 'Farmer', 'Market Maker', 'High Conv.'].map((type, j) => {
-                        const w = [38, 28, 18, 10, 6][j]
-                        return (
-                          <div key={type} className="flex items-center gap-3">
-                            <span className="text-[10px] text-white/55 w-24 flex-shrink-0">{type}</span>
-                            <div className="flex-1 h-5 bg-white/[0.06] rounded overflow-hidden">
-                              <div className="h-full bg-[#34EAB9] rounded opacity-60" style={{ width: `${w}%` }} />
-                            </div>
-                            <span className="font-mono text-[10px] text-white/40 w-10 text-right">{w}%</span>
-                          </div>
-                        )
-                      })}
+                    <div className="space-y-2 pt-4 font-mono text-[10px]">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[#34EAB9]">HYPOTHESIS</span>
+                        <span className="bg-white/[0.06] rounded px-2 py-0.5 text-white/60">your idea, stated precisely</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[#34EAB9]">FRICTIONS</span>
+                        <span className="bg-white/[0.06] rounded px-2 py-0.5 text-white/60">delay + slippage + fees</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[#34EAB9]">KILL CRITERIA</span>
+                        <span className="bg-white/[0.06] rounded px-2 py-0.5 text-white/60">defined before the run</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[#FF3B5C]">VERDICT</span>
+                        <span className="bg-white/[0.06] rounded px-2 py-0.5 text-white/60">whatever the data says</span>
+                      </div>
                     </div>
                   )}
                   {i === 2 && (
-                    <div className="space-y-3">
-                      <div className="bg-[#0F1A1E] rounded p-3 border border-white/[0.08]">
-                        <p className="font-mono text-[10px] text-white/40 mb-2">RULE BUILDER</p>
-                        <div className="space-y-1.5">
-                          <div className="flex items-center gap-2 text-[10px]">
-                            <span className="text-[#34EAB9]">IF</span>
-                            <span className="bg-white/[0.06] rounded px-2 py-0.5 text-[#F0FAF8]">whale_consensus</span>
-                            <span className="text-white/40">&gt;</span>
-                            <span className="font-mono text-[#34EAB9]">80%</span>
-                          </div>
-                          <div className="flex items-center gap-2 text-[10px]">
-                            <span className="text-[#34EAB9]">AND</span>
-                            <span className="bg-white/[0.06] rounded px-2 py-0.5 text-[#F0FAF8]">confidence</span>
-                            <span className="text-white/40">&gt;=</span>
-                            <span className="font-mono text-[#34EAB9]">7/10</span>
-                          </div>
-                          <div className="flex items-center gap-2 text-[10px]">
-                            <span className="text-[#34EAB9]">THEN</span>
-                            <span className="bg-white/[0.06] rounded px-2 py-0.5 text-[#F0FAF8]">enter_long</span>
-                            <span className="text-white/40">size</span>
-                            <span className="font-mono text-[#34EAB9]">2%</span>
-                          </div>
-                        </div>
+                    <div className="space-y-3 pt-4">
+                      <div className="bg-[#0F1A1E] rounded p-3 border border-[#34EAB9]/20">
+                        <div className="w-16 h-2.5 rounded bg-[#34EAB9]/50 mb-2" />
+                        <div className="w-full h-2 rounded bg-white/[0.06] mb-1" />
+                        <div className="w-3/4 h-2 rounded bg-white/[0.06]" />
                       </div>
-                      <div className="grid grid-cols-3 gap-2">
-                        <div className="bg-[#0F1A1E] rounded p-2 border border-white/[0.08] text-center">
-                          <p className="font-mono text-sm text-[#34EAB9]">+47%</p>
-                          <p className="text-[8px] text-white/40">Return</p>
-                        </div>
-                        <div className="bg-[#0F1A1E] rounded p-2 border border-white/[0.08] text-center">
-                          <p className="font-mono text-sm text-[#F0FAF8]">2.3</p>
-                          <p className="text-[8px] text-white/40">Sharpe</p>
-                        </div>
-                        <div className="bg-[#0F1A1E] rounded p-2 border border-white/[0.08] text-center">
-                          <p className="font-mono text-sm text-[#F0FAF8]">-8%</p>
-                          <p className="text-[8px] text-white/40">Max DD</p>
-                        </div>
+                      <div className="bg-[#0F1A1E] rounded p-3 border border-[#FF3B5C]/20">
+                        <div className="w-16 h-2.5 rounded bg-[#FF3B5C]/50 mb-2" />
+                        <div className="w-full h-2 rounded bg-white/[0.06] mb-1" />
+                        <div className="w-2/3 h-2 rounded bg-white/[0.06]" />
                       </div>
+                      <p className="text-[9px] text-white/30 text-center">
+                        Passed and failed verdicts, equal visual weight
+                      </p>
                     </div>
                   )}
                 </div>
@@ -430,7 +343,7 @@ export default function LandingPage() {
             custom={0}
             className="font-display text-3xl md:text-4xl font-medium tracking-tight text-[#F0FAF8] mb-8"
           >
-            The best traders on Hyperliquid have a system. Now you can too.
+            Every claim ships with receipts. Including ours.
           </motion.h2>
           <motion.div
             initial="hidden"
@@ -440,7 +353,7 @@ export default function LandingPage() {
             custom={1}
           >
             <Link
-              href="/dashboard"
+              href="/pulse"
               className="inline-block bg-[#34EAB9] text-[#0F1A1E] font-semibold text-sm px-8 py-3.5 rounded hover:brightness-110 transition-all duration-150"
             >
               Launch Alpha Lens
@@ -454,7 +367,8 @@ export default function LandingPage() {
             custom={2}
             className="text-white/40 text-xs mt-6"
           >
-            Built on Hyperliquid. Open and permissionless.
+            Built on Hyperliquid. Nothing here is financial advice — we show
+            you the data and the costs, and the decision stays yours.
           </motion.p>
         </div>
       </section>

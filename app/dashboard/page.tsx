@@ -78,9 +78,10 @@ export default function DashboardPage() {
       try {
         const res = await fetch('/api/signals')
         if (res.ok) {
-          const data = await res.json()
-          setSignals(data.signals || [])
-          setConsensusAlerts(data.consensus || [])
+          const json = await res.json()
+          // API envelope is { success, data, count, consensus }
+          setSignals(json.data || [])
+          setConsensusAlerts(json.consensus || [])
         }
       } catch {
         // Signals not yet available
@@ -294,7 +295,11 @@ export default function DashboardPage() {
           <h3 className="font-semibold text-sm mb-2">Quick Actions</h3>
           {/* /copy-trade tile removed: quarantined pending repositioning —
               our own backtests showed naive copy-trading loses money. */}
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+            <Link href="/pulse" className="bg-[#0F1A1E] rounded p-3 text-center hover:bg-white/[0.06] transition-colors">
+              <TrendingUp size={18} className="mx-auto mb-1 text-[#34EAB9]" />
+              <span className="text-xs">Pulse</span>
+            </Link>
             <Link href="/hunters" className="bg-[#0F1A1E] rounded p-3 text-center hover:bg-white/[0.06] transition-colors">
               <Crosshair size={18} className="mx-auto mb-1 text-[#34EAB9]" />
               <span className="text-xs">Hunt Alpha</span>

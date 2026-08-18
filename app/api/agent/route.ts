@@ -44,13 +44,12 @@ const tools: Anthropic.Tool[] = [
         archetype: {
           type: 'string',
           enum: [
+            'market_maker',
+            'momentum_trader',
+            'basis_trader',
+            'whale',
             'scalper',
             'swing_trader',
-            'momentum_trader',
-            'high_conviction',
-            'funding_arb',
-            'farmer',
-            'market_maker',
           ],
           description: 'Filter by trader archetype',
         },
@@ -505,9 +504,9 @@ Your capabilities:
 
 Important: When users ask about profits/returns over a specific number of days (e.g. "100% in 3 days", "best performers this week"), use scan_wallets_by_period — it computes exact returns from live trade data.
 
-Wallet archetypes you know: scalper, swing_trader, momentum_trader, high_conviction, funding_arb, farmer, market_maker.
+Wallet archetypes you know: market_maker, momentum_trader, basis_trader, whale, scalper, swing_trader. Wallets with insufficient evidence are 'unclassified'.
 
-Equity tiers: Leviathan (>$10M), Whale ($1M-$10M), Shark ($250K-$1M), Dolphin ($50K-$250K), Fish ($10K-$50K), Shrimp (<$10K).
+Equity tiers (matching the Smart Money page): Leviathan (>=$5M), Whale (>=$500K), Shark (>=$100K), Fish (>=$10K), Crab (>=$1K), Shrimp (<$1K).
 
 When answering:
 - Use the tools to get real data. Never make up wallet addresses or numbers.

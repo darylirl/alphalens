@@ -3,12 +3,13 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useState } from 'react'
-import { Home, Crosshair, Star, Zap, Bell, Search, DollarSign, Wallet, HelpCircle, BarChart3 } from 'lucide-react'
+import { Home, Crosshair, Star, Zap, Bell, Search, DollarSign, Wallet, HelpCircle, BarChart3, TrendingUp } from 'lucide-react'
 import { useWallet } from '@/lib/wallet/WalletContext'
 
 // /copy-trade is intentionally absent: quarantined pending repositioning —
 // our own backtests showed naive copy-trading loses money (see app/copy-trade).
 const navItems = [
+  { href: '/pulse', icon: TrendingUp, label: 'Pulse' },
   { href: '/dashboard', icon: Home, label: 'Dashboard' },
   { href: '/hunters', icon: Crosshair, label: 'Wallet Explorer' },
   { href: '/smart-money', icon: DollarSign, label: 'Smart Money' },
@@ -99,10 +100,8 @@ export function Sidebar({ className = '' }: { className?: string }) {
             {connecting ? 'Connecting...' : 'Connect Wallet'}
           </button>
         )}
-        <div className="flex items-center gap-2 px-3 py-1">
-          <div className="w-1.5 h-1.5 rounded-full bg-[#34EAB9] pulse-accent" />
-          <span className="text-[11px] text-white/40">Live data connected</span>
-        </div>
+        {/* No fabricated "live" indicators: connection status must come from
+            a real source (see /api/capture/health) or not be shown at all. */}
       </div>
     </aside>
   )

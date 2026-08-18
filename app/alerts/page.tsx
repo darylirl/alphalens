@@ -31,9 +31,10 @@ function AlertsContent() {
       try {
         const res = await fetch('/api/signals')
         if (res.ok) {
-          const data = await res.json()
-          setSignals(data.signals || [])
-          setConsensus(data.consensus || [])
+          const json = await res.json()
+          // API envelope is { success, data, count, consensus }
+          setSignals(json.data || [])
+          setConsensus(json.consensus || [])
         }
       } catch {
         // Signals not yet available
@@ -41,11 +42,6 @@ function AlertsContent() {
     }
     loadSignals()
   }, [])
-
-  const handleSaveConfig = async (config: { telegramChatId: string; ntfyTopic: string; minPositionSize: number; archetypesFilter: string[] }) => {
-    console.log('Saving alert config:', config)
-    alert('Alert settings saved! Configure your Supabase credentials to persist settings.')
-  }
 
   return (
     <div>
@@ -83,7 +79,7 @@ function AlertsContent() {
         {tab === 'signals' && (
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
             <ActiveSignalsFeed
-              signals={walletParam ? signals.filter(s => s.walletAddress === walletParam) : signals}
+              signals={walletParam ? signals.filter(s => s.wallet_address === walletParam.toLowerCase()) : signals}
             />
           </motion.div>
         )}
@@ -95,7 +91,7 @@ function AlertsContent() {
         )}
 
         {tab === 'feed' && <AlertFeed alerts={alerts} loading={false} />}
-        {tab === 'settings' && <AlertConfig onSave={handleSaveConfig} />}
+        {tab === 'settings' && <AlertConfig />}
       </div>
     </div>
   )

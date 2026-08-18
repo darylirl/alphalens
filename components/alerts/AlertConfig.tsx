@@ -1,18 +1,19 @@
 'use client'
 import { useState } from 'react'
+import { AlertTriangle } from 'lucide-react'
 
-interface AlertConfigProps {
-  onSave: (config: {
-    telegramChatId: string
-    ntfyTopic: string
-    minPositionSize: number
-    archetypesFilter: string[]
-  }) => void
-}
+// Canonical archetype vocabulary — matches lib/wallets/classify.ts, the only
+// source that actually writes archetypes.
+const ARCHETYPE_OPTIONS = [
+  'market_maker',
+  'momentum_trader',
+  'basis_trader',
+  'whale',
+  'scalper',
+  'swing_trader',
+]
 
-const ARCHETYPE_OPTIONS = ['scalper', 'swing_trader', 'momentum_trader', 'high_conviction', 'funding_arb']
-
-export function AlertConfig({ onSave }: AlertConfigProps) {
+export function AlertConfig() {
   const [telegramChatId, setTelegramChatId] = useState('')
   const [ntfyTopic, setNtfyTopic] = useState('')
   const [minPositionSize, setMinPositionSize] = useState(5000)
@@ -24,6 +25,17 @@ export function AlertConfig({ onSave }: AlertConfigProps) {
 
   return (
     <div className="space-y-6">
+      {/* Honesty note: alert delivery is not wired yet, and this form must
+          never pretend to save. The save button stays disabled until a real
+          persistence + delivery path exists. */}
+      <div className="flex items-start gap-2 rounded border border-amber-400/25 bg-amber-400/[0.06] px-3 py-2.5">
+        <AlertTriangle size={14} className="text-amber-400 shrink-0 mt-0.5" />
+        <p className="text-xs text-amber-400/90 leading-relaxed">
+          Alert delivery is not yet wired. Alerts configured now will activate
+          when the signal pipeline ships — until then this form does not save.
+        </p>
+      </div>
+
       <div>
         <label className="text-sm text-white/55 block mb-2">Telegram Chat ID</label>
         <input
@@ -69,17 +81,18 @@ export function AlertConfig({ onSave }: AlertConfigProps) {
                   : 'bg-[#0F1A1E] text-white/55'
               }`}
             >
-              {a.replace('_', ' ')}
+              {a.replace(/_/g, ' ')}
             </button>
           ))}
         </div>
       </div>
 
       <button
-        onClick={() => onSave({ telegramChatId, ntfyTopic, minPositionSize, archetypesFilter: selectedArchetypes })}
-        className="w-full py-4 rounded-lg font-semibold bg-[#34EAB9] text-[#0F1A1E] transition-opacity hover:opacity-90"
+        disabled
+        title="Alert delivery is not yet wired"
+        className="w-full py-4 rounded-lg font-semibold bg-white/[0.06] text-white/30 cursor-not-allowed"
       >
-        Save Alert Settings
+        Save Alert Settings — not yet available
       </button>
     </div>
   )

@@ -3,15 +3,15 @@ import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { SlidersHorizontal, X, ChevronDown } from 'lucide-react'
 
+// Canonical archetype vocabulary (lib/wallets/classify.ts)
 const ARCHETYPES = [
   { value: 'all', label: 'All Types' },
+  { value: 'market_maker', label: 'Market Maker' },
+  { value: 'momentum_trader', label: 'Momentum' },
+  { value: 'basis_trader', label: 'Basis' },
+  { value: 'whale', label: 'Whale' },
   { value: 'scalper', label: 'Scalper' },
   { value: 'swing_trader', label: 'Swing' },
-  { value: 'momentum_trader', label: 'Momentum' },
-  { value: 'high_conviction', label: 'High Conv.' },
-  { value: 'funding_arb', label: 'Funding Arb' },
-  { value: 'farmer', label: 'Farmer' },
-  { value: 'market_maker', label: 'Market Maker' },
 ]
 
 const SORT_OPTIONS = [

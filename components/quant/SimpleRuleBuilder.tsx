@@ -3,41 +3,54 @@ import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { Play, Save } from 'lucide-react'
 import { BacktestResult, type BacktestSignal } from './BacktestResult'
+import { runBacktest, type Candle, type BacktestConfig } from '@/lib/backtest/engine'
+
+// Honesty contract: the Run button either evaluates the rule with the REAL
+// client engine on real candles (inheriting the sandbox label), or is
+// disabled with "Not yet testable in sandbox". It never fabricates results.
+//
+// The sandbox engine evaluates price-indicator strategies only (EMA-20
+// momentum, RSI-14 < 30 mean reversion). Wallet-event conditions (whale
+// opens, convergence, archetype, confidence) need the server-side
+// verification engine, which is not built yet.
 
 const IF_OPTIONS = [
   { value: '', label: 'Select condition...' },
+  { value: 'asset_eq', label: 'Asset =' },
   { value: 'whale_opens', label: 'Whale opens position' },
   { value: 'wallets_converge', label: '3+ wallets converge' },
   { value: 'archetype_eq', label: 'Wallet archetype =' },
-  { value: 'asset_eq', label: 'Asset =' },
   { value: 'confidence_gt', label: 'Confidence score >' },
 ]
 
 const AND_OPTIONS = [
-  { value: '', label: 'Select condition...' },
+  { value: '', label: 'None' },
+  { value: 'rsi_lt', label: 'RSI(14) <' },
+  { value: 'ema_trend', label: 'Price above EMA(20)' },
   { value: 'direction_eq', label: 'Direction =' },
   { value: 'leverage_gt', label: 'Leverage >' },
   { value: 'size_gt', label: 'Size >' },
   { value: 'funding_gt', label: 'Funding rate >' },
-  { value: 'rsi_lt', label: 'RSI <' },
 ]
 
+// "Mirror trade" removed: copy-trade execution was retired after our own
+// backtests showed it loses money (see /learn).
 const THEN_OPTIONS = [
   { value: '', label: 'Select action...' },
   { value: 'alert', label: 'Send alert' },
-  { value: 'mirror', label: 'Mirror trade' },
   { value: 'watchlist', label: 'Log to watchlist' },
 ]
 
+// Canonical archetype vocabulary (lib/wallets/classify.ts)
 const VALUE_SUGGESTIONS: Record<string, string[]> = {
-  archetype_eq: ['Scalper', 'Momentum', 'Swing Trader', 'High Conviction', 'Farmer', 'Funding Arb'],
+  archetype_eq: ['market_maker', 'momentum_trader', 'basis_trader', 'whale', 'scalper', 'swing_trader'],
   asset_eq: ['BTC', 'ETH', 'SOL', 'HYPE', 'ARB', 'DOGE'],
   direction_eq: ['Long', 'Short'],
   confidence_gt: ['5', '7', '8'],
   leverage_gt: ['3', '5', '10', '20'],
   size_gt: ['10000', '50000', '100000'],
   funding_gt: ['0.01', '0.05', '0.1'],
-  rsi_lt: ['30', '40', '45'],
+  rsi_lt: ['30'],
 }
 
 interface SimpleRuleBuilderProps {
@@ -61,61 +74,73 @@ export function SimpleRuleBuilder({ onSave }: SimpleRuleBuilderProps) {
     signals: BacktestSignal[]
   } | null>(null)
   const [backtesting, setBacktesting] = useState(false)
+  const [backtestError, setBacktestError] = useState('')
 
   const canSave = ifCond && thenAction
-  const canBacktest = ifCond
 
-  const runBacktest = () => {
+  // A rule is sandbox-testable only when it reduces to a price-indicator
+  // strategy the real engine implements, on a concrete coin.
+  const sandboxStrategy: { strategy: 'momentum' | 'mean_reversion'; coin: string } | null = (() => {
+    if (ifCond !== 'asset_eq' || !ifValue) return null
+    if (andCond === 'rsi_lt' && andValue === '30') {
+      return { strategy: 'mean_reversion', coin: ifValue }
+    }
+    if (andCond === 'ema_trend') {
+      return { strategy: 'momentum', coin: ifValue }
+    }
+    return null
+  })()
+
+  const runSandboxBacktest = async () => {
+    if (!sandboxStrategy) return
     setBacktesting(true)
-    setTimeout(() => {
-      const days = 90
-      let cumPnl = 0
-      let peak = 0
-      let maxDd = 0
-      const data = Array.from({ length: days }, (_, i) => {
-        const change = (Math.random() - 0.38) * 400
-        cumPnl += change
-        if (cumPnl > peak) peak = cumPnl
-        const dd = peak - cumPnl
-        if (dd > maxDd) maxDd = dd
-        return {
-          date: new Date(Date.now() - (days - i) * 86400000).toISOString().split('T')[0],
-          pnl: Math.round(cumPnl),
-        }
+    setBacktestError('')
+    setBacktestData(null)
+    try {
+      const endTime = Date.now()
+      const startTime = endTime - 90 * 86400000
+      const res = await fetch('/api/quant/backtest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ coin: sandboxStrategy.coin, startTime, endTime, interval: '1h' }),
       })
-      const dailyReturns = data.map((d, i) => (i === 0 ? 0 : d.pnl - data[i - 1].pnl))
-      const mean = dailyReturns.reduce((s, v) => s + v, 0) / dailyReturns.length
-      const std = Math.sqrt(dailyReturns.reduce((s, v) => s + (v - mean) ** 2, 0) / dailyReturns.length) || 1
+      if (!res.ok) throw new Error('Failed to fetch candle data')
+      const { candles, count } = await res.json()
+      if (!candles || count === 0) throw new Error(`No candle data for ${sandboxStrategy.coin}`)
 
-      const ifLabel = IF_OPTIONS.find(o => o.value === ifCond)?.label || 'Custom'
-      const assets = ['ETH', 'BTC', 'SOL', 'HYPE', 'ARB']
-      const mockSignals: BacktestSignal[] = Array.from({ length: 5 }, (_, i) => {
-        const asset = assets[i % assets.length]
-        const dir: 'Long' | 'Short' = Math.random() > 0.4 ? 'Long' : 'Short'
-        const entry = asset === 'BTC' ? 62000 + Math.round(Math.random() * 5000) : asset === 'ETH' ? 3200 + Math.round(Math.random() * 400) : 100 + Math.round(Math.random() * 50)
-        const pnlAmt = Math.round((Math.random() - 0.35) * 2000)
-        return {
-          date: new Date(Date.now() - (i * 8 + Math.floor(Math.random() * 5)) * 86400000).toISOString().split('T')[0],
-          asset,
-          direction: dir,
-          entry,
-          exit: Math.round((entry + entry * (pnlAmt / 50000)) * 100) / 100,
-          pnl: pnlAmt,
-        }
-      })
+      const config: BacktestConfig = {
+        strategy: sandboxStrategy.strategy,
+        positionSizeUsd: 10000,
+        takerFeePct: 0.035,
+      }
+      const result = runBacktest(candles as Candle[], config)
+
+      const label = sandboxStrategy.strategy === 'momentum'
+        ? `EMA(20) Momentum — ${sandboxStrategy.coin}`
+        : `RSI(14) Mean Reversion — ${sandboxStrategy.coin}`
 
       setBacktestData({
-        strategyName: ifLabel,
-        data,
-        totalPnl: Math.round(cumPnl),
-        winRate: 0.5 + Math.random() * 0.18,
-        tradeCount: Math.floor(15 + Math.random() * 50),
-        sharpe: Math.round((mean / std) * Math.sqrt(365) * 100) / 100,
-        maxDrawdown: Math.round(maxDd),
-        signals: mockSignals,
+        strategyName: label,
+        data: result.equityCurve,
+        totalPnl: result.totalPnl,
+        winRate: result.winRate,
+        tradeCount: result.tradeCount,
+        sharpe: result.sharpe,
+        maxDrawdown: result.maxDrawdown,
+        signals: result.trades.map(t => ({
+          date: new Date(t.entryTime).toISOString().split('T')[0],
+          asset: sandboxStrategy.coin,
+          direction: t.side,
+          entry: Math.round(t.entryPrice * 100) / 100,
+          exit: Math.round(t.exitPrice * 100) / 100,
+          pnl: t.pnl,
+        })),
       })
+    } catch (err) {
+      setBacktestError(err instanceof Error ? err.message : 'Backtest failed')
+    } finally {
       setBacktesting(false)
-    }, 800)
+    }
   }
 
   const handleSave = () => {
@@ -188,7 +213,7 @@ export function SimpleRuleBuilder({ onSave }: SimpleRuleBuilderProps) {
                 <option key={v} value={v}>{v}</option>
               ))}
             </select>
-          ) : andCond ? (
+          ) : andCond && andCond !== 'ema_trend' ? (
             <input
               value={andValue}
               onChange={e => setAndValue(e.target.value)}
@@ -224,8 +249,9 @@ export function SimpleRuleBuilder({ onSave }: SimpleRuleBuilderProps) {
           Save Strategy
         </button>
         <button
-          onClick={runBacktest}
-          disabled={!canBacktest || backtesting}
+          onClick={runSandboxBacktest}
+          disabled={!sandboxStrategy || backtesting}
+          title={sandboxStrategy ? undefined : 'Not yet testable in sandbox'}
           className="flex-1 flex items-center justify-center gap-2 py-3 rounded text-sm font-medium bg-[#0F1A1E] border border-white/[0.12] hover:border-[#34EAB9] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <Play size={14} />
@@ -233,9 +259,18 @@ export function SimpleRuleBuilder({ onSave }: SimpleRuleBuilderProps) {
         </button>
       </div>
 
-      <p className="text-xs text-white/40 text-center">
-        Start simple. Add one rule, backtest it, then layer in conditions.
-      </p>
+      {!sandboxStrategy && ifCond && (
+        <p className="text-[11px] text-white/40 text-center">
+          Not yet testable in sandbox. The client engine evaluates
+          price-indicator rules on a concrete asset (Asset = X with RSI(14) &lt; 30
+          or price above EMA(20)). Wallet-event rules need the server-side
+          verification engine.
+        </p>
+      )}
+
+      {backtestError && (
+        <p className="text-[11px] text-[#FF3B5C] text-center">{backtestError}</p>
+      )}
 
       {backtestData && (
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>

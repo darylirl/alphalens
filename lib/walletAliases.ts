@@ -1,33 +1,25 @@
 /**
- * Human-readable aliases for known top wallets.
- * Key: full lowercase address or prefix (first 6 + last 4 hex chars).
+ * Wallet display aliases.
+ *
+ * Honesty contract: NO invented persona names. The previous version mapped
+ * fabricated brand names ("Apex Momentum", "Ghost Trader", …) onto real
+ * addresses — including 8-char prefix entries that could collide with
+ * unrelated wallets. All of that is removed. An alias may only be added here
+ * for a verified real address, with a factual label (e.g. a publicly
+ * self-identified trader or a protocol treasury), never an invented persona.
+ * User-set labels live in the wallets table (label column), not here.
  */
 const WALLET_ALIASES: Record<string, string> = {
-  '0x348e5365acfa48a26ada7da840ca611e29c950ef': 'Apex Momentum',
-  '0x7a23e91f': 'Ghost Trader',
-  '0xa33a1ff8': 'Whale #2',
-  '0xbb82e19f': 'Precision #3',
-  '0x51f62b39': 'Conviction Bull',
-  '0xd1e4cc07': 'Scalp King',
-  '0x3f8b22a4': 'Delta Farmer',
+  // intentionally empty — see honesty contract above
 }
 
 /**
- * Look up a wallet alias by full address.
- * Tries full address match first, then prefix+suffix match.
+ * Look up a wallet alias by full lowercase address. Exact match only:
+ * prefix matching was removed because it could mislabel unrelated wallets.
  */
 export function getWalletAlias(address: string): string | null {
   if (!address) return null
-  const lower = address.toLowerCase()
-
-  // Full address match
-  if (WALLET_ALIASES[lower]) return WALLET_ALIASES[lower]
-
-  // Prefix+suffix match (first 6 + last 4 chars of hex)
-  const short = lower.slice(0, 6) + lower.slice(-4)
-  if (WALLET_ALIASES[short]) return WALLET_ALIASES[short]
-
-  return null
+  return WALLET_ALIASES[address.toLowerCase()] ?? null
 }
 
 /**

@@ -13,10 +13,9 @@ const ARCHETYPE_MAP: Record<string, string> = {
   'swing trader': 'swing_trader',
   'momentum trader': 'momentum_trader',
   'momentum': 'momentum_trader',
-  'high conviction': 'high_conviction',
-  'funding arb': 'funding_arb',
-  'farmer (delta-neutral)': 'farmer',
-  'farmer': 'farmer',
+  'whale': 'whale',
+  'basis trader': 'basis_trader',
+  'basis': 'basis_trader',
   'market maker': 'market_maker',
 }
 

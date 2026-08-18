@@ -4,9 +4,13 @@ import { validateSortColumn, safeParseInt, safeParseFloat } from '@/lib/validati
 // Track if we've already triggered a seed in this instance
 let seedTriggered = false
 
+// Canonical archetype vocabulary — must match lib/wallets/classify.ts,
+// the only source that writes archetypes. (The old list contained values
+// like high_conviction/funding_arb/farmer that are never stored, so those
+// filters always returned zero rows.)
 const VALID_ARCHETYPES = new Set([
-  'all', 'scalper', 'swing_trader', 'momentum_trader',
-  'high_conviction', 'funding_arb', 'farmer', 'market_maker',
+  'all', 'market_maker', 'momentum_trader', 'basis_trader',
+  'whale', 'scalper', 'swing_trader',
 ])
 
 export async function GET(req: Request) {

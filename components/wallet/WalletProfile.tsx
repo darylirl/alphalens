@@ -13,7 +13,6 @@ import { FundingHistory } from './FundingHistory'
 import { CopyableAddress } from '@/components/ui/CopyableAddress'
 import type { WalletDetail, ClearinghouseState } from '@/lib/hyperliquid/types'
 import { computeDailyPnl, computeSharpe, computeSharpeFromFills, computeWinRate, computeMaxDrawdown } from '@/lib/analytics/pnl'
-import { detectArchetype } from '@/lib/analytics/archetype'
 import { computeAlphaDecay } from '@/lib/analytics/alphaDecay'
 import { getWalletAlias } from '@/lib/walletAliases'
 
@@ -28,9 +27,12 @@ const TABS: { key: Tab; label: string }[] = [
 interface WalletProfileProps {
   detail: WalletDetail
   headlinePnl: number
+  /** Primary archetype tag from the stored classifier (canonical vocabulary).
+   *  The old client-side heuristic used a divergent vocabulary and is retired. */
+  primaryTag?: string | null
 }
 
-export function WalletProfile({ detail, headlinePnl }: WalletProfileProps) {
+export function WalletProfile({ detail, headlinePnl, primaryTag }: WalletProfileProps) {
   const [activeTab, setActiveTab] = useState<Tab>('overview')
   const alias = getWalletAlias(detail.address)
   const accountValue = parseFloat(detail.state.crossMarginSummary?.accountValue || '0')
@@ -40,7 +42,6 @@ export function WalletProfile({ detail, headlinePnl }: WalletProfileProps) {
 
   const dailyPnl = computeDailyPnl(fills)
   const dailyValues = dailyPnl.map(d => d.pnl)
-  const archetypeResult = detectArchetype(fills, state)
 
   function sharpeOrFallback(days: number): number {
     const daily = computeSharpe(dailyValues.slice(-days))
@@ -49,8 +50,8 @@ export function WalletProfile({ detail, headlinePnl }: WalletProfileProps) {
   }
 
   const analytics = {
-    archetype: archetypeResult.archetype,
-    confidence: archetypeResult.confidence,
+    archetype: primaryTag || 'unclassified',
+    confidence: 0,
     sharpe7d: sharpeOrFallback(7),
     sharpe30d: sharpeOrFallback(30),
     sharpe90d: sharpeOrFallback(90),
