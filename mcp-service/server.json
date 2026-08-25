@@ -1,0 +1,36 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.darylirl/alphalens-mcp-server",
+  "title": "AlphaLens",
+  "description": "Read-only MCP tools over the AlphaLens public API: Ledger, cohort positioning, cohort.",
+  "version": "0.1.0",
+  "websiteUrl": "https://alphalens-taupe.vercel.app",
+  "repository": {
+    "url": "https://github.com/darylirl/alphalens",
+    "source": "github",
+    "subfolder": "mcp-service"
+  },
+  "_meta": {
+    "io.github.darylirl/alphalens": {
+      "transport": "stdio",
+      "auth": "none",
+      "readOnly": true,
+      "tools": [
+        "alphalens_get_pulse",
+        "alphalens_list_ledger_calls",
+        "alphalens_get_ledger_call",
+        "alphalens_get_cohort"
+      ],
+      "environmentVariables": [
+        {
+          "name": "ALPHALENS_API_BASE",
+          "description": "Base URL of the AlphaLens deployment to read. Defaults to https://alphalens-taupe.vercel.app.",
+          "isRequired": false,
+          "isSecret": false,
+          "format": "string"
+        }
+      ],
+      "note": "No `packages` entry yet: this server is run from source (`node mcp-service/index.mjs`) or from the Dockerfile in this directory. A packages entry is added here when a published npm or OCI artifact exists to point at — an identifier that resolves to nothing would be a claim we cannot back."
+    }
+  }
+}

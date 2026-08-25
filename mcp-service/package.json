@@ -1,0 +1,13 @@
+{
+  "name": "alphalens-mcp-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "bin": { "alphalens-mcp-server": "index.mjs" },
+  "scripts": {
+    "start": "node index.mjs",
+    "test": "node --test 'test/*.test.mjs'",
+    "smoke": "node smoke.mjs"
+  }
+}
