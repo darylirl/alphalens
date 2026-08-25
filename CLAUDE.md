@@ -106,6 +106,32 @@ aggregation that under-counted unnoticed).
   or after each of a known set of decision timestamps. Do not merge them
   without checking both callers.
 
+## Publishing rule: what may reach the Ledger
+
+`verify-service/` is the **canonical verification engine**. It owns the job
+queue, the versioned spec schema, rule grammar v1, and the invariant tests.
+`verification/` is an earlier standalone Python stack, kept as experimental
+reference; new verification work goes in `verify-service/`.
+
+A result is **Ledger-eligible** only when both hold:
+
+1. It was produced by the canonical engine (`engine_version` starts
+   `verify-engine@`), and
+2. Its `spec` validates against the current grammar — `validateSpec()` accepts
+   it unchanged, which means the spec is a spec the engine could re-run today.
+
+Everything else is recorded but not published. That includes honest results
+from the experimental stack: `verification_results` id=1 was written by
+`e2e-runner-0.1.0` before grammar v1 existed, and its `spec` does not conform
+(`{type: cross_above, series: cohort.net_flow_usd}` rather than
+`{type: cohort, metric: net_flow_usd, op: cross_above}`); it also reports no
+excluded pairs where the canonical engine finds 225 for BTC.
+
+The row stays. `verification_results` is append-only on purpose, and removing
+an honest measurement to tidy the record would be its own dishonesty — the
+eligibility test is what keeps it out of anything user-facing, not deletion.
+Filter on publish; never edit or delete history.
+
 ## Capacity budget: capture scope
 
 Disk growth is bounded by an enforced mechanism, not a number in a doc:
