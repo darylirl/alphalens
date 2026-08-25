@@ -1,6 +1,6 @@
 FROM node:22-slim
 WORKDIR /app
-COPY package.json index.mjs enqueue.mjs backfill.mjs ./
+COPY package.json index.mjs enqueue.mjs backfill.mjs scorer.mjs ./
 COPY lib ./lib
 COPY specs ./specs
 USER node
