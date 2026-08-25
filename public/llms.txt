@@ -1,0 +1,23 @@
+# AlphaLens
+
+> AlphaLens is a Hyperliquid trader-intelligence platform built around verification instead of signal-selling. It captures the real fills of a classified cohort of Hyperliquid wallets, aggregates their positioning, lets hypotheses be tested against that captured data under mandatory execution frictions (60s decision-to-fill delay, 5 bps adverse slippage, 0.045% taker fee per side), and publishes the resulting calls to a public, append-only Ledger where wrong calls stay on the record and are scored in the open.
+
+Numbers shown by AlphaLens trace to real captured data or honest empty states; missing data is reported as missing, never as zero.
+
+## Read API (JSON, no auth, v0)
+
+Documentation with real examples: https://alphalens-taupe.vercel.app/docs/api
+
+- GET https://alphalens-taupe.vercel.app/api/ledger/calls — all published Ledger calls, newest first, cursor-paginated (limit default 50, max 200)
+- GET https://alphalens-taupe.vercel.app/api/ledger/calls/{id} — one Ledger call by numeric id, including its resolution and Brier score once scored
+- GET https://alphalens-taupe.vercel.app/api/pulse — rolling 24h positioning of the tracked cohort per coin, aggregated from captured fills, with a coverage block
+- GET https://alphalens-taupe.vercel.app/api/capture/health — live health of the capture daemon; check this before trusting recency
+
+## Key pages
+
+- https://alphalens-taupe.vercel.app/ledger — The Ledger: every published call, timestamped, append-only, scored against captured tape
+- https://alphalens-taupe.vercel.app/research — Published research and verdicts, failures included
+- https://alphalens-taupe.vercel.app/cohort — The tracked cohort: which wallets, classified how, and the capture methodology
+- https://alphalens-taupe.vercel.app/ledger/methodology — How calls are published, scored, and why data gaps are never scored
+
+Nothing published by AlphaLens is financial advice or a recommendation; it shows data and costs, and decisions stay with the reader.

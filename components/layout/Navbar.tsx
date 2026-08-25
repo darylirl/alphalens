@@ -8,23 +8,29 @@ import { Search, ChevronDown } from 'lucide-react'
 // Core destinations stay visible; everything else lives in the More menu.
 // Twelve flat links overflowed the bar at common desktop widths (the search
 // box rendered on top of the last links) and gave the nav no hierarchy.
+// Ledger and Research lead after Pulse: the public track record and the
+// published verdicts are what differentiates the product, so they are never
+// buried in an overflow menu.
 const primaryLinks = [
   { href: '/pulse', label: 'Pulse' },
-  { href: '/dashboard', label: 'Dashboard' },
-  { href: '/smart-money', label: 'Smart Money' },
-  { href: '/wallets', label: 'Wallets' },
-  { href: '/signals', label: 'Signals' },
+  { href: '/ledger', label: 'Ledger' },
+  { href: '/research', label: 'Research' },
   { href: '/hunters', label: 'Explorer' },
+  { href: '/wallets', label: 'Wallets' },
+  { href: '/smart-money', label: 'Smart Money' },
   { href: '/performance', label: 'Performance' },
 ]
 
 // /copy-trade is intentionally absent: quarantined pending repositioning —
 // our own backtests showed naive copy-trading loses money (see app/copy-trade).
 const moreLinks = [
-  { href: '/agent', label: 'AI Agent' },
-  { href: '/watchlist', label: 'Watchlist' },
-  { href: '/quant', label: 'Strategies' },
+  { href: '/signals', label: 'Signals' },
   { href: '/alerts', label: 'Alerts' },
+  { href: '/watchlist', label: 'Watchlist' },
+  { href: '/dashboard', label: 'Dashboard' },
+  { href: '/agent', label: 'AI Agent' },
+  { href: '/quant', label: 'Strategies' },
+  { href: '/cohort', label: 'Cohort (Methodology)' },
   { href: '/learn', label: 'Learn' },
 ]
 
