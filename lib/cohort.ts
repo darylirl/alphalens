@@ -6,6 +6,10 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 // exactly the bytes the CSV endpoint serves (for identical underlying data).
 // Server-only: imports the service-role Supabase client's types.
 
+// Versioned marker on the public cohort JSON, mirroring ledger.v0: fields may
+// be added over time but existing ones are never renamed or removed.
+export const COHORT_SCHEMA = 'cohort.v0'
+
 export interface CohortWallet {
   address: string
   archetype: string | null

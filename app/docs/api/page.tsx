@@ -145,11 +145,25 @@ export default function ApiDocsPage() {
       <div className="px-4 py-4 lg:px-6 max-w-2xl mx-auto">
         <h1 className="text-lg font-bold mb-1">Public read API</h1>
         <P>
-          Four read-only JSON endpoints expose what AlphaLens publishes: the
+          Five read-only JSON endpoints expose what AlphaLens publishes: the
           Ledger (our public, append-only track record), the cohort positioning
-          behind Pulse, and the live health of the capture pipeline. They exist
-          so machines — scripts, dashboards, AI agents — can read the record
-          without scraping HTML.
+          behind Pulse, the tracked cohort itself, and the live health of the
+          capture pipeline. They exist so machines — scripts, dashboards, AI
+          agents — can read the record without scraping HTML.
+        </P>
+        <P>
+          Agents that speak MCP can skip the HTTP layer: the{' '}
+          <a
+            href="https://github.com/darylirl/alphalens/tree/HEAD/mcp-service"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[#34EAB9] hover:underline"
+          >
+            AlphaLens MCP server
+          </a>{' '}
+          wraps these same endpoints as four read-only tools. It is a client of
+          this API like any other — it holds no database credentials and has no
+          privileged read path.
         </P>
 
         <div className="border border-[#F5A623]/30 bg-[#F5A623]/5 rounded-lg p-3 mb-2">
@@ -174,6 +188,7 @@ export default function ApiDocsPage() {
           for what may be published and how calls are scored.
         </P>
         <Params rows={[
+          ['kind', 'restrict to one call kind: hypothesis_verdict (the adjudicated result of a completed replay) or cohort_signal (a forward-looking call that gets scored). Omit for both. Any other value is a 400 — never a silently empty page. The response echoes the applied filter as a top-level kind, null when unfiltered; the example below was captured before that field existed.'],
           ['limit', 'calls per page, integer. Default 50, maximum 200.'],
           ['cursor', 'opaque pagination cursor from a previous response’s next_cursor (a base64 string). Omit for the first page; next_cursor is null when there is no further page.'],
         ]} />
@@ -214,6 +229,39 @@ export default function ApiDocsPage() {
           {PULSE_EXAMPLE}
         </Example>
 
+        <H2 id="cohort">The tracked cohort</H2>
+        <Endpoint method="GET" path="/api/cohort" />
+        <P>
+          The wallets AlphaLens captures — the API twin of{' '}
+          <Link href="/cohort" className="text-[#34EAB9] hover:underline">/cohort</Link>.
+          Returns <code className="font-mono">count</code> and{' '}
+          <code className="font-mono">by_archetype</code> for the whole cohort,
+          the <code className="font-mono">selection</code> criteria that put a
+          wallet in capture scope, a{' '}
+          <code className="font-mono">snapshot</code> block with the CSV
+          download URL and the SHA-256 of exactly those bytes, and one bounded
+          page of <code className="font-mono">wallets</code>. Counts describe
+          the entire cohort (the endpoint pages through the table rather than
+          trusting one read); the wallet array is a page of it.
+        </P>
+        <P>
+          This list exists so our claims can be audited, not so the wallets can
+          be followed — we replayed 28,318 trades from wallets like these under
+          honest frictions and lost money. A failed database read is a 503, not
+          an empty list: &ldquo;we could not measure&rdquo; and &ldquo;nobody is
+          in scope&rdquo; are opposite claims.
+        </P>
+        <Params rows={[
+          ['limit', 'wallets per page, integer. Default 100, maximum 500.'],
+          ['cursor', 'the address from a previous response’s next_cursor. Wallets are ordered by address, so the cursor is a plain address rather than an opaque token — a resumed page is checkable against the CSV. A cursor that is not in the current cohort is a 400.'],
+        ]} />
+        <p className="text-[11px] text-white/40 leading-relaxed mb-3">
+          No example response is shown here yet. Every example on this page is a
+          real captured response and this endpoint ships with the change that
+          added this section — an invented sample would be exactly the kind of
+          thing the rest of this project exists to avoid.
+        </p>
+
         <H2 id="capture-health">Capture health</H2>
         <Endpoint method="GET" path="/api/capture/health" />
         <P>
@@ -231,7 +279,8 @@ export default function ApiDocsPage() {
         <P>
           Ledger responses carry a top-level{' '}
           <code className="font-mono">schema: &quot;ledger.v0&quot;</code>{' '}
-          version marker. Timestamps are ISO-8601 with timezone offsets.
+          version marker, and the cohort endpoint carries{' '}
+          <code className="font-mono">schema: &quot;cohort.v0&quot;</code>. Timestamps are ISO-8601 with timezone offsets.
           Responses are uncached (<code className="font-mono">Cache-Control:
           no-store</code>) and the Ledger endpoints allow cross-origin GET from
           any origin. Errors are JSON with an{' '}

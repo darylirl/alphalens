@@ -8,8 +8,13 @@ export const dynamic = 'force-dynamic'
 const DEFAULT_LIMIT = 50
 const MAX_LIMIT = 200
 
+// The two call kinds the database allows (ledger_calls_kind CHECK). Filtering
+// is validated against this list rather than passed through, so an unknown
+// kind is a 400 and never a silently empty page that reads as "no such calls".
+const KINDS = ['hypothesis_verdict', 'cohort_signal'] as const
+
 /**
- * GET /api/ledger/calls?limit=50&cursor=...
+ * GET /api/ledger/calls?kind=&limit=50&cursor=...
  * The public Ledger as machine-readable JSON: reverse-chronological calls,
  * keyset-paginated. Read-only; documented at /docs/api. Explicitly bounded —
  * PostgREST truncates silently near 1000 rows, so every page is a chosen cap.
@@ -27,6 +32,11 @@ export async function GET(req: NextRequest) {
     limit = Math.min(n, MAX_LIMIT)
   }
 
+  const kind = params.get('kind')
+  if (kind !== null && !(KINDS as readonly string[]).includes(kind)) {
+    return ledgerJson({ error: `kind must be one of: ${KINDS.join(', ')}` }, 400)
+  }
+
   const rawCursor = params.get('cursor')
   const cursor = rawCursor !== null ? decodeCursor(rawCursor) : null
   if (rawCursor !== null && cursor === null) {
@@ -40,6 +50,9 @@ export async function GET(req: NextRequest) {
       .order('published_at', { ascending: false })
       .order('id', { ascending: false })
       .limit(limit + 1) // one extra row to detect whether a next page exists
+    // Filter in SQL, not after the read: a client-side filter over a bounded
+    // page would drop rows the cursor had already advanced past.
+    if (kind) query = query.eq('kind', kind)
     if (cursor) {
       query = query.or(
         `published_at.lt.${cursor.publishedAt},and(published_at.eq.${cursor.publishedAt},id.lt.${cursor.id})`
@@ -53,6 +66,7 @@ export async function GET(req: NextRequest) {
     const nextCursor = rows.length > limit && page.length > 0 ? encodeCursor(page[page.length - 1]) : null
 
     return ledgerJson({
+      kind: kind ?? null,
       calls: page.map(serializeCall),
       next_cursor: nextCursor,
     })
