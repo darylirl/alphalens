@@ -8,6 +8,11 @@ candles, a completed backtest) or is an honest empty state. Timestamps are
 never synthesized against `Date.now()` to simulate recency. Schematic visuals
 are captioned "Illustration".
 
+## Rules
+
+Done means merged to the default branch, deployed, and verified against
+production; completion may never be reported on preview evidence.
+
 ## Invariant: missing data is never zero
 
 A gap in captured data must never be read, stored, or displayed as `0`.
