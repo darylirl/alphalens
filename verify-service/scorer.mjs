@@ -40,6 +40,9 @@ const state = { ticks: 0, resolved: 0, published: 0, lastError: null }
 async function beat() {
   try {
     await heartbeat({
+      // service='scorer', not the worker's 'verify': a dead scorer must be
+      // visible in capture_health rather than masked by the worker's beats.
+      service: 'scorer',
       note: `scorer=${WORKER_ID} ticks=${state.ticks} resolved=${state.resolved}`
         + ` published=${state.published}${state.lastError ? ` lastError=${state.lastError.slice(0, 120)}` : ''}`,
     })
