@@ -13,9 +13,14 @@ export async function GET() {
   try {
     const supabase = getSupabase()
 
+    // service filter: the verification worker also heartbeats into
+    // capture_health (service='verify', no WS state); capture status must
+    // read only the capture daemon's rows.
     const [{ data: latest }, { data: first }] = await Promise.all([
-      supabase.from('capture_health').select('*').order('ts', { ascending: false }).limit(1),
-      supabase.from('capture_health').select('ts').order('ts', { ascending: true }).limit(1),
+      supabase.from('capture_health').select('*')
+        .eq('service', 'capture').order('ts', { ascending: false }).limit(1),
+      supabase.from('capture_health').select('ts')
+        .eq('service', 'capture').order('ts', { ascending: true }).limit(1),
     ])
 
     const last = latest?.[0] ?? null

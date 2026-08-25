@@ -2,9 +2,9 @@ import { getSupabase } from '@/lib/db/supabase'
 import { BottomNav } from '@/components/layout/BottomNav'
 
 // Public, no login, server-rendered for sub-1s FCP: all data comes from the
-// pulse_24h materialized view (captured fills, refreshed every 5 minutes) —
-// no live exchange calls on this path, no per-wallet data, and none of the
-// deprecated wallet confidence scores.
+// pulse_24h materialized view (captured fills, refreshed every 30 minutes by
+// pg_cron) — no live exchange calls on this path, no per-wallet data, and
+// none of the deprecated wallet confidence scores.
 // Server-rendered per request rather than prerendered at build time: the
 // build must not depend on the database being reachable (a build-time Supabase
 // call that hangs fails the whole deployment). This trades ISR caching for
@@ -44,15 +44,24 @@ function ago(ts: string | null): string {
 async function loadPulse() {
   try {
     const supabase = getSupabase()
+    // capture_health is shared: the verification worker also heartbeats here
+    // (service='verify', no WS state or wallet counts). Status must read only
+    // the capture daemon's own rows or an interleaved verify heartbeat
+    // renders "Capture offline" while capture is healthy.
     const [{ data: rows }, { data: latest }, { data: first }] = await Promise.all([
       supabase.from('pulse_24h').select('*').order('notional_24h', { ascending: false }).limit(30),
-      supabase.from('capture_health').select('ts,wallets_polled').order('ts', { ascending: false }).limit(1),
-      supabase.from('capture_health').select('ts').order('ts', { ascending: true }).limit(1),
+      supabase.from('capture_health').select('ts,wallets_polled')
+        .eq('service', 'capture').order('ts', { ascending: false }).limit(5),
+      supabase.from('capture_health').select('ts')
+        .eq('service', 'capture').order('ts', { ascending: true }).limit(1),
     ])
+    // wallets_polled can be null on a heartbeat written before the first
+    // wallet refresh completes; fall back to the newest row that has it.
+    const walletsTracked = latest?.find(r => r.wallets_polled != null)?.wallets_polled ?? null
     return {
       rows: (rows || []) as PulseRow[],
       lastHeartbeat: latest?.[0]?.ts ?? null,
-      walletsTracked: latest?.[0]?.wallets_polled ?? null,
+      walletsTracked,
       captureSince: first?.[0]?.ts ?? null,
     }
   } catch {
@@ -70,6 +79,10 @@ export default async function PulsePage() {
 
   const coins = rows
     .filter(r => Number(r.notional_24h) > 0)
+    // "@107"-style coins are Hyperliquid's internal spot-pair ids. We hold no
+    // verified id->symbol mapping (and this path makes no live exchange
+    // calls), so unmapped ids are excluded rather than shown raw or guessed.
+    .filter(r => !/^@\d+$/.test(r.coin))
     .map(r => {
       const notional = Number(r.notional_24h)
       const netFlow = Number(r.net_flow_24h)
@@ -108,7 +121,7 @@ export default async function PulsePage() {
             <span className={`w-2 h-2 rounded-full ${live ? 'bg-[#34EAB9] animate-pulse' : 'bg-[#FF3B5C]'}`} />
             <span className="text-xs font-semibold">{live ? 'Capture running' : 'Capture offline'}</span>
             <span className="text-[10px] text-white/40 ml-auto">
-              data refreshed every 5 min{computedAt ? ` · computed ${ago(computedAt)}` : ''}
+              data refreshed every 30 min{computedAt ? ` · computed ${ago(computedAt)}` : ''}
             </span>
           </div>
           <div className="grid grid-cols-3 gap-2 text-center">
