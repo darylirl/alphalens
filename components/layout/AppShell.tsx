@@ -1,5 +1,6 @@
 'use client'
 import { Navbar } from './Navbar'
+import { Footer } from './Footer'
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   return (
@@ -9,6 +10,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <main className="min-h-screen pt-14 md:pt-16">
         {children}
       </main>
+      <Footer />
     </>
   )
 }

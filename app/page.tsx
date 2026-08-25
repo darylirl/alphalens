@@ -20,9 +20,11 @@ const features = [
     num: '01',
     label: 'LIVE COHORT POSITIONING',
     title: 'See what tracked wallets are actually doing.',
-    desc: 'Pulse aggregates the real fills of hundreds of tracked Hyperliquid wallets — the classified cohort — into a rolling 24-hour positioning view: long/short skew per coin, new positions versus additions, traded notional in USD. Captured from the exchange, never estimated, and honest about its own coverage.',
+    desc: 'Pulse aggregates the real fills of the classified cohort of tracked Hyperliquid wallets into a rolling 24-hour positioning view: long/short skew per coin, new positions versus additions, traded notional in USD. Captured from the exchange, never estimated, and honest about its own coverage.',
     href: '/pulse',
     cta: 'Open Pulse',
+    href2: '/cohort',
+    cta2: 'See the classified cohort',
   },
   {
     num: '02',
@@ -44,7 +46,7 @@ const features = [
 
 const steps = [
   { num: '01', title: 'Watch the cohort', desc: 'Pulse shows real aggregated positioning from captured fills. Form a hypothesis from what wallets do, not what anyone claims.' },
-  { num: '02', title: 'Test with frictions', desc: 'Run the idea through the backtester with delay, slippage, and fees included. No cost-free fantasy results.' },
+  { num: '02', title: 'Test with frictions', desc: 'Run the idea through the backtester with delay, slippage, and fees included. No cost-free fantasy results. The full verification engine behind our published verdicts opens to user hypotheses soon.' },
   { num: '03', title: 'Keep the verdict', desc: 'Win or lose, the result is the asset. We publish our failures with the same weight as our wins.' },
 ]
 
@@ -238,9 +240,16 @@ export default function LandingPage() {
                 <p className="text-white/55 leading-relaxed text-sm md:text-base mb-5">
                   {f.desc}
                 </p>
-                <Link href={f.href} className="text-[#34EAB9] text-sm font-medium hover:underline">
-                  {f.cta} →
-                </Link>
+                <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+                  <Link href={f.href} className="text-[#34EAB9] text-sm font-medium hover:underline">
+                    {f.cta} →
+                  </Link>
+                  {'href2' in f && f.href2 && (
+                    <Link href={f.href2} className="text-white/55 text-sm font-medium hover:text-[#34EAB9] hover:underline transition-colors">
+                      {f.cta2} →
+                    </Link>
+                  )}
+                </div>
               </motion.div>
               <motion.div
                 custom={2}
