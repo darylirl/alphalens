@@ -14,6 +14,7 @@ import { replayCoin, assertInvariants, ENGINE_VERSION } from './engine.mjs'
 import { loadCohortSeries, resolveCohortWallets, resolveTopCoins, TOP_COINS_LOOKAHEAD_FLAG } from './cohort.mjs'
 import { summarize, evaluateVerdict, tradesCsv } from './metrics.mjs'
 import { pageAll, uploadObject, RESULTS_BUCKET, sb } from './db.mjs'
+import { publishResult } from './publish.mjs'
 
 const HOUR_MS = 3_600_000
 
@@ -142,6 +143,17 @@ export async function runJob(job, { log = console.log } = {}) {
       engine_version: ENGINE_VERSION,
     }],
   })
+
+  // Ledger publish, gated by the publishing rule (eligibility is re-checked
+  // inside). A publish failure must not fail the job — the result row is
+  // durable and the scorer's sweep re-publishes anything missed — but it is
+  // loud, because a silent gap between results and calls is how a "public
+  // ledger" quietly stops being one.
+  try {
+    await publishResult(row, { log })
+  } catch (e) {
+    log(`Ledger publish for result ${row.id} failed (sweep will retry): ${e.message}`)
+  }
 
   return { result: row, metrics, verdict, dataCoverage, trades: allTrades, csv }
 }

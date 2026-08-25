@@ -1,5 +1,6 @@
 import { getSupabase } from '@/lib/db/supabase'
 import { BottomNav } from '@/components/layout/BottomNav'
+import { CaptureCoverageStrip, loadCaptureStatus } from '@/components/layout/CaptureCoverageStrip'
 
 // Public, no login, server-rendered for sub-1s FCP: all data comes from the
 // pulse_24h materialized view (captured fills, refreshed every 5 minutes) —
@@ -42,30 +43,19 @@ function ago(ts: string | null): string {
 }
 
 async function loadPulse() {
+  const supabase = getSupabase()
+  const capture = await loadCaptureStatus(supabase)
   try {
-    const supabase = getSupabase()
-    const [{ data: rows }, { data: latest }, { data: first }] = await Promise.all([
-      supabase.from('pulse_24h').select('*').order('notional_24h', { ascending: false }).limit(30),
-      supabase.from('capture_health').select('ts,wallets_polled').order('ts', { ascending: false }).limit(1),
-      supabase.from('capture_health').select('ts').order('ts', { ascending: true }).limit(1),
-    ])
-    return {
-      rows: (rows || []) as PulseRow[],
-      lastHeartbeat: latest?.[0]?.ts ?? null,
-      walletsTracked: latest?.[0]?.wallets_polled ?? null,
-      captureSince: first?.[0]?.ts ?? null,
-    }
+    const { data: rows } = await supabase
+      .from('pulse_24h').select('*').order('notional_24h', { ascending: false }).limit(30)
+    return { rows: (rows || []) as PulseRow[], ...capture }
   } catch {
-    return { rows: [] as PulseRow[], lastHeartbeat: null, walletsTracked: null, captureSince: null }
+    return { rows: [] as PulseRow[], ...capture }
   }
 }
 
 export default async function PulsePage() {
   const { rows, lastHeartbeat, walletsTracked, captureSince } = await loadPulse()
-  const live = lastHeartbeat !== null && Date.now() - new Date(lastHeartbeat).getTime() < 3 * 60 * 1000
-  const sinceLabel = captureSince
-    ? new Date(captureSince).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
-    : null
   const computedAt = rows[0]?.computed_at ?? null
 
   const coins = rows
@@ -103,29 +93,12 @@ export default async function PulsePage() {
         </div>
 
         {/* Data coverage — real capture status, never fabricated */}
-        <div className="card p-3">
-          <div className="flex items-center gap-2 mb-2">
-            <span className={`w-2 h-2 rounded-full ${live ? 'bg-[#34EAB9] animate-pulse' : 'bg-[#FF3B5C]'}`} />
-            <span className="text-xs font-semibold">{live ? 'Capture running' : 'Capture offline'}</span>
-            <span className="text-[10px] text-white/40 ml-auto">
-              data refreshed every 5 min{computedAt ? ` · computed ${ago(computedAt)}` : ''}
-            </span>
-          </div>
-          <div className="grid grid-cols-3 gap-2 text-center">
-            <div className="bg-[#0F1A1E] rounded p-2">
-              <p className="text-[9px] text-white/40 mb-0.5">Capturing since</p>
-              <p className="text-[11px] font-mono">{sinceLabel ?? '—'}</p>
-            </div>
-            <div className="bg-[#0F1A1E] rounded p-2">
-              <p className="text-[9px] text-white/40 mb-0.5">Wallets tracked</p>
-              <p className="text-[11px] font-mono">{walletsTracked?.toLocaleString() ?? '—'}</p>
-            </div>
-            <div className="bg-[#0F1A1E] rounded p-2">
-              <p className="text-[9px] text-white/40 mb-0.5">Last heartbeat</p>
-              <p className="text-[11px] font-mono">{ago(lastHeartbeat)}</p>
-            </div>
-          </div>
-        </div>
+        <CaptureCoverageStrip
+          lastHeartbeat={lastHeartbeat}
+          walletsTracked={walletsTracked}
+          captureSince={captureSince}
+          refreshNote={`data refreshed every 5 min${computedAt ? ` · computed ${ago(computedAt)}` : ''}`}
+        />
 
         {coins.length === 0 ? (
           <div className="card p-8 text-center">
