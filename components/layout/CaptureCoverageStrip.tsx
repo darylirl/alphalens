@@ -3,6 +3,8 @@
 // honest provenance strip. Server component; all values come from
 // capture_health rows the caller actually read.
 
+import Link from 'next/link'
+
 function ago(ts: string | null): string {
   if (!ts) return '—'
   const m = Math.round((Date.now() - new Date(ts).getTime()) / 60000)
@@ -39,10 +41,13 @@ export function CaptureCoverageStrip({
           <p className="text-[9px] text-white/40 mb-0.5">Capturing since</p>
           <p className="text-[11px] font-mono">{sinceLabel ?? '—'}</p>
         </div>
-        <div className="bg-[#0F1A1E] rounded p-2">
+        {/* Links to /cohort — the receipts page listing every tracked wallet */}
+        <Link href="/cohort" className="bg-[#0F1A1E] rounded p-2 hover:bg-white/[0.04] transition-colors">
           <p className="text-[9px] text-white/40 mb-0.5">Wallets tracked</p>
-          <p className="text-[11px] font-mono">{walletsTracked?.toLocaleString() ?? '—'}</p>
-        </div>
+          <p className="text-[11px] font-mono text-[#34EAB9] underline decoration-[#34EAB9]/40 underline-offset-2">
+            {walletsTracked?.toLocaleString() ?? '—'}
+          </p>
+        </Link>
         <div className="bg-[#0F1A1E] rounded p-2">
           <p className="text-[9px] text-white/40 mb-0.5">Last heartbeat</p>
           <p className="text-[11px] font-mono">{ago(lastHeartbeat)}</p>

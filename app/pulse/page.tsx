@@ -153,7 +153,10 @@ export default async function PulsePage() {
 
         <p className="text-[10px] text-white/30 text-center pb-2">
           Aggregated flow direction from exchange-reported fill types. USD
-          figures are traded notional, not open interest. Nothing here is a
+          figures are traded notional, not open interest. Market-maker
+          wallets are excluded from capture as of Aug 25, 2026 — their
+          two-sided inventory churn is market-neutral noise, not directional
+          signal (previously captured history is retained). Nothing here is a
           recommendation.
         </p>
       </div>
