@@ -416,6 +416,34 @@ The agent runs an agentic loop (up to 10 rounds of tool calls) and returns a for
 
 ---
 
+## Capture Service
+
+`capture-service/index.mjs` is the always-on daemon that captures Hyperliquid
+fills and 1m candles into Supabase for the verification engine (WS
+subscriptions plus a rotating REST sweep, idempotent writes, heartbeats to
+`capture_health`).
+
+### Capture scope (`SWEEP_SCOPE`)
+
+The daemon originally swept every tracked wallet (~7,000). At that scope the
+`fills` table reached **3.8GB** and was growing **4-10GB/month** — unbounded
+disk growth for wallets nothing downstream reads. Capture now concentrates on
+the classified cohort, enforced by a flag rather than a convention:
+
+- `wallets.capture_enabled` (migration `011_capture_scope.sql`, default
+  `false`) is set for every classified wallet (`archetype not null`), plus
+  any wallet referenced by an active signal or a verification job spec.
+- `SWEEP_SCOPE=cohort` (the default) makes both the WS subscription set and
+  the rotating REST sweep read only `capture_enabled` wallets (paginated —
+  PostgREST caps responses near 1000 rows).
+- `SWEEP_SCOPE=all` is an explicit override that restores the full sweep.
+
+The candle coin universe is unchanged (still driven by `recent_fill_coins`).
+Existing fills from out-of-scope wallets are kept — they simply stop
+accumulating; nothing is deleted.
+
+---
+
 ## Database Schema
 
 The database has 7 tables defined in `supabase/migrations/001_init.sql`. Only 2 are actively used by the application:
@@ -439,6 +467,7 @@ avg_hold_seconds     int                 -- Average position hold time
 avg_leverage         float               -- Average leverage used
 most_traded_asset    text                -- Most frequently traded token
 is_seeded            boolean             -- True if from auto-discovery
+capture_enabled      boolean             -- Capture scope flag (see Capture Service)
 last_updated         timestamptz
 created_at           timestamptz
 ```

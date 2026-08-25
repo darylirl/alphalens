@@ -8,7 +8,8 @@
  *  - WebSocket userFills subscriptions for a prioritized subset of tracked
  *    wallets (WS_WALLET_LIMIT; Hyperliquid caps subscriptions per IP, and the
  *    tracked table holds thousands of wallets).
- *  - A rotating REST poll sweep over ALL tracked wallets. This is the
+ *  - A rotating REST poll sweep over the in-scope wallets (SWEEP_SCOPE,
+ *    default: the capture_enabled cohort). This is the
  *    gap-detection path the spec asks for AND the lossless backstop: the
  *    fills endpoint retains a wallet's most recent ~2000 fills, so a sweep
  *    cycle shorter than "2000 fills of activity" misses nothing. It also
@@ -29,7 +30,11 @@
  *
  * Env: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_ANON_KEY),
  *      TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID (optional),
- *      WS_WALLET_LIMIT (default 300), SWEEP_WALLETS_PER_MIN (default 30).
+ *      WS_WALLET_LIMIT (default 300), SWEEP_WALLETS_PER_MIN (default 30),
+ *      SWEEP_SCOPE (default 'cohort': only wallets with capture_enabled=true —
+ *      the classified cohort plus wallets referenced by active signals or
+ *      verification specs; 'all' is an explicit override that sweeps every
+ *      tracked wallet).
  *
  * Run: node index.mjs   (Node >= 22; zero npm dependencies)
  */
@@ -45,6 +50,7 @@ if (!SUPABASE_URL || !SUPABASE_KEY) {
 }
 
 const WS_WALLET_LIMIT = parseInt(process.env.WS_WALLET_LIMIT || '300', 10)
+const SWEEP_SCOPE = (process.env.SWEEP_SCOPE || 'cohort').toLowerCase()
 const SWEEP_WALLETS_PER_MIN = parseInt(process.env.SWEEP_WALLETS_PER_MIN || '30', 10)
 const CANDLE_COIN_LIMIT = parseInt(process.env.CANDLE_COIN_LIMIT || '150', 10)
 const HEARTBEAT_MS = 60_000
@@ -227,13 +233,29 @@ async function sbPageAll(pathQs, pageSize = 1000) {
 
 async function refreshWallets() {
   try {
+    // Scope: 'cohort' (default) reads only capture_enabled=true wallets —
+    // the classified cohort plus wallets referenced by active signals or
+    // verification specs (migration 011). 'all' is an explicit override
+    // that sweeps every tracked wallet. Both the WS subscription set and
+    // the rotating sweep derive from this one list.
+    let scope = SWEEP_SCOPE === 'all' ? '' : '&capture_enabled=is.true'
+    if (scope) {
+      // Deploy-order safety: if the capture_enabled column does not exist
+      // yet (migration 011 not applied), capturing at the old full scope
+      // beats capturing nothing. Warn loudly and fall back.
+      const probe = await sb(`wallets?select=address${scope}&limit=1`).catch(() => null)
+      if (probe === null) {
+        log('WARN: capture_enabled scope query failed (migration 011 missing?) — falling back to SWEEP_SCOPE=all')
+        scope = ''
+      }
+    }
     // Classified wallets first (they are the analytically interesting set),
     // then everything else. removed_at filter tolerates the column's absence.
     const classified = await sbPageAll(
-      'wallets?select=address&archetype=not.is.null&removed_at=is.null'
-    ).catch(() => sbPageAll('wallets?select=address&archetype=not.is.null'))
-    const rest = await sbPageAll('wallets?select=address&removed_at=is.null&order=address')
-      .catch(() => sbPageAll('wallets?select=address&order=address'))
+      `wallets?select=address&archetype=not.is.null&removed_at=is.null${scope}`
+    ).catch(() => sbPageAll(`wallets?select=address&archetype=not.is.null${scope}`))
+    const rest = await sbPageAll(`wallets?select=address&removed_at=is.null&order=address${scope}`)
+      .catch(() => sbPageAll(`wallets?select=address&order=address${scope}`))
     const ordered = []
     const seen = new Set()
     for (const w of [...(classified || []), ...(rest || [])]) {
@@ -456,7 +478,7 @@ async function heartbeat() {
 
 // ── Main ────────────────────────────────────────────────────────────────────
 async function main() {
-  log(`capture daemon starting: ws_limit=${WS_WALLET_LIMIT}, sweep=${SWEEP_WALLETS_PER_MIN}/min`)
+  log(`capture daemon starting: scope=${SWEEP_SCOPE}, ws_limit=${WS_WALLET_LIMIT}, sweep=${SWEEP_WALLETS_PER_MIN}/min`)
   await refreshWallets()
   await refreshCoins()
   connectWs()

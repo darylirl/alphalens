@@ -49,6 +49,19 @@ a missing bucket is the absence of measurement. Concretely:
   sequential — a previous unpaced refresh schedule saturated the production
   database.
 
+## Capacity budget: capture scope
+
+Disk growth is bounded by an enforced mechanism, not a number in a doc:
+`wallets.capture_enabled` (migration 011, default false) marks the wallets
+the daemon captures — the classified cohort (`archetype not null`) plus any
+wallet referenced by an active signal or a verification job spec. The
+capture daemon defaults to `SWEEP_SCOPE=cohort` and reads only
+`capture_enabled` wallets for both WS subscriptions and the rotating sweep;
+`SWEEP_SCOPE=all` is an explicit, deliberate override. Context: sweeping all
+~7,000 tracked wallets grew `fills` (3.8GB) by 4-10GB/month. When adding
+wallets to capture, set the flag — never widen the daemon's query. Existing
+out-of-scope fills are kept, never deleted.
+
 ## Operational notes
 
 - The Supabase Management API caps `statement_timeout` at the outer
