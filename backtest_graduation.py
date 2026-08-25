@@ -909,11 +909,15 @@ def main():
     print("Eligibility floor per decision date: ≥60 resolved round trips and")
     print("≥30 active days in the trailing 60d window, complete verified history")
     print("(startPosition validation), equity anchor servable.")
+    print("Failure columns count, among that date's ELIGIBLE wallets, how many")
+    print("fail each process criterion (a wallet can fail several at once).")
     print(f"\n{'decision':>10}  {'active':>6}  {'excluded':>8}  {'eligible':>8}  "
-          f"{'graduated(G0)':>13}")
+          f"{'graduated(G0)':>13}  {'f_dd':>4}  {'f_cv':>4}  {'f_pl':>4}  "
+          f"{'f_ex':>4}  {'f_lq':>4}")
     coverage_rows = []
     for t in decisions_all:
         active = excluded = eligible = graduated = 0
+        fails = {"dd": 0, "cv": 0, "postloss": 0, "exposure": 0, "liq": 0}
         for w in wallets:
             m = metrics_cache[(w.address, t)]
             if m["excluded"] == "no_fills_in_window":
@@ -924,12 +928,30 @@ def main():
                 continue
             if passes_floor(m, G0_DEFAULT):
                 eligible += 1
+                if m["dd_frac"] > G0_DEFAULT["max_dd_frac"]:
+                    fails["dd"] += 1
+                if m["cv"] is not None and m["cv"] > G0_DEFAULT["max_size_cv"]:
+                    fails["cv"] += 1
+                if (m["postloss_ratio"] is not None
+                        and m["postloss_ratio"] > G0_DEFAULT["max_postloss_ratio"]):
+                    fails["postloss"] += 1
+                if m["exposure_max"] > G0_DEFAULT["max_exposure_frac"]:
+                    fails["exposure"] += 1
+                if m["n_liq"] > G0_DEFAULT["max_liquidations"]:
+                    fails["liq"] += 1
                 if passes_g0(m, G0_DEFAULT):
                     graduated += 1
         coverage_rows.append({"decision_date": iso(t), "t": t, "active": active,
                               "excluded": excluded, "eligible": eligible,
-                              "graduated_headline": graduated})
-        print(f"{iso(t):>10}  {active:>6}  {excluded:>8}  {eligible:>8}  {graduated:>13}")
+                              "graduated_headline": graduated,
+                              "fail_drawdown": fails["dd"],
+                              "fail_sizing_cv": fails["cv"],
+                              "fail_postloss": fails["postloss"],
+                              "fail_exposure": fails["exposure"],
+                              "fail_liquidation": fails["liq"]})
+        print(f"{iso(t):>10}  {active:>6}  {excluded:>8}  {eligible:>8}  "
+              f"{graduated:>13}  {fails['dd']:>4}  {fails['cv']:>4}  "
+              f"{fails['postloss']:>4}  {fails['exposure']:>4}  {fails['liq']:>4}")
 
     # Longest verified-contiguous run of decision dates with ≥1 eligible wallet.
     best_start = best_len = cur_start = cur_len = 0
@@ -967,16 +989,18 @@ def main():
     print(f"18-month requirement: window is {window_months} months → "
           f"{'UNDER 18 MONTHS — LOW-POWER' if low_power else 'met'}")
 
+    in_window = set(decisions)
     with open(RESULTS / "coverage.csv", "w", newline="") as fh:
-        wcsv = csv.DictWriter(fh, fieldnames=["decision_date", "active", "excluded",
-                                              "eligible", "graduated_headline",
-                                              "in_walkforward_window"])
+        fields = ["decision_date", "active", "excluded", "eligible",
+                  "graduated_headline", "fail_drawdown", "fail_sizing_cv",
+                  "fail_postloss", "fail_exposure", "fail_liquidation",
+                  "in_walkforward_window"]
+        wcsv = csv.DictWriter(fh, fieldnames=fields)
         wcsv.writeheader()
         for r in coverage_rows:
-            wcsv.writerow({"decision_date": r["decision_date"], "active": r["active"],
-                           "excluded": r["excluded"], "eligible": r["eligible"],
-                           "graduated_headline": r["graduated_headline"],
-                           "in_walkforward_window": r["t"] in set(decisions)})
+            row = {k: r[k] for k in fields if k in r}
+            row["in_walkforward_window"] = r["t"] in in_window
+            wcsv.writerow(row)
 
     if args.coverage_only:
         print("\n--coverage-only: stopping here as requested.")
