@@ -43,6 +43,7 @@ test('firstEvaluableMs is the start of data plus the lookback', () => {
   assert.equal(s.firstEvaluableMs(24), T0 + 24 * HOUR)
   assert.equal(s.firstEvaluableMs(48), T0 + 48 * HOUR)
   assert.equal(new CohortSeries([], { coin: 'BTC' }).firstEvaluableMs(24), null)
+  assert.equal(new CohortSeries([], { coin: 'BTC' }).at(T0, 24), null)
 })
 
 test('cohort metrics match the pulse_24h shapes', () => {
@@ -61,14 +62,55 @@ test('cohort metrics match the pulse_24h shapes', () => {
   assert.equal(s.metric('new_position_count', at, 24, 'net'), 48)
 })
 
-test('hours with no captured fills read as zero flow, not as missing', () => {
+test('an hour the aggregate never built is a hole, not zero flow', () => {
+  // Rows exist only at hour 0 and hour 47. Under the old zero-filling series
+  // every hour between them read as "cohort net flow was exactly 0" — an
+  // outage rendered as tradeable data. Now they read as uncovered.
   const sparse = [
     { bucket: new Date(T0).toISOString(), fills: 1, wallets: 1, notional: 100, net_flow: 100, new_longs: 1, new_shorts: 0 },
     { bucket: new Date(T0 + 47 * HOUR).toISOString(), fills: 1, wallets: 1, notional: 100, net_flow: -50, new_longs: 0, new_shorts: 1 },
   ]
   const s = new CohortSeries(sparse, { coin: 'BTC', wallets: null })
-  assert.equal(s.at(T0 + 48 * HOUR, 24).net_flow_usd, -50)
-  assert.equal(s.at(T0 + 30 * HOUR, 24).net_flow_usd, 0)
+  assert.equal(s.at(T0 + 48 * HOUR, 24), null, 'a window spanning un-built hours must not evaluate')
+  assert.equal(s.at(T0 + 30 * HOUR, 24), null, 'un-built hours must never read as zero flow')
+  assert.equal(s.metric('net_flow_usd', T0 + 30 * HOUR, 24), null)
+})
+
+test('a covered hour with no row for this coin is a real zero', () => {
+  // Coverage says the aggregate was built for all 48 hours; this coin simply
+  // did not trade in most of them. That is a genuine zero, not a hole.
+  const covered = new Set(Array.from({ length: 48 }, (_, i) => Math.floor((T0 + i * HOUR) / HOUR)))
+  const rows = [
+    { bucket: new Date(T0 + 40 * HOUR).toISOString(), fills: 2, wallets: 1, notional: 500, net_flow: 250, new_longs: 1, new_shorts: 0 },
+  ]
+  const s = new CohortSeries(rows, { coin: 'QUIET', wallets: null, coveredHours: covered })
+  const agg = s.at(T0 + 47 * HOUR, 24)
+  assert.ok(agg, 'a fully covered window must evaluate even when this coin was idle')
+  assert.equal(agg.net_flow_usd, 250)
+  assert.equal(s.coverageSource, 'aggregate build coverage')
+})
+
+test('holes are reported and the longest covered run is exposed', () => {
+  const covered = new Set([
+    ...Array.from({ length: 10 }, (_, i) => Math.floor(T0 / HOUR) + i),        // 0..9
+    ...Array.from({ length: 30 }, (_, i) => Math.floor(T0 / HOUR) + 20 + i),   // 20..49
+  ])
+  const s = new CohortSeries([], { coin: 'BTC', wallets: null, coveredHours: covered })
+  assert.equal(s.holes.length, 1)
+  assert.equal(s.holes[0].hours, 10)
+  const run = s.longestCoveredRun()
+  assert.equal(run[0], (Math.floor(T0 / HOUR) + 20) * HOUR)
+  assert.equal(run[1], (Math.floor(T0 / HOUR) + 50) * HOUR)
+})
+
+test('firstEvaluableMs skips a run that is shorter than the lookback', () => {
+  const base = Math.floor(T0 / HOUR)
+  const covered = new Set([
+    ...Array.from({ length: 5 }, (_, i) => base + i),          // too short for 24h
+    ...Array.from({ length: 40 }, (_, i) => base + 30 + i),    // long enough
+  ])
+  const s = new CohortSeries([], { coin: 'BTC', wallets: null, coveredHours: covered })
+  assert.equal(s.firstEvaluableMs(24), (base + 30 + 23 + 1) * HOUR)
 })
 
 // ── indicators ──────────────────────────────────────────────────────────────

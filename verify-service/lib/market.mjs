@@ -107,7 +107,7 @@ export class Market {
     const targets = [...new Set(targetsMs)].sort((a, b) => a - b)
     for (let i = 0; i < targets.length; i += chunkSize) {
       const chunk = targets.slice(i, i + chunkSize)
-      const rows = await rpc('verify_tape_prices', {
+      const rows = await rpc('verify_tape_prices_at', {
         p_coin: coin,
         p_targets: chunk.map((t) => new Date(t).toISOString()),
         p_search: `${Math.round(searchMs / 1000)} seconds`,

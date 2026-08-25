@@ -46,3 +46,34 @@ database `CHECK` constraints on persisted results
 "gross returns" toggle, or a test fixture that bypasses them: a number produced
 without these frictions is not a result, and there is no code path in which it
 is acceptable to produce one.
+
+### 3. Missing data is never zero
+
+An absent row means *we do not know*, not *nothing happened*. The two are
+opposite claims and only one of them is honest.
+
+This is not hypothetical: the hourly cohort aggregate
+(`cohort_flow_hourly`) was partially built during development, and a
+zero-filling rolling window replayed those un-built hours as genuine
+"cohort net flow went flat" readings — manufacturing entry signals out of an
+outage. The strategy would have looked tradeable because the outage looked
+like data.
+
+Therefore, anywhere a series is assembled from stored aggregates:
+
+- Track coverage **explicitly and separately from the values**. For
+  `cohort_flow_hourly` the ground truth is "the aggregate holds a row for ANY
+  coin in that hour" — the build is global per hour, so a coin missing from a
+  covered hour genuinely did not trade, while an hour missing entirely was
+  never computed.
+- A rolling window that touches an uncovered point returns `null`, never `0`.
+  `null` must propagate through rule evaluation (Kleene logic) so it cannot
+  fire anything — reading it as `false` is the same bug wearing a different
+  hat.
+- When coverage has holes, narrow the served window to the longest contiguous
+  covered run and **report what was dropped** in `data_coverage`. Silently
+  spanning a gap is the failure this rule exists to prevent.
+- The same applies to any completeness claim about a recent window: fills for
+  a period still being backfilled are not a complete picture of that period,
+  and a wallet count that collapses is the signal that a window is damaged
+  rather than quiet.

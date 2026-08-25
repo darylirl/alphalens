@@ -258,41 +258,6 @@ as $$
   offset greatest(p_offset, 0)
 $$;
 
--- Batched tape lookup for the replay's fill-price ladder.
---
--- Every decision timestamp a replay can produce is known before the replay
--- runs (bar close + the friction delay), so the engine prefetches them in one
--- statement per batch instead of one HTTP round trip per fill. Measured on a
--- loaded instance, the per-fill version spent more time in PostgREST round
--- trips and statement timeouts than in the query itself.
---
--- Bounded by construction: exactly one row per target, and the caller chunks
--- the target array (see Market.prefetchTape).
-create or replace function verify_tape_prices(
-  p_coin    text,
-  p_targets timestamptz[],
-  p_search  interval default interval '15 minutes'
-)
-returns table (target timestamptz, ts timestamptz, price double precision)
-language sql
-stable
-parallel safe
-set search_path = public
-as $$
-  select t.target, hit.timestamp, hit.price
-  from unnest(p_targets) as t(target)
-  left join lateral (
-    select f.timestamp, f.price
-      from fills f
-     where f.asset = p_coin
-       and f.timestamp >= t.target
-       and f.timestamp <  t.target + p_search
-       and f.tid is not null
-     order by f.timestamp asc
-     limit 1
-  ) hit on true
-$$;
-
 -- The cohort series scans fills by (asset, timestamp); without this index the
 -- planner falls back to the timestamp-only index and re-filters millions of
 -- rows per coin.
@@ -332,6 +297,4 @@ grant usage on sequence verification_results_id_seq to service_role;
 revoke all on function claim_verification_job(text) from public;
 grant execute on function claim_verification_job(text) to service_role;
 grant execute on function verify_cohort_flow_hourly(text, timestamptz, timestamptz, text[], int, int)
-  to anon, authenticated, service_role;
-grant execute on function verify_tape_prices(text, timestamptz[], interval)
   to anon, authenticated, service_role;

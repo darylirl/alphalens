@@ -146,31 +146,15 @@ begin
   return format('%s: filled %s .. %s -> %s rows', p_slice, lo, hi, n);
 end $$;
 
--- Recent hours are rebuilt every 15 minutes: the capture daemon's REST sweep
--- backfills fills the WebSocket missed, so the last few hours keep changing
--- after the fact.
-select cron.schedule(
-  'rebuild-cohort-flow-hourly',
-  '*/15 * * * *',
-  $$select cohort_flow_rebuild(now() - interval '6 hours', now())$$
-);
-
--- Historical backfill. The bounds are dated literals on purpose: a relative
--- bound would drift every tick and never converge. Once the range is built the
--- job returns 'complete' and costs nothing, so leaving it scheduled is cheap.
---
--- ONE job, every 10 minutes, six hours at a time. This pacing is deliberate
--- and was learned the hard way: four slices every two minutes saturated the
+-- NO pg_cron SCHEDULE FOR THE REBUILD. This is deliberate and was learned the
+-- hard way: four backfill slices on a two-minute cron saturated this
 -- instance's IO so completely that PostgREST stopped answering and the capture
--- daemon's writes failed for the better part of an hour. This table shares a
--- small instance with a continuously-writing capture daemon — backfill it
--- slowly, and widen the step only after watching cron.job_run_details and the
--- daemon's heartbeats stay healthy.
-select cron.schedule(
-  'cohort-backfill-history',
-  '*/10 * * * *',
-  $$select cohort_flow_backfill_slice('history', '2026-06-16T00:00:00Z', '2026-08-16T00:00:00Z', interval '6 hours')$$
-);
+-- daemon's writes failed for the better part of an hour. Aggregation over
+-- `fills` is heavy and its cost grows with capture volume, so it is driven by
+-- verify-service/backfill.mjs — a worker that paces itself, holds a lease
+-- (migration 012) so two runs cannot overlap, and can be stopped instantly.
+-- Keep pg_cron for cheap, bounded refreshes only, and respect the project's
+-- 30-minute floor for those.
 
 -- Reads: public, and paged like everything else (CLAUDE.md).
 alter table cohort_flow_hourly enable row level security;

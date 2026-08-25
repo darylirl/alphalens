@@ -201,6 +201,8 @@ export async function replayCoin({ spec, coin, market, cohort, log = [] }) {
   }
 
   const cohortWindows = collectCohortWindows(spec.entry.rule, collectCohortWindows(spec.exit.condition))
+  let cohortHoles = []
+  let coveredRun = null
   if (cohortWindows.size > 0) {
     const maxWindowH = Math.max(...cohortWindows)
     const cohortFirst = cohort ? cohort.firstEvaluableMs(maxWindowH) : null
@@ -211,11 +213,34 @@ export async function replayCoin({ spec, coin, market, cohort, log = [] }) {
       if (cohortFirst > firstEvaluable) firstEvaluable = cohortFirst
       reasons.push([`cohort ${maxWindowH}h lookback`, cohortFirst])
     }
+
+    // Missing data is never zero (CLAUDE.md): where the aggregate has holes,
+    // the replay runs inside the LONGEST contiguous covered run rather than
+    // straddling a gap, and says out loud what it dropped. The null-guard in
+    // CohortSeries.at() is the second line of defence — a rule that reaches
+    // into a hole cannot evaluate at all.
+    cohortHoles = cohort?.holes ?? []
+    if (cohort && cohortHoles.length > 0) {
+      coveredRun = cohort.longestCoveredRun()
+      if (!coveredRun) {
+        firstEvaluable = Infinity
+        reasons.push(['longest contiguous cohort coverage', null])
+      } else {
+        const runFirstEvaluable = coveredRun[0] + maxWindowH * 3_600_000
+        if (runFirstEvaluable > firstEvaluable) firstEvaluable = runFirstEvaluable
+        reasons.push(['longest contiguous cohort coverage', runFirstEvaluable])
+        log.push(`${coin}: cohort aggregate has ${cohortHoles.length} hole(s) totalling `
+          + `${cohortHoles.reduce((s, h) => s + h.hours, 0)}h; replay narrowed to the longest contiguous run `
+          + `${new Date(coveredRun[0]).toISOString()} .. ${new Date(coveredRun[1]).toISOString()} `
+          + '— uncovered hours are NOT read as zero flow')
+      }
+    }
   }
 
   const lastEvaluable = Math.min(
     windowEnd,
     cohortWindows.size > 0 && cohort?.lastDataMs ? cohort.lastDataMs : windowEnd,
+    coveredRun ? coveredRun[1] : windowEnd,
     bars[bars.length - 1].close_ts,
   )
 
@@ -358,6 +383,17 @@ export async function replayCoin({ spec, coin, market, cohort, log = [] }) {
       served_to: new Date(lastEvaluable).toISOString(),
       cohort_rows: cohort ? cohort.rowCount : null,
       cohort_source: cohort ? cohort.source : null,
+      cohort_coverage: cohort
+        ? {
+          hours_spanned: cohort.n,
+          hours_covered: cohort.coveredHourCount,
+          coverage_basis: cohort.coverageSource,
+          holes: cohortHoles,
+          narrowed_to_longest_run: coveredRun
+            ? { from: new Date(coveredRun[0]).toISOString(), to: new Date(coveredRun[1]).toISOString() }
+            : null,
+        }
+        : null,
       coverage_reasons: Object.fromEntries(
         reasons.map(([k, v]) => [k, v === null ? null : new Date(v).toISOString()]),
       ),
