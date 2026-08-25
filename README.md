@@ -2,7 +2,7 @@
 
 **Hyperliquid Trader Intelligence Platform**
 
-AlphaLens is a full-stack trading analytics platform built on top of the [Hyperliquid](https://hyperliquid.xyz) perpetuals DEX. It discovers, classifies, and tracks on-chain wallets, letting users study smart-money behaviour, copy trades, build no-code strategies, and receive real-time alerts.
+AlphaLens is a verification-first trading research platform built on the [Hyperliquid](https://hyperliquid.xyz) perpetuals DEX. It captures and classifies on-chain wallet activity, aggregates real cohort positioning (/pulse), and lets users backtest ideas with real frictions. Copy trading was deliberately removed after our own 28,318-trade replay showed it loses money — that verification engine is the core of the product.
 
 **Live deployment:** [alphalens-taupe.vercel.app](https://alphalens-taupe.vercel.app)
 
@@ -48,11 +48,11 @@ AlphaLens is a full-stack trading analytics platform built on top of the [Hyperl
 
 - **Wallet Archetype Classification** — Classifies wallets into 7 trading styles: Scalper, Swing Trader, Momentum Trader, High Conviction, Funding Arb, Farmer, Market Maker. Based on hold time, trade frequency, leverage patterns, and PnL distribution.
 
-- **Copy Trading Setup** — UI for configuring copy-trade relationships (target wallet, copy ratio, max position size, delay, asset filters). Configs are stored in Supabase. **Note:** Actual trade execution is not implemented — this is configuration only.
+- **Copy Trading (RETIRED)** — removed after our own backtests (28,318 replayed trades with real frictions) showed naive copy-trading loses money. /copy-trade is a static explainer; /api/copy-trade returns 410 Gone. See the autopsy in /learn.
 
 - **Pocket Quant (Strategy Builder)** — No-code rule builder with one-click strategy templates (Momentum Breakout, Mean Reversion, Trend Following). Includes a mock backtest engine. **Note:** The backtest produces simulated results, not real historical backtests.
 
-- **Performance Tracking** — Attribution page for analysing copy-trade results: total PnL, best/worst trades, per-wallet breakdown. Currently uses placeholder demo data.
+- **Performance Tracking** — Real per-address Hyperliquid performance (fills + funding based) for a connected wallet. The disconnected state shows live capture-pipeline status from capture_health, never placeholder numbers.
 
 - **Watchlists** — Client-side watchlist management (create lists, add/remove wallets). Stored in Zustand (browser memory, not persisted to database).
 
@@ -296,11 +296,11 @@ alphalens/
 | `/hunters` | Explorer | `/api/hunters` → Supabase | Filterable wallet leaderboard with archetype/Sharpe/PnL filters |
 | `/smart-money` | Smart Money | `/api/smart-money` → Hyperliquid + Supabase | Token confidence scores, tier breakdowns, sector analysis |
 | `/wallet/[address]` | Wallet Profile | `/api/wallets/[address]` → Hyperliquid | Tabbed view: Overview (positions, PnL chart, archetype, token metrics, strategy summary), Trade History (paginated fills), Funding (funding payments) |
-| `/copy-trade` | Copy Trade | `/api/copy-trade` → Supabase | Configure copy-trading relationships (config only, no execution) |
+| `/copy-trade` | Copy Trade (retired) | static | Explainer for why copy trading was removed; legacy UI quarantined |
 | `/quant` | Pocket Quant | `/api/quant/backtest` (mock) | Rule builder, strategy templates, mock backtester |
 | `/performance` | Performance | Hardcoded demo data | Copy-trade performance attribution and trade log |
 | `/agent` | AI Agent | `/api/agent` → Claude API + Hyperliquid + Supabase | Natural language queries for wallet data, market analysis, and PnL lookups |
-| `/alerts` | Alert Center | `/api/signals` (stub) | Live signals, consensus alerts, alert log, notification settings |
+| `/alerts` | Alert Center | `/api/signals` | Live signals and consensus from the signals table; settings honestly marked not-yet-wired |
 | `/watchlist` | Watchlist | Zustand (client-only) | Manage wallet watchlists (not persisted to DB) |
 | `/learn` | Learn | Static | Educational content on archetypes, tiers, metrics |
 
@@ -318,20 +318,18 @@ alphalens/
 | `/api/hunters` | GET | Supabase `wallets` table | Paginated wallet leaderboard with filtering and sorting |
 | `/api/smart-money` | GET | Hyperliquid + Supabase | Token-level analysis, tier classification, sector insights |
 | `/api/seed` | GET/POST | Hyperliquid `recentTrades` → Supabase | Discovers wallets from recent trades, computes metrics, seeds DB |
-| `/api/copy-trade` | GET/POST | Supabase `copy_trade_configs` | Read/write copy-trade configurations |
+| `/api/copy-trade` | GET/POST | none | Returns 410 Gone — feature retired after backtest evidence |
 | `/api/agent` | POST | Claude API + Hyperliquid + Supabase | AI agent that interprets natural language queries and uses tools to fetch live data |
 
-### Stubs / Partially Implemented
+### Implementation Notes
 
-| Endpoint | Method | Status | Description |
-|----------|--------|--------|-------------|
-| `/api/signals` | GET | **Stub** — returns `{ signals: [], consensus: [] }` | Meant for WebSocket-fed signal pipeline |
-| `/api/quant/backtest` | POST | **Mock** — returns simulated results | Accepts rules, returns fake equity curve |
-| `/api/quant/rules` | GET | **Stub** — returns empty array | Meant to fetch saved quant rules from Supabase |
-| `/api/leaderboard` | GET | **Stub** — returns empty object | Intended Hyperliquid leaderboard integration |
-| `/api/scanner` | GET | **Stub** — returns empty array | Intended for asset screening |
-| `/api/stream` | GET | **Stub** — returns message | Planned SSE/WebSocket streaming endpoint |
-| `/api/wallets/[address]/track` | GET | **Stub** — returns success | Webhook registration placeholder |
+All previously stubbed endpoints are now implemented: `/api/signals` (real
+signals + consensus from Supabase), `/api/quant/backtest` (real candleSnapshot
+data feeding the client-side engine), `/api/quant/rules`, `/api/leaderboard`,
+`/api/scanner`, and `/api/stream` (Edge SSE). `/api/copy-trade` intentionally
+returns 410 Gone. Known caveat: the Edge SSE routes construct outbound
+WebSockets, which Vercel's Edge runtime does not support in production — the
+signal-generation path is being moved into the capture daemon.
 
 ---
 
@@ -418,6 +416,34 @@ The agent runs an agentic loop (up to 10 rounds of tool calls) and returns a for
 
 ---
 
+## Capture Service
+
+`capture-service/index.mjs` is the always-on daemon that captures Hyperliquid
+fills and 1m candles into Supabase for the verification engine (WS
+subscriptions plus a rotating REST sweep, idempotent writes, heartbeats to
+`capture_health`).
+
+### Capture scope (`SWEEP_SCOPE`)
+
+The daemon originally swept every tracked wallet (~7,000). At that scope the
+`fills` table reached **3.8GB** and was growing **4-10GB/month** — unbounded
+disk growth for wallets nothing downstream reads. Capture now concentrates on
+the classified cohort, enforced by a flag rather than a convention:
+
+- `wallets.capture_enabled` (migration `011_capture_scope.sql`, default
+  `false`) is set for every classified wallet (`archetype not null`), plus
+  any wallet referenced by an active signal or a verification job spec.
+- `SWEEP_SCOPE=cohort` (the default) makes both the WS subscription set and
+  the rotating REST sweep read only `capture_enabled` wallets (paginated —
+  PostgREST caps responses near 1000 rows).
+- `SWEEP_SCOPE=all` is an explicit override that restores the full sweep.
+
+The candle coin universe is unchanged (still driven by `recent_fill_coins`).
+Existing fills from out-of-scope wallets are kept — they simply stop
+accumulating; nothing is deleted.
+
+---
+
 ## Database Schema
 
 The database has 7 tables defined in `supabase/migrations/001_init.sql`. Only 2 are actively used by the application:
@@ -441,6 +467,7 @@ avg_hold_seconds     int                 -- Average position hold time
 avg_leverage         float               -- Average leverage used
 most_traded_asset    text                -- Most frequently traded token
 is_seeded            boolean             -- True if from auto-discovery
+capture_enabled      boolean             -- Capture scope flag (see Capture Service)
 last_updated         timestamptz
 created_at           timestamptz
 ```

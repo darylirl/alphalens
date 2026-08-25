@@ -1,0 +1,114 @@
+{
+  "spec": {
+    "spec_version": "1",
+    "hypothesis_text": "When the 24h rolling cohort net flow into BTC crosses above zero, going long for 6h is profitable after realistic frictions.",
+    "universe": {
+      "coins": [
+        "BTC"
+      ],
+      "cohort_filters": null
+    },
+    "entry": {
+      "type": "cross_above",
+      "series": "cohort.net_flow_usd",
+      "threshold": 0,
+      "window": "24h",
+      "side": "long"
+    },
+    "exit": {
+      "type": "max_holding_time_h",
+      "hours": 6
+    },
+    "window": {
+      "start": "2026-06-16T00:00:00.000Z",
+      "end": "2026-08-15T00:00:00.000Z"
+    },
+    "frictions": {
+      "delay_s": 60,
+      "slippage_bps": 5,
+      "taker_fee_pct": 0.045
+    },
+    "sizing": {
+      "type": "fixed_usd",
+      "usd": 1000
+    },
+    "kill_criteria": [
+      {
+        "id": "unprofitable",
+        "metric": "net_pnl_usd",
+        "op": "lte",
+        "value": 0
+      },
+      {
+        "id": "too_few_trades",
+        "metric": "trade_count",
+        "op": "lt",
+        "value": 10
+      }
+    ]
+  },
+  "spec_hash": "ff3b026a51b2dd1576cc4138c4012a0c30adc83978403a9f33fb36ef90bcab80",
+  "metrics": {
+    "net_pnl_usd": -78.53,
+    "gross_pnl_usd": -21.84,
+    "fees_usd": 56.69,
+    "win_rate": 0.4762,
+    "profit_factor": 0.6622,
+    "max_drawdown_usd": 81.58,
+    "max_drawdown_pct": 8.16,
+    "trade_count": 63,
+    "avg_hold_s": 21600,
+    "monthly": [
+      {
+        "month": "2026-06",
+        "net_pnl_usd": -73.96
+      },
+      {
+        "month": "2026-07",
+        "net_pnl_usd": 28.43
+      },
+      {
+        "month": "2026-08",
+        "net_pnl_usd": -33.01
+      }
+    ]
+  },
+  "verdict": {
+    "overall": "killed",
+    "criteria": [
+      {
+        "id": "unprofitable",
+        "pass": false,
+        "detail": "net_pnl_usd=-78.53 must be > 0"
+      },
+      {
+        "id": "too_few_trades",
+        "pass": true,
+        "detail": "trade_count=63 must be >= 10"
+      }
+    ]
+  },
+  "data_coverage": {
+    "window_requested": {
+      "start": "2026-06-16T00:00:00.000Z",
+      "end": "2026-08-15T00:00:00.000Z"
+    },
+    "window_served": {
+      "start": "2026-06-16T00:00:00+00:00",
+      "end": "2026-08-15T00:00:00+00:00"
+    },
+    "granularity_mix": {
+      "signal_series": "1h cohort_flow_series buckets (1440/1440 covered)",
+      "execution_prices": "1h Hyperliquid candle opens; realized delay 60s..1h (>= 60s floor)"
+    },
+    "source_mix": {
+      "signal_series": "supabase.cohort_flow_series (captured fills, capture_gaps pairs excluded)",
+      "execution_prices": "hyperliquid.api candleSnapshot BTC 1h (1453 bars, gap-free)"
+    },
+    "excluded_pairs": [],
+    "covered_hours": 1440,
+    "total_hours": 1440
+  },
+  "trade_count": 63,
+  "engine_version": "e2e-runner-0.1.0"
+}

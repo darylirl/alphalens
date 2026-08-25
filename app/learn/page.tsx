@@ -2,7 +2,7 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import Link from 'next/link'
-import { ChevronDown, Crosshair, DollarSign, Copy, Zap, BarChart3, Users, TrendingUp, Shield, Target, Activity, Layers, ArrowRight } from 'lucide-react'
+import { ChevronDown, Crosshair, DollarSign, Zap, BarChart3, Users, TrendingUp, Shield, Target, Activity, Layers, ArrowRight } from 'lucide-react'
 
 interface SectionProps {
   id: string
@@ -115,35 +115,35 @@ export default function LearnPage() {
             <div className="mt-2"><Badge color="#34EAB9" label="Momentum" /></div>
           </Term>
 
-          <Term name="High Conviction" explorerType="High Conviction">
-            Traders who place fewer but larger bets. They make under 20 trades with average
-            position sizes above $10,000 and low leverage (under 5x). These traders do deep
-            research and put significant capital behind their ideas.
-            <div className="mt-2"><Badge color="#34EAB9" label="High Conv." /></div>
+          <Term name="Whale" explorerType="Whale">
+            Traders whose average trade size exceeds $500,000 notional. Size is
+            the signal: whichever style they trade, their positions move
+            markets and their flow is worth understanding on its own.
+            <div className="mt-2"><Badge color="#34EAB9" label="Whale" /></div>
           </Term>
 
-          <Term name="Funding Arb" explorerType="Funding Arb">
-            Traders who exploit funding rate differences. They keep positions open with low
-            leverage and low PnL variance, steadily collecting funding payments.
-            Typically low trade frequency with consistent small gains.
-            <div className="mt-2"><Badge color="rgba(255,255,255,0.55)" label="Funding Arb" /></div>
-          </Term>
-
-          <Term name="Farmer" explorerType="Farmer (Delta-Neutral)">
-            Sophisticated traders who hold simultaneous long AND short positions across different
-            assets to stay market-neutral (net exposure under 20% of total notional). They farm
-            funding rates by being on the paying side of high-funding markets. Key signals: both-side
-            positions, low leverage (under 3x), low PnL variance, and 4+ simultaneous positions.
-            <div className="mt-2"><Badge color="#30d158" label="Farmer" /></div>
+          <Term name="Basis Trader" explorerType="Basis Trader">
+            Traders whose PnL comes substantially from funding payments (20%+
+            of total) while holding positions for a week or more. They harvest
+            the funding rate rather than directional moves.
+            <div className="mt-2"><Badge color="rgba(255,255,255,0.55)" label="Basis" /></div>
           </Term>
 
           <Term name="Market Maker" explorerType="Market Maker">
-            High-frequency traders who provide liquidity by placing both buy and sell orders on
-            the same coins. They profit from the bid-ask spread. Key signals: two-sided trading
-            on 2+ coins, 100+ trades, hold times under 5 minutes, and very tight PnL distribution.
+            High-frequency liquidity providers trading BOTH sides of the same
+            coins. Classifier signals: 200+ trades per 30 days across 5+
+            coins with a high two-sided trading share. Copying their maker
+            flow with taker orders is structurally impossible — one of the
+            findings that killed our copy-trading feature.
             <div className="mt-2"><Badge color="#5ac8fa" label="Market Maker" /></div>
           </Term>
         </div>
+
+        <p className="text-white/40 text-xs">
+          Wallets without enough evidence (fewer than three measured round
+          trips) are labeled Unclassified rather than guessed — the classifier
+          never fabricates a style from insufficient data.
+        </p>
       </Section>
 
       {/* Equity Tiers */}
@@ -342,33 +342,89 @@ export default function LearnPage() {
         </div>
       </Section>
 
-      {/* Copy Trade */}
-      <Section id="copy-trade" icon={<Copy size={18} />} title="Copy Trading">
+      {/* Why we killed copy trading */}
+      <Section id="copy-trade" icon={<Shield size={18} />} title="Why We Killed Copy Trading">
         <p>
-          Copy trading lets you mirror the trades of wallets you&apos;ve identified through Alpha Hunting
-          or Smart Money analysis. Connect your wallet to set up copy configurations.
+          Copy trading was going to be a core AlphaLens feature. Before shipping
+          it, we tested it — and the results killed it. This section is the
+          autopsy, because knowing what loses money is research too.
         </p>
 
         <div className="grid gap-3">
-          <Term name="Copy Ratio (%)">
-            The percentage of the target trader&apos;s position size you want to mirror. At 50%, if
-            the target opens a $10,000 position, you&apos;ll open a $5,000 position. Adjust based on
-            your risk tolerance and account size.
+          <Term name="The experiment">
+            We replayed 28,318 trades from top-ranked wallets across two
+            independent cohorts and 13 months of history, simulating a real
+            copier: 60-second execution delay filled at the next candle open,
+            5 bps slippage, and 0.045% taker fees per side, $1,000 fixed
+            notional per trade.
           </Term>
 
-          <Term name="Max Position (USD)">
-            The maximum dollar amount for any single copied position. This is your safety cap —
-            even if the target trader opens a massive position, yours won&apos;t exceed this limit.
+          <Term name="Run 1: top wallets by Sharpe">
+            The best-ranked wallets were all high-frequency traders. Nine of
+            ten could not be replayed at all — their positions never touch
+            flat and their history is too deep to retrieve. The one replayable
+            wallet lost $1,251 over 7,499 copied trades with a 4.8% win rate:
+            a sub-minute edge is dead by the time you arrive 60 seconds late.
+          </Term>
+
+          <Term name="Run 2: copyability-first cohort">
+            We then selected only slow, verifiable wallets: swing and momentum
+            traders with 4h+ median holds and 90+ days of complete, validated
+            history. Result: net -$9,704 over 28,318 trades. Gross PnL was
+            negative before a single fee was charged, and monthly PnL
+            alternated sign around a negative mean — no persistent edge
+            existed to copy.
+          </Term>
+
+          <Term name="What this means">
+            Trailing performance did not predict forward copyable returns in
+            either cohort. That finding is why AlphaLens shows you what
+            wallets do (Pulse) and helps you test your own ideas (the
+            backtester) instead of selling wallet-following as a strategy.
           </Term>
         </div>
 
-        <div className="bg-[#0F1A1E] rounded p-4 border border-[#FF3B5C20]">
-          <p className="text-[#FF3B5C] font-medium text-xs mb-1.5">Risk Warning</p>
+        <div className="bg-[#0F1A1E] rounded p-4 border border-[#34EAB9]/20">
+          <p className="text-[#34EAB9] font-medium text-xs mb-1.5">Receipts</p>
           <p className="text-white/55 text-xs">
-            Copy trading involves significant risk. Past performance does not guarantee future results.
-            Always set conservative max positions and never copy trade with funds you cannot afford to lose.
-            Slippage and timing differences mean your results will differ from the target trader.
+            The full methodology and per-trade results are public in the
+            repository (backtest_copy.py and backtest_results/). Every claim
+            above traces to those files.
           </p>
+        </div>
+      </Section>
+
+      {/* How verification works */}
+      <Section id="verification" icon={<Target size={18} />} title="How Verification Works">
+        <p>
+          Every strategy tested on AlphaLens goes through the same four-step
+          discipline that killed our copy-trading hypothesis.
+        </p>
+
+        <div className="grid gap-3">
+          <Term name="1. Hypothesis">
+            A precise, falsifiable statement of the idea: what you trade, when
+            you enter, when you exit, and what size. Vague ideas cannot be
+            tested — the discipline starts with writing them down exactly.
+          </Term>
+
+          <Term name="2. Frictions">
+            Every test includes the costs that kill strategies in practice:
+            execution delay, slippage, and taker fees. A backtest without
+            frictions is a fantasy with charts.
+          </Term>
+
+          <Term name="3. Kill criteria">
+            Before the run, you define what result means the idea is dead —
+            maximum drawdown, minimum profit factor, minimum trade count.
+            Deciding after seeing the results is how people fool themselves.
+          </Term>
+
+          <Term name="4. Verdict">
+            The result is the result. Failed hypotheses get published with the
+            same weight as successes, because a documented failure saves every
+            reader the money it would have cost them to find out live.
+          </Term>
         </div>
       </Section>
 
@@ -469,7 +525,7 @@ export default function LearnPage() {
           </div>
           <div className="flex gap-3 items-start">
             <span className="text-[#34EAB9] font-bold text-sm mt-0.5">5</span>
-            <p><strong className="text-[#F0FAF8]">Use copy trade conservatively.</strong> Start with low copy ratios (10-25%) and tight max position limits. Increase only after observing the target&apos;s performance over time.</p>
+            <p><strong className="text-[#F0FAF8]">Test before you trade.</strong> Run any idea through the backtester with frictions on before risking money. Our own copy-trading hypothesis failed this test — that is the point of having it.</p>
           </div>
           <div className="flex gap-3 items-start">
             <span className="text-[#34EAB9] font-bold text-sm mt-0.5">6</span>

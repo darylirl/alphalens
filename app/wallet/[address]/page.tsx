@@ -201,6 +201,7 @@ export default function WalletPage() {
         <WalletProfile
           detail={mergedDetail}
           headlinePnl={headlinePnl}
+          primaryTag={walletTags.find(t => t !== 'unclassified') || null}
         />
       </div>
     </div>

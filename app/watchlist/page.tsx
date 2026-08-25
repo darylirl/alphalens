@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { WalletCard } from '@/components/wallet/WalletCard'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Star, Plus, X } from 'lucide-react'
@@ -21,11 +21,28 @@ interface Watchlist {
   wallets: WatchlistItem[]
 }
 
+const STORAGE_KEY = 'alphalens_watchlists'
+
 export default function WatchlistPage() {
   const [watchlists, setWatchlists] = useState<Watchlist[]>([])
   const [showCreate, setShowCreate] = useState(false)
   const [newName, setNewName] = useState('')
   const [activeList, setActiveList] = useState<string | null>(null)
+  const [loaded, setLoaded] = useState(false)
+
+  // Persist to localStorage so the "saved in this browser" promise is true.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY)
+      if (raw) setWatchlists(JSON.parse(raw))
+    } catch { /* corrupted storage: start fresh */ }
+    setLoaded(true)
+  }, [])
+
+  useEffect(() => {
+    if (!loaded) return
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(watchlists)) } catch { /* full */ }
+  }, [watchlists, loaded])
 
   const handleCreate = () => {
     if (!newName.trim()) return
@@ -48,7 +65,7 @@ export default function WatchlistPage() {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-lg font-bold mb-1">Watchlists</h2>
-            <p className="text-white/55 text-xs">Track your favorite wallets in organized lists</p>
+            <p className="text-white/55 text-xs">Track your favorite wallets in organized lists. Saved in this browser only.</p>
           </div>
           <button
             onClick={() => setShowCreate(!showCreate)}

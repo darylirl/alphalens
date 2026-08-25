@@ -9,6 +9,7 @@ import { Search, ChevronDown } from 'lucide-react'
 // Twelve flat links overflowed the bar at common desktop widths (the search
 // box rendered on top of the last links) and gave the nav no hierarchy.
 const primaryLinks = [
+  { href: '/pulse', label: 'Pulse' },
   { href: '/dashboard', label: 'Dashboard' },
   { href: '/smart-money', label: 'Smart Money' },
   { href: '/wallets', label: 'Wallets' },
@@ -225,7 +226,7 @@ export function Navbar() {
             )}
             {isLanding && (
               <Link
-                href="/dashboard"
+                href="/pulse"
                 className="hidden md:inline-block text-sm font-medium transition-all duration-150 ease-out"
                 style={{
                   fontFamily: 'Inter, sans-serif',
@@ -249,7 +250,7 @@ export function Navbar() {
             )}
             {isLanding && (
               <Link
-                href="/dashboard"
+                href="/pulse"
                 className="md:hidden text-sm font-medium transition-all duration-150 ease-out"
                 style={{
                   fontFamily: 'Inter, sans-serif',
@@ -342,7 +343,7 @@ export function Navbar() {
             {/* Drawer CTA */}
             <div className="p-6">
               <Link
-                href="/dashboard"
+                href="/pulse"
                 onClick={closeDrawer}
                 className="block text-center text-sm font-medium"
                 style={{

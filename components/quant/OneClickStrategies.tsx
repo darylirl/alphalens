@@ -8,7 +8,7 @@ const TEMPLATES = [
     id: 'whale_momentum',
     name: 'Whale Momentum',
     description: 'Alert when high-conviction wallets (Sharpe >1.5) open new longs and RSI is below 45',
-    archetype: 'high_conviction',
+    archetype: 'whale',
     emoji: '\u{1F40B}',
     params: [
       { id: 'min_sharpe', label: 'Min Sharpe (30d)', value: '1.5', type: 'number' },
@@ -34,7 +34,7 @@ const TEMPLATES = [
     id: 'funding_fade',
     name: 'Funding Fade',
     description: 'Alert when funding arb wallets open large shorts and funding rate exceeds 0.05%',
-    archetype: 'funding_arb',
+    archetype: 'basis_trader',
     emoji: '\u{1F4C9}',
     params: [
       { id: 'min_funding', label: 'Min Funding Rate (%)', value: '0.05', type: 'number' },

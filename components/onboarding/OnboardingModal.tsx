@@ -2,144 +2,90 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import Link from 'next/link'
-import { X, ChevronRight, Crosshair, TrendingUp, Bell, DollarSign } from 'lucide-react'
+import { X, TrendingUp, FlaskConical, Scale } from 'lucide-react'
 
 const ONBOARDING_KEY = 'alphalens_onboarded'
 
+// Honesty contract: no fabricated wallets, PnL, or activity anywhere in
+// onboarding. Every number a new user sees must be real or absent; the
+// journey introduces real surfaces (Pulse, the backtester, verdicts).
 const steps = [
   {
-    icon: Crosshair,
-    title: 'Discover Top Traders',
-    subtitle: 'Meet a proven performer',
-    content: (
-      <div className="space-y-3">
-        <div className="bg-[#0F1A1E] rounded-lg p-4 border border-white/[0.08]">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 rounded-lg bg-[#34EAB920] flex items-center justify-center text-[#34EAB9] font-mono text-sm font-bold">#1</div>
-            <div>
-              <p className="font-mono text-sm text-[#F0FAF8]">0x7a23...e91f</p>
-              <p className="text-[10px] text-white/40">Momentum Trader &middot; 847 trades</p>
-            </div>
-          </div>
-          <div className="grid grid-cols-3 gap-2 text-center">
-            <div>
-              <p className="font-mono text-sm font-bold text-[#34EAB9]">+$284K</p>
-              <p className="text-[9px] text-white/40">Total PnL</p>
-            </div>
-            <div>
-              <p className="font-mono text-sm font-bold">71%</p>
-              <p className="text-[9px] text-white/40">Win Rate</p>
-            </div>
-            <div>
-              <p className="font-mono text-sm font-bold">2.41</p>
-              <p className="text-[9px] text-white/40">Sharpe</p>
-            </div>
-          </div>
-        </div>
-        <p className="text-xs text-white/55 leading-relaxed">
-          Alpha Lens analyzes thousands of wallets on Hyperliquid. We surface the ones with real, consistent edge — not just one lucky trade.
-        </p>
-      </div>
-    ),
-  },
-  {
     icon: TrendingUp,
-    title: 'See What You Could Have Made',
-    subtitle: '7-day hypothetical return',
+    title: 'Start with what wallets actually do',
+    subtitle: 'Pulse — live cohort positioning',
     content: (
       <div className="space-y-3">
-        <div className="bg-[#0F1A1E] rounded-lg p-4 border border-white/[0.08]">
-          <p className="text-[10px] text-white/40 mb-2">If you followed this wallet at 25% ratio for 7 days:</p>
-          <div className="space-y-2">
-            {[
-              { asset: 'ETH Long', pnl: '+$1,420', time: '3d ago' },
-              { asset: 'BTC Long', pnl: '+$890', time: '5d ago' },
-              { asset: 'SOL Short', pnl: '+$340', time: '6d ago' },
-              { asset: 'ARB Long', pnl: '-$120', time: '7d ago' },
-            ].map(t => (
-              <div key={t.asset} className="flex items-center justify-between text-xs">
-                <span className="text-[#F0FAF8]">{t.asset}</span>
-                <div className="flex items-center gap-3">
-                  <span className="text-[10px] text-white/40">{t.time}</span>
-                  <span className={`font-mono font-semibold ${t.pnl.startsWith('+') ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>{t.pnl}</span>
-                </div>
+        <div className="bg-[#0F1A1E] rounded-lg p-4 border border-white/[0.08] space-y-2.5">
+          {[62, 47, 55].map((pct, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <div className="w-8 h-2.5 rounded bg-white/[0.1]" />
+              <div className="flex-1 h-1.5 bg-[#FF3B5C]/25 rounded-full overflow-hidden">
+                <div className="h-full bg-[#34EAB9]/80 rounded-full" style={{ width: `${pct}%` }} />
               </div>
-            ))}
-          </div>
-          <div className="mt-3 pt-3 border-t border-white/[0.08] flex justify-between">
-            <span className="text-xs text-white/55">Hypothetical 7d return</span>
-            <span className="font-mono text-sm font-bold text-[#34EAB9]">+$2,530</span>
-          </div>
-        </div>
-        <p className="text-xs text-white/55 leading-relaxed">
-          Past performance doesn&apos;t guarantee future results, but it shows the kind of edge available when you follow data instead of guessing.
-        </p>
-      </div>
-    ),
-  },
-  {
-    icon: Bell,
-    title: 'Set Up Your First Alert',
-    subtitle: 'Never miss a move',
-    content: (
-      <div className="space-y-3">
-        <div className="bg-[#0F1A1E] rounded-lg p-4 border border-[#34EAB920]">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="w-2 h-2 rounded-full bg-[#34EAB9] pulse-accent" />
-            <span className="text-xs font-medium text-[#34EAB9]">New Position Alert</span>
-          </div>
-          <p className="text-sm text-[#F0FAF8] mb-1">
-            <span className="font-mono text-white/55">0x7a23...e91f</span> opened <span className="text-[#34EAB9]">Long ETH</span>
-          </p>
-          <p className="text-[10px] text-white/40">
-            $75,000 @ $3,510 &middot; 5x leverage &middot; Just now
-          </p>
-          <div className="flex gap-2 mt-3">
-            <div className="flex-1 text-center py-2 rounded text-xs font-semibold bg-[#34EAB9] text-[#0F1A1E]">
-              Mirror Trade
             </div>
-            <div className="py-2 px-3 rounded text-xs text-white/55 border border-white/[0.12]">
-              Dismiss
-            </div>
-          </div>
-        </div>
-        <p className="text-xs text-white/55 leading-relaxed">
-          Get notified the moment top wallets make moves. Each alert includes context — wallet track record, trade details, and a one-tap action.
-        </p>
-      </div>
-    ),
-  },
-  {
-    icon: DollarSign,
-    title: 'Start Your Journey',
-    subtitle: 'From observer to systematic trader',
-    content: (
-      <div className="space-y-4">
-        <p className="text-sm text-[#F0FAF8] leading-relaxed">
-          Alpha Lens turns you from a passive observer into a systematic trader with a feedback loop.
-        </p>
-        <div className="space-y-2">
-          {[
-            { step: '1', label: 'Explore', desc: 'Browse the Alpha Hunters leaderboard', href: '/hunters' },
-            { step: '2', label: 'Follow', desc: 'Add top wallets to your watchlist', href: '/watchlist' },
-            { step: '3', label: 'Alert', desc: 'Set up signals for wallet moves', href: '/alerts' },
-            { step: '4', label: 'Execute', desc: 'Copy trade or act on signals', href: '/copy-trade' },
-            { step: '5', label: 'Learn', desc: 'Track your performance and iterate', href: '/performance' },
-          ].map(s => (
-            <Link
-              key={s.step}
-              href={s.href}
-              className="flex items-center gap-3 bg-[#0F1A1E] rounded-lg p-3 hover:bg-white/[0.06] transition-colors group"
-            >
-              <div className="w-6 h-6 rounded-full bg-[#34EAB920] flex items-center justify-center text-[#34EAB9] text-xs font-bold">{s.step}</div>
-              <div className="flex-1">
-                <p className="text-xs font-semibold">{s.label}</p>
-                <p className="text-[10px] text-white/40">{s.desc}</p>
-              </div>
-              <ChevronRight size={14} className="text-white/40 group-hover:text-[#34EAB9] transition-colors" />
-            </Link>
           ))}
+          <p className="text-[9px] text-white/30 text-center pt-1">Illustration</p>
         </div>
+        <p className="text-xs text-white/55 leading-relaxed">
+          Pulse aggregates the real fills of tracked Hyperliquid wallets into a
+          rolling 24-hour view: long/short skew, new positions versus
+          additions, notional in USD. Captured from the exchange — when
+          capture is down, the page says so instead of showing stale numbers.
+        </p>
+        <Link href="/pulse" className="block text-center text-xs text-[#34EAB9] hover:underline">
+          Open Pulse →
+        </Link>
+      </div>
+    ),
+  },
+  {
+    icon: FlaskConical,
+    title: 'Test ideas before risking money',
+    subtitle: 'Backtests with real frictions',
+    content: (
+      <div className="space-y-3">
+        <div className="bg-[#0F1A1E] rounded-lg p-4 border border-white/[0.08] font-mono text-[10px] space-y-1.5">
+          <p><span className="text-[#34EAB9]">FRICTIONS</span> <span className="text-white/60">delay · slippage · taker fees</span></p>
+          <p><span className="text-[#34EAB9]">DATA</span> <span className="text-white/60">real Hyperliquid candles</span></p>
+          <p><span className="text-[#FF3B5C]">VERDICT</span> <span className="text-white/60">whatever the data says</span></p>
+        </div>
+        <p className="text-xs text-white/55 leading-relaxed">
+          We built this discipline for ourselves first: before shipping copy
+          trading, we replayed 28,318 smart-money trades with real frictions.
+          It lost money, so we removed the feature. Your ideas get the same
+          honest treatment in the sandbox backtester.
+        </p>
+        <Link href="/quant" className="block text-center text-xs text-[#34EAB9] hover:underline">
+          Try the backtester →
+        </Link>
+      </div>
+    ),
+  },
+  {
+    icon: Scale,
+    title: 'Keep the verdict, either way',
+    subtitle: 'Failures are research too',
+    content: (
+      <div className="space-y-3">
+        <div className="bg-[#0F1A1E] rounded-lg p-4 border border-white/[0.08] space-y-2">
+          <div className="rounded border border-[#34EAB9]/25 px-3 py-2">
+            <div className="w-14 h-2 rounded bg-[#34EAB9]/50" />
+          </div>
+          <div className="rounded border border-[#FF3B5C]/25 px-3 py-2">
+            <div className="w-14 h-2 rounded bg-[#FF3B5C]/50" />
+          </div>
+          <p className="text-[9px] text-white/30 text-center">Passed and failed — equal weight</p>
+        </div>
+        <p className="text-xs text-white/55 leading-relaxed">
+          Every number on AlphaLens traces to a real source or an honest empty
+          state — no invented wallets, no simulated recency, no signals sold
+          as alpha. Read how we killed our own flagship feature in the Learn
+          section.
+        </p>
+        <Link href="/learn" className="block text-center text-xs text-[#34EAB9] hover:underline">
+          Read the copy-trading autopsy →
+        </Link>
       </div>
     ),
   },
@@ -218,7 +164,6 @@ export function OnboardingModal() {
 
           {/* Footer */}
           <div className="px-5 py-4 border-t border-white/[0.08] flex items-center justify-between">
-            {/* Step dots */}
             <div className="flex gap-1.5">
               {steps.map((_, i) => (
                 <div

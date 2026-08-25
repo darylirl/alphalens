@@ -2,7 +2,7 @@
 import { useMemo } from 'react'
 import { motion } from 'framer-motion'
 import Link from 'next/link'
-import { Target, Clock, TrendingUp, BarChart3, Shield, Zap, Copy } from 'lucide-react'
+import { Target, Clock, TrendingUp, BarChart3, Shield, Zap } from 'lucide-react'
 import type { Fill, ClearinghouseState } from '@/lib/hyperliquid/types'
 
 interface StrategySummaryProps {
@@ -287,14 +287,15 @@ export function StrategySummary({ fills, state, address, analytics }: StrategySu
         </div>
       </div>
 
-      {/* Action buttons */}
+      {/* Action buttons — copy-trade CTA removed: our own backtests showed
+          naive copy-trading loses money (see /learn) */}
       <div className="flex gap-2">
         <Link
-          href={`/copy-trade?target=${address}`}
+          href="/pulse"
           className="flex-1 flex items-center justify-center gap-2 py-3 rounded text-sm font-semibold bg-[#34EAB9] text-[#0F1A1E] hover:brightness-110 transition-all"
         >
-          <Copy size={14} />
-          Copy This Trader
+          <TrendingUp size={14} />
+          Cohort Positioning
         </Link>
         <Link
           href={`/alerts?wallet=${address}`}
