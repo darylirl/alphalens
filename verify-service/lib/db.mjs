@@ -141,7 +141,11 @@ export async function uploadObject(bucket, objectPath, body, contentType = 'text
   }
 }
 
-/** Heartbeat into the shared capture_health table with service='verify'. */
+/**
+ * Heartbeat into the shared capture_health table. Defaults to the worker's
+ * service='verify'; callers pass their own service label to stay
+ * distinguishable (the scorer beats as service='scorer').
+ */
 export async function heartbeat(row) {
   return sb('capture_health', {
     method: 'POST',

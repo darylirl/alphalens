@@ -184,7 +184,13 @@ select * from capture_health where service = 'verify' order by ts desc limit 5;
 
 The worker heartbeats every minute with its phase, the job it is running, and
 its completed/failed counters — the same table the capture daemon uses, so one
-query answers "is anything running?".
+query answers "is anything running?". The ledger scorer heartbeats into the
+same table as `service = 'scorer'`, so a dead scorer is not masked by the
+worker's beats:
+
+```sql
+select * from capture_health where service = 'scorer' order by ts desc limit 5;
+```
 
 ## API
 

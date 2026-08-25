@@ -54,8 +54,9 @@ export function CaptureCoverageStrip({
 
 /**
  * The capture_health reads behind the strip — shared by /pulse and /ledger.
- * capture_health is shared: the verification worker and the ledger scorer
- * also heartbeat here (service='verify', no WS state or wallet counts).
+ * capture_health is shared: the verification worker (service='verify') and
+ * the ledger scorer (service='scorer') also heartbeat here, with no WS state
+ * or wallet counts.
  * Status must read only the capture daemon's own rows or an interleaved
  * verify heartbeat renders "Capture offline" while capture is healthy.
  */
