@@ -237,11 +237,24 @@ def fetch_fills(address: str) -> tuple[list[dict], bool]:
             break
         start = max(f["time"] for f in page) + 1
     fills.sort(key=lambda f: f["time"])
+
+    def own_liquidation(f: dict) -> bool:
+        """True only when THIS wallet was liquidated. The liquidation field
+        also appears on counterparty fills (taking over someone else's
+        liquidated position, liquidatedUser = someone else) — those are not
+        survivorship events for this wallet. A missing liquidatedUser is the
+        older API format, observed only on own-liquidation closes."""
+        liq = f.get("liquidation")
+        if liq:
+            lu = (liq.get("liquidatedUser") or "").lower()
+            return lu in ("", address.lower())
+        return "liquidat" in (f.get("dir") or "").lower()
+
     slim = [{"coin": f["coin"], "side": f["side"], "time": f["time"],
              "sz": f["sz"], "px": f["px"], "fee": f.get("fee"),
              "feeToken": f.get("feeToken"), "closedPnl": f.get("closedPnl"),
              "startPosition": f.get("startPosition"), "dir": f.get("dir"),
-             "liq": bool(f.get("liquidation")) or "liquidat" in (f.get("dir") or "").lower()}
+             "liq": own_liquidation(f)}
             for f in fills]
     cache_file.write_text(json.dumps({"complete": complete, "fills": slim}))
     return slim, complete
@@ -415,6 +428,17 @@ class SampledSeries:
             return self.vs[0], True
         return None, False
 
+    def bracket_max(self, t: int):
+        """Max of the two samples bracketing t. Used for the exposure
+        denominator: interpolation under-reads equity in the hours after a
+        deposit (samples are ~11 days apart) and would manufacture impossible
+        exposure readings (hundreds of times equity on a 50x-max venue)."""
+        if not self.ts or t < self.ts[0] or t > self.ts[-1]:
+            return None
+        i = bisect.bisect_right(self.ts, t) - 1
+        j = min(i + 1, len(self.ts) - 1)
+        return max(self.vs[i], self.vs[j])
+
 
 # ── Per-wallet preprocessing ────────────────────────────────────────────────
 
@@ -492,7 +516,7 @@ class WalletData:
                 increasing = abs(new) > abs(prev) + POSITION_EPS
 
                 if increasing:
-                    eq = self.avh.value_at(f["time"]) if self.avh else None
+                    eq = self.avh.bracket_max(f["time"]) if self.avh else None
                     if eq is not None and eq > 0:
                         frac = abs(new) * px / eq
                         if frac >= 0.20:
@@ -549,6 +573,11 @@ class WalletData:
         anchor, clamped = self.avh.anchor_at(w0, t_ms)
         if anchor is None or anchor <= 0:
             return {"excluded": "no_equity_anchor_at_window_start"}
+        if anchor < EQUITY_ANCHOR_FLOOR:
+            # A near-zero window-start equity (account funded mid-window)
+            # makes every ratio metric degenerate: the wallet-date cannot be
+            # honestly evaluated — excluded and logged, not failed or guessed.
+            return {"excluded": f"equity_anchor_below_{int(EQUITY_ANCHOR_FLOOR)}"}
 
         # Resolved round trips in window.
         rlo = bisect.bisect_right(self.trip_close_ts, w0)
