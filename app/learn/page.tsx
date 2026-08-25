@@ -391,6 +391,12 @@ export default function LearnPage() {
             repository (backtest_copy.py and backtest_results/). Every claim
             above traces to those files.
           </p>
+          <Link
+            href="/research/copy-trading-autopsy"
+            className="inline-flex items-center gap-1 mt-2 text-[11px] text-[#34EAB9] font-medium hover:underline"
+          >
+            Read the full autopsy <ArrowRight size={10} />
+          </Link>
         </div>
       </Section>
 

@@ -119,6 +119,20 @@ export default function LandingPage() {
             </div>
           </motion.div>
 
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.5, duration: 0.4 }}
+            className="mt-4"
+          >
+            <Link
+              href="/research/copy-trading-autopsy"
+              className="text-xs text-[#34EAB9] font-medium hover:underline"
+            >
+              Read the full autopsy: 28,000 smart-money trades, replayed →
+            </Link>
+          </motion.div>
+
           {/* Product illustration */}
           <motion.div
             initial={{ opacity: 0, y: 40 }}

@@ -4,6 +4,7 @@ import { WalletProvider } from '@/lib/wallet/WalletContext'
 import { AppShell } from '@/components/layout/AppShell'
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'https://alphalens-taupe.vercel.app'),
   title: 'AlphaLens',
   description: 'Hyperliquid Trader Intelligence Platform',
   icons: {

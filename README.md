@@ -19,7 +19,8 @@ especially, the negative ones.
 ## The evidence that shaped the product
 
 Both datasets are in this repo under [`backtest_results/`](backtest_results/),
-per-trade, so you can check us.
+per-trade, so you can check us. The full write-up is published in-app at
+[`/research/copy-trading-autopsy`](https://alphalens-taupe.vercel.app/research/copy-trading-autopsy).
 
 **Run 1 — naive copy-trading** (top 10 directional wallets by 30d Sharpe,
 one month of fills, $1,000 fixed notional per mirror):
