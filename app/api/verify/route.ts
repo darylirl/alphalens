@@ -4,6 +4,7 @@ import { getSupabase } from '@/lib/db/supabase'
 // copies of a rule grammar drift, and the whole point of a spec_hash is that
 // the thing enqueued is exactly the thing verified.
 import { validateSpec, specHash, SpecError, SPEC_VERSION } from '@/verify-service/lib/spec.mjs'
+import { isAuthorized, unauthorizedResponse } from '@/lib/auth/admin'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,8 +16,15 @@ export const dynamic = 'force-dynamic'
  * wrong with it, rather than becoming a failed job the requester has to poll
  * for. The worker re-validates anyway — the queue is a table, and a result is
  * only worth what its spec was checked against.
+ *
+ * Gated behind the admin token (same gate as wallet management): enqueueing
+ * runs the worker against production data, so public hypothesis submission
+ * stays closed until rate limiting exists. Reads (GET here and
+ * GET /api/verify/[id]) remain public.
  */
 export async function POST(req: NextRequest) {
+  if (!isAuthorized(req)) return unauthorizedResponse()
+
   let body: unknown
   try {
     body = await req.json()

@@ -320,6 +320,7 @@ alphalens/
 | `/api/seed` | GET/POST | Hyperliquid `recentTrades` → Supabase | Discovers wallets from recent trades, computes metrics, seeds DB |
 | `/api/copy-trade` | GET/POST | none | Returns 410 Gone — feature retired after backtest evidence |
 | `/api/agent` | POST | Claude API + Hyperliquid + Supabase | AI agent that interprets natural language queries and uses tools to fetch live data |
+| `/api/verify` | GET/POST | Supabase `verification_jobs` | POST (enqueue a hypothesis) is admin-gated; public submission is planned but stays gated pending rate limiting. GET and `/api/verify/[id]` are public read-only. |
 
 ### Implementation Notes
 
