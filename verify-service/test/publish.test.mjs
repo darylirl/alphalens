@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { ledgerEligibility, ledgerEligibleOnly } from '../lib/publish.mjs'
+import { ledgerEligibility, ledgerEligibleOnly, publishResult } from '../lib/publish.mjs'
 
 const conformingSpec = {
   spec_version: 1,
@@ -50,6 +50,47 @@ test('both failures are reported together, not one at a time', () => {
 test('an under-frictioned spec can never be Ledger-eligible', () => {
   const cheat = { ...conformingSpec, frictions: { delay_s: 30, slippage_bps: 2, taker_fee_pct: 0.01 } }
   assert.equal(ledgerEligibility({ engine_version: 'verify-engine@1.0.0', spec: cheat }).eligible, false)
+})
+
+test('same spec, two results, one Ledger call (dedup by spec_hash)', async () => {
+  // In-memory ledger_calls standing in for PostgREST: answers the dedup
+  // lookup and records inserts.
+  const calls = []
+  const db = async (pathQs, { method = 'GET', body } = {}) => {
+    if (method === 'POST') {
+      const row = { id: calls.length + 1, ...body[0] }
+      calls.push(row)
+      return [row]
+    }
+    const hash = /provenance->>spec_hash=eq\.([0-9a-f]+)/.exec(pathQs)?.[1]
+    return calls.filter((c) => c.kind === 'hypothesis_verdict' && c.provenance?.spec_hash === hash)
+  }
+
+  const sharedHash = 'b'.repeat(64)
+  const base = {
+    engine_version: 'verify-engine@1.0.0',
+    spec: conformingSpec,
+    spec_hash: sharedHash,
+    trade_count: 35,
+    metrics: { net_pnl_usd: -66.546151 },
+    verdict: { overall: 'killed' },
+  }
+  const logs = []
+  const log = (m) => logs.push(m)
+
+  // First result of the spec publishes.
+  const first = await publishResult({ ...base, id: 41, job_id: 8 }, { log, db })
+  assert.equal(first.published, true)
+  assert.equal(calls.length, 1)
+
+  // A re-run of the SAME spec (new result id, new job) is skipped, logging
+  // the existing call id — reproduction is evidence, not a second call.
+  const second = await publishResult({ ...base, id: 42, job_id: 9 }, { log, db })
+  assert.equal(second.published, false)
+  assert.match(second.reasons[0], /already published as call 1/)
+  assert.equal(calls.length, 1, 'the ledger must hold exactly one call for the spec')
+  assert.ok(logs.some((m) => /call 1/.test(m) && /dedup by spec_hash/.test(m)),
+    'the skip is logged with the existing call id')
 })
 
 test('filtering keeps eligible rows and drops the rest without mutating them', () => {

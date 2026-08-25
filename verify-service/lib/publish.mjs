@@ -117,24 +117,41 @@ const isDuplicateCall = (e) =>
 
 /**
  * Publish one verification result to the Ledger, if and only if the
- * publishing rule admits it. Idempotent: the partial unique index on
- * provenance->result_id makes a second publish a no-op, so this can be
- * called from the runner at result time AND from the scorer's sweep without
- * double-publishing.
+ * publishing rule admits it. Idempotent two ways, because this is the shared
+ * path for the runner's publish-at-result AND the scorer's sweep:
+ *
+ *  - by spec: a re-run of the same spec (identical spec_hash) reproduces the
+ *    same verdict — reproduction is evidence, not news. If any
+ *    hypothesis_verdict call already exists for this spec_hash, the result is
+ *    skipped and the existing call id is logged. (Checked here rather than by
+ *    a constraint: no schema change; the historical duplicate, calls 2 and 5,
+ *    stays untouched as honest history.)
+ *  - by result: the partial unique index on provenance->result_id makes a
+ *    concurrent second publish of the same row a no-op.
  *
  * @returns {{published: boolean, call?: object, reasons?: string[]}}
  */
-export async function publishResult(result, { log = () => {} } = {}) {
+export async function publishResult(result, { log = () => {}, db = sb } = {}) {
   const { eligible, reasons } = ledgerEligibility(result)
   if (!eligible) {
     log(`result ${result.id} not Ledger-eligible: ${reasons.join('; ')}`)
     return { published: false, reasons }
   }
 
+  const existing = await db(
+    'ledger_calls?select=id&kind=eq.hypothesis_verdict'
+    + `&provenance->>spec_hash=eq.${result.spec_hash}&order=id.asc&limit=1`,
+  )
+  if (existing?.length) {
+    log(`result ${result.id} spec ${String(result.spec_hash).slice(0, 12)}… already published`
+      + ` as Ledger call ${existing[0].id} — skipping (dedup by spec_hash)`)
+    return { published: false, reasons: [`spec already published as call ${existing[0].id}`] }
+  }
+
   const row = hypothesisVerdictCall(result)
   let call
   try {
-    ;[call] = await sb('ledger_calls', {
+    ;[call] = await db('ledger_calls', {
       method: 'POST',
       prefer: 'return=representation',
       body: [row],
@@ -158,15 +175,15 @@ export async function publishResult(result, { log = () => {} } = {}) {
  * insert). Bounded on purpose — one page of the most recent results, newest
  * first; anything older was already swept when it was recent.
  */
-export async function sweepUnpublished({ limit = 50, log = () => {} } = {}) {
-  const results = await sb(
+export async function sweepUnpublished({ limit = 50, log = () => {}, db = sb } = {}) {
+  const results = await db(
     'verification_results?select=id,job_id,spec,spec_hash,trade_count,metrics,verdict,engine_version'
     + `&order=id.desc&limit=${limit}`,
   )
   if (!results?.length) return { published: 0 }
 
   const ids = results.map((r) => r.id).join(',')
-  const existing = await sb(
+  const existing = await db(
     `ledger_calls?select=provenance&kind=eq.hypothesis_verdict`
     + `&provenance->>result_id=in.(${ids})&order=id.asc&limit=${limit}`,
   )
@@ -175,7 +192,9 @@ export async function sweepUnpublished({ limit = 50, log = () => {} } = {}) {
   let published = 0
   for (const result of results) {
     if (done.has(result.id)) continue
-    const { published: ok } = await publishResult(result, { log })
+    // publishResult also dedups by spec_hash, so a result whose spec was
+    // already published under a different result id is skipped, not re-called.
+    const { published: ok } = await publishResult(result, { log, db })
     if (ok) published += 1
   }
   return { published }
