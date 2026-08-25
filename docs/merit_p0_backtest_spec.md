@@ -1,76 +1,77 @@
-# MERIT P0 Backtest Specification
+# MERIT P0 Backtest Specification, v1.2
 ## The graduated-book test: does process-based selection beat passive capital?
 
-Version 1.0, 25 August 2026. Owner: Daryl Lim. Resolves open question 1 of the MERIT handoff. All figures USD. Nothing here is investment, financial or legal advice.
+Version 1.2, 26 August 2026. Owner: Daryl Lim. Supersedes v1.0. All figures USD. Nothing here is investment, financial or legal advice.
 
 ---
+
+## 0. Change log (v1.0 to v1.2), pre-registered before any verdict exists
+
+**Why this amendment is legitimate:** no run has produced a verdict. v1.0's coverage gate halted before the headline run, exactly as designed, and the committed diagnostic (backtest_results/graduation/coverage.csv, 28 decision dates) showed the reason: the 9-month window held a mean of 3.7 eligible wallets per date, and v1.0's binary gates produced zero graduations everywhere, with failure broad-based across all five criteria (exposure 85%, drawdown 67%, sizing 39%, post-loss 24%, liquidation 15% of eligible wallet-dates). A test that can only return an empty book answers nothing. Two changes follow, each with its reason on the record:
+
+**Change 1: binary gates become a continuous score.** v1.0's pass/fail cliffs contradicted the MERIT handoff's own eval principle 4 ("continuous capital curve, no pass/fail cliff; allocation is a monotonic function of risk-adjusted score"). v1.2 aligns the test with the product's actual mechanism: wallets are ranked by a composite process score and the book funds the top of the ranking, score-weighted. The five process dimensions are unchanged; only their aggregation changes from gates to a curve.
+
+**Change 2: full universe, full window.** v1.0 ran on the classified cohort over a 9-month verified window. v1.2 requires the S3 archive backfill and the full wallet universe meeting the eligibility floor, because G0 scores observable behavior, not our labels, and because the venture question deserves statistical power.
+
+**What did NOT change, and may not change:** the four kill criteria (section 6), the walk-forward look-ahead protocol, the eligibility floor, survivorship inclusion, capacity haircuts, the HLP benchmark, and the priority order (kill criteria first, dataset capture always, money layer last). Any further amendment before the binding run requires another change-log entry here; after the binding run, the spec is frozen and the verdict stands.
 
 ## 1. What this test decides
 
-The MERIT handoff pre-registers one kill criterion for the entire venture: **if the backtested graduated book cannot beat HLP risk-adjusted, with lower drawdown, stop.** This document defines that test precisely enough that the result is binding, using the discipline AlphaLens already proved: hypothesis stated before the run, frictions and exclusions explicit, kill criteria evaluated by the engine rather than by hope.
+Unchanged from v1.0: the venture-level kill criterion from the MERIT handoff. If a book of wallets selected on process quality cannot beat passive HLP exposure risk-adjusted, with lower drawdown, MERIT's selection thesis fails and the funding ladder does not get built. The hypothesis, causal form: traders ranked highly on repeatable process discipline (drawdown control, sizing consistency, post-loss composure, exposure management, liquidation avoidance) will, as a diversified score-weighted book, outperform passive exposure on a risk-adjusted basis, because process persists where returns-based rankings select luck. Our published research (the copy-trading autopsy) proved the null for returns-based selection. This test measures whether process-based selection does better.
 
-The hypothesis, stated causally: wallets selected on **process quality** (drawdown discipline, sizing consistency, post-loss behavior) rather than trailing returns will, as a diversified book, deliver better risk-adjusted forward performance than passive HLP exposure, because process metrics measure repeatable behavior while trailing returns measure mostly luck and regime. Our own run 2 proved the null for return-based selection: trailing Sharpe anti-selects. MERIT's premise is that process metrics do better. That premise has never been tested. This test does it.
+This remains an allocation test, not a copy test: book returns are the wallets' own realized returns scaled to allocation. The relevant integrity constraints are look-ahead prevention, survivorship inclusion, capacity honesty, and selection made strictly from information available at decision time.
 
-Important framing: this is not a copy-trading test. The book does not mirror trades with delay and slippage. It simulates being the capital behind the wallets, so book returns are the wallets' own realized returns scaled to allocation. The frictions that matter here are selection honesty, look-ahead prevention, survivorship inclusion, and capacity haircuts, not execution latency.
+## 2. The process score S (replaces v1.0's G0 gates)
 
-## 2. The graduation template G0 (the retroactive eval proxy)
+At each decision date T, every wallet passing the eligibility floor receives a score built from the same five dimensions as v1.0, each measured continuously over the trailing 60-day window using only data at or before T:
 
-A wallet graduates at decision time T if, computed strictly from data available at or before T over the trailing 60-day eval window, all of the following hold:
+1. **Drawdown control** d1: max intra-window equity drawdown as a fraction of window-start equity. Lower is better.
+2. **Sizing consistency** d2: coefficient of variation of per-trade open notional. Lower is better.
+3. **Post-loss composure** d3: median size of the 3 trades following a losing close, divided by window-median size. Values at or below 1.0 are best; escalation above 1.0 is penalized.
+4. **Exposure management** d4: the window's maximum single-position entry notional as a fraction of equity at entry. Lower is better.
+5. **Liquidation avoidance** d5: liquidation events in the window (0 or more). Fewer is better; any liquidation is heavily penalized but not disqualifying by itself.
 
-**Eligibility floor.** At least 60 resolved round-trip trades in the window; active on at least 30 distinct days; verified complete history over the window per the start_position validation, else excluded and logged, never guessed.
+**Aggregation, fixed before the run:** each dimension is converted to a cross-sectional percentile rank among that decision date's eligible wallets (rank ascending so that better behavior means a higher percentile), then S = mean of the five percentiles, equally weighted. Percentile ranking is deliberately parameter-free: it removes every tunable threshold that v1.0 contained, which is the strongest available defense against calibration fishing. Ties broken by longer verified history. No returns, PnL, Sharpe, or win-rate term appears anywhere in S. That absence is the experiment.
 
-**Process criteria (the actual eval).**
-1. Drawdown discipline: max equity drawdown within the window at most 15 percent of window-start equity.
-2. Sizing consistency: coefficient of variation of per-trade notional at most 1.5, computed on opens only.
-3. Post-loss behavior: median position size in the 3 trades following a losing close at most 1.3x the wallet's window-median size. This is the revenge-sizing gate.
-4. Exposure discipline: no single open position exceeding 40 percent of equity at entry during the window.
-5. Kill-style survivorship inside the window: no liquidation events in the window (historicalOrders liquidatedCanceled or equivalent).
+**Eligibility floor (unchanged from v1.0):** at least 60 resolved round-trip trades in the window; active on at least 30 distinct days; verified complete history over the window per start_position validation, else excluded and logged, never guessed.
 
-**Explicitly absent from G0: any profit target, any Sharpe threshold, any PnL rank.** Returns enter only through the risk lens above. This is the point of the test. If process selection cannot work without smuggling returns back in, MERIT's eval thesis is false and we want to know.
+## 3. Walk-forward protocol (unchanged mechanics, wider data)
 
-G0's thresholds are the pre-registered defaults. The robustness battery perturbs them; the headline result uses these numbers.
-
-## 3. Walk-forward protocol (look-ahead prevention)
-
-Monthly decision dates T1..Tn across the longest honest window the data supports. At each T: score all eligible wallets on G0 using only data at or before T; graduated wallets form the book for the forward 90-day funded window; wallets are re-evaluated at every subsequent T (perpetual recertification proxy), and a wallet failing G0 at any later T is removed from the book at that T, not retroactively.
-
-Blown-up wallets stay in the record: a graduated wallet that dies mid-window contributes its losses to the book until removal at the next T or its final trade, whichever is first. Survivorship is included by construction, never filtered.
+Monthly decision dates across the longest verified-contiguous window the S3-backfilled data supports, targeting the archive's full depth (3 years where servable). At each T: score eligible wallets; the book for the forward 90-day funded window is the **top quintile by S** (see section 4); wallets are re-scored at every subsequent T and drop out of the book when they leave the top quintile, effective at that T only. Blown-up wallets contribute their losses until removal or final trade, whichever is first. Survivorship included by construction.
 
 ## 4. Book construction
 
-Equal-weight across graduated wallets at each T, per-wallet cap 5 percent of book, cash earns zero. Book return per period is the allocation-weighted sum of wallets' own equity-curve returns (from portfolio accountValueHistory where servable, else reconstructed from fills with the standard completeness validation). Capacity haircut: any wallet whose window median daily traded notional exceeds USD 5M contributes returns haircut by 25 percent, disclosed per wallet, because small-wallet returns do not scale to funded size. Correlation cap deferred to a robustness variant rather than the headline (v0 keeps the model simple and disclosed).
+**Selection: top 20 percent of eligible wallets by S at each T, with an absolute cap of 50 wallets** (largest-S first) so the book stays auditable. **Weighting: proportional to S within the selected set**, subject to the per-wallet cap of 5 percent of book. Cash earns zero. Capacity haircut unchanged: any wallet whose window median daily traded notional exceeds USD 5M contributes returns haircut by 25 percent, disclosed per wallet. Book returns computed from wallets' own equity histories (accountValueHistory where servable, else fills reconstruction with completeness validation), penny-reconciled.
+
+**Breadth floor for a meaningful book (feeds kill criterion 3):** a decision date with fewer than 25 eligible wallets scores the date but marks it under-powered; the walk-forward headline uses only dates meeting the floor, and the count of excluded dates is reported.
 
 ## 5. Benchmark
 
-HLP over the identical calendar windows, from public vault performance history. Same period, same accounting, no cherry-picked start dates. Both series reported gross of any fund fees, since the kill test compares capital deployment quality, not fee structures.
+Unchanged: HLP vault performance over the identical calendar windows, same accounting, both series gross of fund fees. No cherry-picked start dates.
 
-## 6. Kill criteria (pre-registered, binding)
+## 6. Kill criteria (unchanged from v1.0, binding)
 
-The venture test FAILS, and MERIT stops per the handoff, unless ALL of the following hold on the headline configuration:
+The venture test FAILS, and MERIT stops per the handoff, unless ALL hold on the headline configuration:
 
-1. Book deflated Sharpe strictly greater than HLP Sharpe over the full walk-forward period. Deflation accounts for the number of graduation-threshold configurations examined across the robustness battery.
+1. Book deflated Sharpe strictly greater than HLP Sharpe over the full walk-forward period, with deflation accounting for every configuration examined across the robustness battery.
 2. Book maximum drawdown strictly lower than HLP maximum drawdown over the same period.
-3. Breadth: the book averages at least 15 graduated wallets across decision dates. Below that, the verdict is INCONCLUSIVE, not PASS: a thin book proves nothing about an underwriting business.
-4. Robustness: the sign of the Sharpe advantage survives (a) removal of the single best wallet-period, (b) first-half versus second-half split, and (c) G0 thresholds perturbed by plus and minus 20 percent each, one at a time. A result that flips on any of these is curve fitting, verdict FAIL.
+3. Breadth: the headline walk-forward averages at least 15 wallets in the book across qualifying decision dates, and at least 12 qualifying decision dates exist. Below either, the verdict is INCONCLUSIVE, never PASS.
+4. Robustness: the sign of the Sharpe advantage survives (a) removal of the single best wallet-period, (b) first-half versus second-half split, (c) selection at top 10 percent and top 30 percent instead of 20, (d) equal-weight instead of S-weighted allocation. A result that flips on any of these is curve fitting: verdict FAIL.
 
-Additionally reported, not gating: alpha of the book versus a simple market factor (BTC), so a pass driven purely by beta-in-a-bull-window is visible and named.
+Additionally reported, not gating: book alpha versus BTC; the rank correlation between S at T and forward 90-day risk-adjusted return (the direct measurement of whether process predicts performance, and the first entry in MERIT's predictive-validity dataset); and the same correlation for a trailing-Sharpe ranking, as the published foil.
 
-## 7. Data constraints, stated before running
+## 7. Data protocol: the S3 backfill (new, binding architecture)
 
-The handoff assumes 3 years of history. Our verified store supports less: replayable complete histories in the cohort run 94 to 955 days, and the S3 deep backfill was deliberately deferred. Protocol: the test runs on the longest verified-contiguous window the data honestly supports, reported prominently; if that window is under 18 months, the verdict carries an explicit LOW-POWER flag and the S3 backfill (Option 3, previously deferred, roughly USD 5 and an AWS account) becomes the prerequisite for a binding verdict. We do not stretch thin data into a confident answer. Missing data is never zero.
+The run requires the Hyperliquid S3 archive (requester-pays; AWS credentials in .env.local, read-only IAM user, USD 25/month budget lockout armed).
+
+**Architecture rule, non-negotiable:** archive data is downloaded once to a local cache directory (s3_cache/, gitignored), decompressed and consumed locally by the backtest. **Nothing from the archive is bulk-loaded into Supabase.** The hot database receives only: run results, the coverage report, and per-period book CSVs (also written to backtest_results/graduation/). Heavy analytics never lives in the hot database; a full-universe multi-year ingest would also exceed the 16GB disk. The backfill script prints its estimated transfer cost before the full download and requires --confirm to proceed past the estimate; expected range USD 5 to 20, hard-fenced by the AWS budget action regardless.
+
+Coverage gate, restated for the wider data: the run reports eligible counts per decision date and the verified window before executing; if the S3-backed window still cannot produce at least 12 qualifying decision dates, stop and report rather than degrade.
 
 ## 8. Implementation route
 
-A standalone research script in the repo, backtest_graduation.py, sibling to backtest_copy.py, same invariants enforced: completeness validation, exclusion logging, penny reconciliation of book accounting, per-wallet source disclosure. Not forced through the verify-service rule grammar (allocation books are outside grammar v1); instead the run's spec, kill criteria, and verdict are published to the Ledger as a hypothesis_verdict call under the standard publishing rule, with the per-period book CSV as the receipt. If MERIT proceeds, a later grammar version absorbs allocation specs; for P0, honest research code beats premature productization.
+backtest_graduation.py evolves to v1.2: the gate logic becomes the scoring pipeline of section 2, the S3 cache reader is added, everything else (completeness validation, exclusion logging, penny reconciliation, HLP caching, walk-forward engine) carries over. Same invariants as backtest_copy.py throughout. The spec, kill criteria, and verdict publish to the Ledger as a hypothesis_verdict call under the standard publishing rule, with per-period book CSVs as receipts. The v1.0-to-v1.2 change log (section 0) is part of the published record.
 
 ## 9. Outputs
 
-One report: headline verdict against the four kill criteria; book versus HLP equity curves; per-decision-date graduation counts; per-wallet contribution table with capacity haircuts and exclusions; robustness battery table; the LOW-POWER flag state; and the Ledger call id once published. Plus the actuarial seed: the per-window distribution of graduated-wallet outcomes, which is the first row of the loss dataset the handoff names as MERIT's crown jewel, captured from test one as instructed.
-
-## 10. Claude Code prompt (run in the alphalens repo, one session, after current PRs merge)
-
-"Build backtest_graduation.py implementing the MERIT P0 spec at docs/merit_p0_backtest_spec.md exactly. Read the spec first and treat its G0 thresholds, walk-forward protocol, book construction, kill criteria, and data-constraint rules as binding. Reuse the fills store, completeness validation, and candle ladder from backtest_copy.py. Before the full run, print the honest data coverage report (eligible wallet count per decision date, longest verified-contiguous window) and stop for my confirmation if the window is under 18 months. Then run headline plus the full robustness battery, write per-period book CSVs to backtest_results/graduation/, and print the verdict block evaluating all four kill criteria. Do not optimize anything. HLP benchmark series from the public vault history endpoints, cached locally. All PostgREST reads paginated. Report the verdict verbatim."
-
----
-
-*Priority order unchanged from the handoff: kill criteria first, dataset capture always, money layer last. If this test says stop, MERIT stops, and the result publishes to the Ledger like every other honest no.*
+The verdict block against the four criteria with the LOW-POWER/INCONCLUSIVE machinery of sections 4 and 6; book versus HLP equity curves; per-date eligible counts and score distributions; per-wallet contribution table with haircuts and exclusions; the robustness battery table; the S-to-forward-performance rank correlation alongside the trailing-Sharpe foil; and the per-window outcome distribution that seeds MERIT's actuarial loss dataset.
