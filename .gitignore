@@ -56,5 +56,9 @@ venv/
 # backtest local cache
 data/backtest_cache/
 
+# Hyperliquid S3 archive cache (spec §7: downloaded once, consumed
+# locally, never committed and never loaded into Supabase)
+s3_cache/
+
 # stray next build artifacts outside the app root
 **/.next/
