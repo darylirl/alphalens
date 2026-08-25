@@ -20,9 +20,11 @@ const features = [
     num: '01',
     label: 'LIVE COHORT POSITIONING',
     title: 'See what tracked wallets are actually doing.',
-    desc: 'Pulse aggregates the real fills of hundreds of tracked Hyperliquid wallets — the classified cohort — into a rolling 24-hour positioning view: long/short skew per coin, new positions versus additions, traded notional in USD. Captured from the exchange, never estimated, and honest about its own coverage.',
+    desc: 'Pulse aggregates the real fills of the tracked Hyperliquid cohort — classified by behavior, market makers excluded — into a rolling 24-hour positioning view: long/short skew per coin, new positions versus additions, traded notional in USD. Captured from the exchange, never estimated, and honest about its own coverage. Every wallet behind it is listed publicly.',
     href: '/pulse',
     cta: 'Open Pulse',
+    href2: '/cohort',
+    cta2: 'See every wallet we track',
   },
   {
     num: '02',
@@ -238,9 +240,16 @@ export default function LandingPage() {
                 <p className="text-white/55 leading-relaxed text-sm md:text-base mb-5">
                   {f.desc}
                 </p>
-                <Link href={f.href} className="text-[#34EAB9] text-sm font-medium hover:underline">
-                  {f.cta} →
-                </Link>
+                <div className="flex items-center gap-5">
+                  <Link href={f.href} className="text-[#34EAB9] text-sm font-medium hover:underline">
+                    {f.cta} →
+                  </Link>
+                  {'href2' in f && f.href2 && (
+                    <Link href={f.href2} className="text-white/55 text-sm font-medium hover:text-[#34EAB9] hover:underline transition-colors">
+                      {f.cta2} →
+                    </Link>
+                  )}
+                </div>
               </motion.div>
               <motion.div
                 custom={2}
