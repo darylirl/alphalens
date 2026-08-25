@@ -430,7 +430,7 @@ The daemon originally swept every tracked wallet (~7,000). At that scope the
 disk growth for wallets nothing downstream reads. Capture now concentrates on
 the classified cohort, enforced by a flag rather than a convention:
 
-- `wallets.capture_enabled` (migration `011_capture_scope.sql`, default
+- `wallets.capture_enabled` (migration `014_capture_scope.sql`, default
   `false`) is set for every classified wallet (`archetype not null`), plus
   any wallet referenced by an active signal or a verification job spec.
 - `SWEEP_SCOPE=cohort` (the default) makes both the WS subscription set and

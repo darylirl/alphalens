@@ -1,6 +1,14 @@
 import { NextResponse } from 'next/server'
 import { getSupabase } from '@/lib/db/supabase'
 
+// Never prerendered: this route reads Supabase, and a build-time database
+// call makes the deployment depend on database health. When the database was
+// unreachable, Next.js retried static generation of this route three times at
+// 60s each and failed the whole build — a page that is dynamic by nature
+// should say so.
+export const dynamic = 'force-dynamic'
+
+
 function envelope(data: unknown, error?: string) {
   return NextResponse.json({
     success: !error,

@@ -1,0 +1,75 @@
+{
+  "spec_version": 1,
+  "hypothesis_text": "When the tracked cohort's 24h net flow in BTC flips from net-short to net-long, BTC continues higher over the following day, by enough to clear 60s-delayed taker execution.",
+  "universe": {
+    "coins": [
+      "BTC"
+    ]
+  },
+  "bar_interval": "1h",
+  "entry": {
+    "side": "long",
+    "rule": {
+      "type": "cohort",
+      "metric": "net_flow_usd",
+      "window_h": 24,
+      "op": "cross_above",
+      "value": 0
+    }
+  },
+  "exit": {
+    "condition": null,
+    "max_holding_time_h": 24
+  },
+  "sizing": {
+    "mode": "fixed_usd",
+    "notional_usd": 1000
+  },
+  "frictions": {
+    "delay_s": 60,
+    "slippage_bps": 5,
+    "taker_fee_pct": 0.045
+  },
+  "window": {
+    "start": "2026-06-17T00:00:00Z",
+    "end": "2026-08-16T00:00:00Z"
+  },
+  "kill_criteria": [
+    {
+      "id": "unprofitable",
+      "metric": "net_pnl_usd",
+      "op": "lte",
+      "value": 0,
+      "description": "Kill if the strategy does not make money after frictions."
+    },
+    {
+      "id": "weak_edge",
+      "metric": "profit_factor",
+      "op": "lt",
+      "value": 1.2,
+      "description": "Kill if profit factor is below 1.2 \u2014 too thin to survive worse slippage."
+    },
+    {
+      "id": "too_few_trades",
+      "metric": "trade_count",
+      "op": "lt",
+      "value": 10,
+      "description": "Kill if fewer than 10 trades: nothing to conclude from."
+    },
+    {
+      "id": "drawdown",
+      "metric": "max_drawdown_pct",
+      "op": "gt",
+      "value": 25,
+      "description": "Kill if peak-to-trough drawdown exceeds 25% of the stated capital base."
+    }
+  ],
+  "notes": {
+    "look_ahead_flags": [
+      "Cohort membership is whatever the capture daemon tracks today; wallets added to tracking after the window began contribute flow to the earlier part of the window.",
+      "Window end is 2026-08-16, chosen because capture was interrupted on 2026-08-16 and fills for 2026-08-17..25 are still backfilling with high-frequency wallets permanently lost. Distinct BTC wallets per day fall from ~200 to ~35 across that boundary, so any window extending past it would read a damaged cohort as a quiet one."
+    ],
+    "mechanism": "stated",
+    "mechanism_text": "Cohort net flow is an aggregate of informed-trader positioning; a sign flip is a change in that group's directional stance, which should precede price if their information is real and not already priced."
+  }
+}

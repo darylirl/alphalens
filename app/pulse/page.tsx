@@ -5,7 +5,11 @@ import { BottomNav } from '@/components/layout/BottomNav'
 // pulse_24h materialized view (captured fills, refreshed every 5 minutes) —
 // no live exchange calls on this path, no per-wallet data, and none of the
 // deprecated wallet confidence scores.
-export const revalidate = 60
+// Server-rendered per request rather than prerendered at build time: the
+// build must not depend on the database being reachable (a build-time Supabase
+// call that hangs fails the whole deployment). This trades ISR caching for
+// build independence; the read is a single small matview query.
+export const dynamic = 'force-dynamic'
 
 interface PulseRow {
   coin: string

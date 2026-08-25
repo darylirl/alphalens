@@ -1,4 +1,21 @@
-# Verification runs
+# Verification runs — EXPERIMENTAL
+
+> **Status: experimental. Not the canonical engine.**
+>
+> `verify-service/` is the canonical verification engine: it owns the queue,
+> the versioned spec schema and rule grammar v1, and the invariant tests. This
+> directory holds an earlier standalone Python run of the same database
+> surface, kept for reference and comparison.
+>
+> **Results produced here are not Ledger-eligible** (see the publishing rule in
+> `CLAUDE.md`): only results written by the canonical engine, from a spec that
+> validates against the current grammar, may be published. `verification_results`
+> id=1 came from this stack, predates grammar v1, and is therefore recorded but
+> not publishable. It stays in the table — the table is append-only by design,
+> and deleting an honest result to tidy the record would be its own dishonesty.
+>
+> If you extend this directory, it stays experimental. New verification work
+> belongs in `verify-service/`.
 
 Artifacts from end-to-end runs of the database verification surface. Each
 result also lives as an append-only row in `verification_results` (the

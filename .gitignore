@@ -51,3 +51,6 @@ venv/
 
 # backtest local cache
 data/backtest_cache/
+
+# stray next build artifacts outside the app root
+**/.next/
