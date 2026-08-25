@@ -3,9 +3,9 @@ import { BottomNav } from '@/components/layout/BottomNav'
 import { CaptureCoverageStrip, loadCaptureStatus } from '@/components/layout/CaptureCoverageStrip'
 
 // Public, no login, server-rendered for sub-1s FCP: all data comes from the
-// pulse_24h materialized view (captured fills, refreshed every 5 minutes) —
-// no live exchange calls on this path, no per-wallet data, and none of the
-// deprecated wallet confidence scores.
+// pulse_24h materialized view (captured fills, refreshed every 30 minutes by
+// pg_cron) — no live exchange calls on this path, no per-wallet data, and
+// none of the deprecated wallet confidence scores.
 // Server-rendered per request rather than prerendered at build time: the
 // build must not depend on the database being reachable (a build-time Supabase
 // call that hangs fails the whole deployment). This trades ISR caching for
@@ -46,6 +46,8 @@ async function loadPulse() {
   const supabase = getSupabase()
   const capture = await loadCaptureStatus(supabase)
   try {
+    // capture_health filtering lives in loadCaptureStatus (shared with
+    // /ledger): capture-daemon rows only, wallets_polled null-fallback.
     const { data: rows } = await supabase
       .from('pulse_24h').select('*').order('notional_24h', { ascending: false }).limit(30)
     return { rows: (rows || []) as PulseRow[], ...capture }
@@ -60,6 +62,10 @@ export default async function PulsePage() {
 
   const coins = rows
     .filter(r => Number(r.notional_24h) > 0)
+    // "@107"-style coins are Hyperliquid's internal spot-pair ids. We hold no
+    // verified id->symbol mapping (and this path makes no live exchange
+    // calls), so unmapped ids are excluded rather than shown raw or guessed.
+    .filter(r => !/^@\d+$/.test(r.coin))
     .map(r => {
       const notional = Number(r.notional_24h)
       const netFlow = Number(r.net_flow_24h)
@@ -97,7 +103,7 @@ export default async function PulsePage() {
           lastHeartbeat={lastHeartbeat}
           walletsTracked={walletsTracked}
           captureSince={captureSince}
-          refreshNote={`data refreshed every 5 min${computedAt ? ` · computed ${ago(computedAt)}` : ''}`}
+          refreshNote={`data refreshed every 30 min${computedAt ? ` · computed ${ago(computedAt)}` : ''}`}
         />
 
         {coins.length === 0 ? (

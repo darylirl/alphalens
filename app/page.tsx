@@ -20,7 +20,7 @@ const features = [
     num: '01',
     label: 'LIVE COHORT POSITIONING',
     title: 'See what tracked wallets are actually doing.',
-    desc: 'Pulse aggregates the real fills of thousands of tracked Hyperliquid wallets into a rolling 24-hour positioning view: long/short skew per coin, new positions versus additions, traded notional in USD. Captured from the exchange, never estimated, and honest about its own coverage.',
+    desc: 'Pulse aggregates the real fills of hundreds of tracked Hyperliquid wallets — the classified cohort — into a rolling 24-hour positioning view: long/short skew per coin, new positions versus additions, traded notional in USD. Captured from the exchange, never estimated, and honest about its own coverage.',
     href: '/pulse',
     cta: 'Open Pulse',
   },
@@ -37,7 +37,7 @@ const features = [
     label: 'VERIFIED VERDICTS',
     title: 'Verdicts you can share — including the failures.',
     desc: 'A tested idea gets a verdict with receipts: the full parameter set, the frictions applied, and the result. Failed hypotheses are first-class research here, because knowing what loses money is the cheapest edge there is.',
-    href: '/learn',
+    href: '/research/copy-trading-autopsy',
     cta: 'Read our copy-trading autopsy',
   },
 ]

@@ -52,18 +52,30 @@ export function CaptureCoverageStrip({
   )
 }
 
-/** The capture_health reads behind the strip — shared by /pulse and /ledger. */
+/**
+ * The capture_health reads behind the strip — shared by /pulse and /ledger.
+ * capture_health is shared: the verification worker and the ledger scorer
+ * also heartbeat here (service='verify', no WS state or wallet counts).
+ * Status must read only the capture daemon's own rows or an interleaved
+ * verify heartbeat renders "Capture offline" while capture is healthy.
+ */
 export async function loadCaptureStatus(supabase: {
   from: (t: string) => any
 }): Promise<{ lastHeartbeat: string | null; walletsTracked: number | null; captureSince: string | null }> {
   try {
     const [{ data: latest }, { data: first }] = await Promise.all([
-      supabase.from('capture_health').select('ts,wallets_polled').order('ts', { ascending: false }).limit(1),
-      supabase.from('capture_health').select('ts').order('ts', { ascending: true }).limit(1),
+      supabase.from('capture_health').select('ts,wallets_polled')
+        .eq('service', 'capture').order('ts', { ascending: false }).limit(5),
+      supabase.from('capture_health').select('ts')
+        .eq('service', 'capture').order('ts', { ascending: true }).limit(1),
     ])
+    // wallets_polled can be null on a heartbeat written before the first
+    // wallet refresh completes; fall back to the newest row that has it.
+    const walletsTracked =
+      latest?.find((r: { wallets_polled: number | null }) => r.wallets_polled != null)?.wallets_polled ?? null
     return {
       lastHeartbeat: latest?.[0]?.ts ?? null,
-      walletsTracked: latest?.[0]?.wallets_polled ?? null,
+      walletsTracked,
       captureSince: first?.[0]?.ts ?? null,
     }
   } catch {
