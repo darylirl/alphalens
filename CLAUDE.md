@@ -100,6 +100,18 @@ aggregation that under-counted unnoticed).
   (idempotent delete+insert per hour range) and backfilled in paced steps via
   `cohort_flow_backfill_slice`, guarded by `cohort_flow_backfill_claim` so two
   runners cannot advance the same slice.
+- `ledger_calls` (migration 015) is the public Ledger: append-only with the
+  same enforcement as `verification_results`, plus one carved-out door — a
+  column-level grant lets the scorer fill the resolution block
+  (`resolved_at`, `outcome`, `scored_brier`, `resolution_evidence`) exactly
+  once, validated by the trigger. Calls are strategy/cohort-level only
+  (`ledger_subject_ok` rejects wallet-bearing subjects). Eligible
+  verification results auto-publish via `verify-service/lib/publish.mjs`
+  (runner at result time + scorer sweep; idempotent via the partial unique
+  index on `provenance->result_id`). `cohort_signal` calls are scored by
+  `verify-service/scorer.mjs` against captured tape, and a tape gap at
+  either instant resolves as `unresolvable` with no Brier score — never a
+  guessed price.
 - Two tape readers exist and mean different things:
   `verify_tape_prices(coin, from, to, ...)` returns captured rows over a range;
   `verify_tape_prices_at(coin, targets[], search)` returns the first print at

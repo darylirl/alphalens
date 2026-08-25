@@ -21,9 +21,14 @@ triggered.
 | `lib/indicators.mjs` | EMA / RSI / price-change, `null` until warmed up |
 | `lib/engine.mjs` | Replay core + the invariants, as assertions |
 | `lib/metrics.mjs` | Metrics, verdict, per-trade CSV |
-| `lib/runner.mjs` | One job end to end |
+| `lib/runner.mjs` | One job end to end (publishes the result to the Ledger when eligible) |
+| `lib/publish.mjs` | Ledger eligibility rule + call construction and publishing |
+| `lib/scorer.mjs` | Resolves due `cohort_signal` calls against captured tape |
+| `lib/telegram.mjs` | Ledger channel publisher (separate env from watchdog alerts) |
 | `index.mjs` | Worker loop: claim → run → persist → heartbeat |
+| `scorer.mjs` | Ledger scorer loop: publish sweep + horizon scoring |
 | `enqueue.mjs` | CLI: validate a spec file and enqueue it |
+| `publish-founding.mjs` | One-shot: the Ledger's two founding entries |
 
 Node >= 22, zero npm dependencies — same shape as `capture-service`.
 
@@ -121,10 +126,38 @@ nothing, and `verdict.inconclusive` says so.
   cohort flow, maintained by pg_cron.
 - Storage bucket `verification-results` — one per-trade CSV per job.
 
+## The Ledger (migration 015, `/ledger`)
+
+`ledger_calls` is the public, append-only record of published calls, with the
+same enforcement as `verification_results` (UPDATE/DELETE revoked and
+trigger-rejected). The one carved-out door is a one-time write of the
+resolution block (`resolved_at`, `outcome`, `scored_brier`,
+`resolution_evidence`) by the scorer, via a column-level grant that the
+trigger still validates.
+
+- **Publishing rule** (`lib/publish.mjs`): a verification result reaches the
+  Ledger only when the canonical engine produced it AND its spec still passes
+  `validateSpec()`. The runner publishes at result time; the scorer's sweep is
+  the at-least-once net; a partial unique index on `provenance->result_id`
+  makes double-publish impossible. `verification_results` id=1 (pre-grammar
+  engine) stays recorded and unpublished, on purpose.
+- **Scoring** (`scorer.mjs`, `lib/scorer.mjs`): due `cohort_signal` calls
+  resolve against the first captured print at/after `published_at` and
+  `resolves_at` (1m candles, then cohort fills; 15-minute search). Missing
+  tape is never scored: the scorer waits `SCORER_GRACE_H` (default 24h) for
+  late capture, then records `unresolvable` with no Brier score and the gap
+  documented. Aggregate/strategy subjects only — a wallet-bearing subject is
+  rejected by the database.
+- **Telegram** (`lib/telegram.mjs`): posts each new call and each resolution
+  to a public channel via `LEDGER_TELEGRAM_BOT_TOKEN` +
+  `LEDGER_TELEGRAM_CHANNEL_ID`. Deliberately separate from the watchdog alert
+  bot's env; unconfigured means messages are logged and dropped.
+
 ## Run locally
 
 ```
 SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... node index.mjs         # worker
+SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... node scorer.mjs        # ledger scorer
 SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... \
   node enqueue.mjs specs/btc-cohort-flow-flip.json me                 # enqueue
 npm test                                                              # invariants
