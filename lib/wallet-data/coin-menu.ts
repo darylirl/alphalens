@@ -101,16 +101,24 @@ function entriesFromFills(fills: Fill[]): CoinMenuEntry[] {
 }
 
 export async function loadCoinMenu(address: string): Promise<CoinMenu> {
-  const wallet = await loadWalletRow(address)
+  // All three reads are keyed on the address alone, so they go together:
+  // waiting for the wallets row before starting the aggregate put a round
+  // trip in front of the page's first paint for nothing. A wallet that
+  // turns out not to be cohort simply discards a cheap indexed lookup that
+  // found nothing.
+  const supabase = getSupabase()
+  const [wallet, menuRes, gapCoins] = await Promise.all([
+    loadWalletRow(address),
+    supabase
+      .rpc('replay_coin_menu', { p_wallet: address.toLowerCase() })
+      .then(r => r, (e: unknown) => ({ data: null, error: e as { message: string } })),
+    loadGapCoins(address),
+  ])
   const isCohort = Boolean(wallet?.capture_enabled)
 
   if (isCohort) {
     try {
-      const supabase = getSupabase()
-      const [{ data, error }, gapCoins] = await Promise.all([
-        supabase.rpc('replay_coin_menu', { p_wallet: address.toLowerCase() }),
-        loadGapCoins(address),
-      ])
+      const { data, error } = menuRes
       if (error) throw error
       const rows = (data ?? []) as MenuRpcRow[]
       const coins: CoinMenuEntry[] = rows.map(r => ({
@@ -143,20 +151,27 @@ export async function loadCoinMenu(address: string): Promise<CoinMenu> {
             : 'AlphaLens capture store: no captured fills yet for this cohort wallet',
         },
       }
-    } catch {
+    } catch (err) {
       // Store unreachable: fall through to the exchange window, same rule as
-      // the fills reader — the coverage block says which source answered.
+      // the fills reader — the coverage block says which source answered,
+      // and the reason is logged so a cohort wallet quietly serving its
+      // shallow recent window is diagnosable.
+      console.error(
+        'coin-menu store read failed, falling back to exchange window:',
+        err instanceof Error ? err.message : err
+      )
     }
   }
 
-  const { fills, coverage, isCohort: cohortNow, wallet: walletNow, gapCoins } =
-    await loadWalletFills(address)
+  const { fills, coverage, gapCoins: exchangeGaps } = await loadWalletFills(address, {
+    wallet,
+  })
   return {
     coins: entriesFromFills(fills),
     coverage,
-    isCohort: cohortNow,
-    wallet: walletNow ?? wallet,
-    gapCoins,
+    isCohort,
+    wallet,
+    gapCoins: isCohort ? gapCoins : exchangeGaps,
     coinsCapped: false,
   }
 }
