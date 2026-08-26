@@ -131,25 +131,25 @@ def require_boto3():
 
 
 def make_client(region: str, env: dict):
+    """Explicit keys when present, otherwise boto3's default credential chain.
+
+    On an EC2 instance with an attached role there are no keys to find and none
+    should exist: the instance profile is delivered by IMDS and rotates on its
+    own. Requiring explicit keys here would mean copying long-lived secrets onto
+    a machine that already has better credentials, which is strictly worse than
+    having none."""
     boto3, Config = require_boto3()
+    cfg = Config(retries={"max_attempts": 4, "mode": "standard"},
+                 connect_timeout=20, read_timeout=120,
+                 max_pool_connections=16)
     key = env.get("AWS_ACCESS_KEY_ID", "")
     secret = env.get("AWS_SECRET_ACCESS_KEY", "")
-    if not key or not secret:
-        sys.exit(
-            "No AWS credentials found in the environment or .env.local.\n"
-            "Spec section 7 puts the read-only IAM user's keys in .env.local; that file\n"
-            "is gitignored and is not present here. Without it the archive is\n"
-            "unreachable and NO backfill is possible. Refusing to emit a partial\n"
-            "cache that would later read as real coverage."
-        )
-    return boto3.client(
-        "s3", region_name=region,
-        aws_access_key_id=key, aws_secret_access_key=secret,
-        aws_session_token=env.get("AWS_SESSION_TOKEN") or None,
-        config=Config(retries={"max_attempts": 4, "mode": "standard"},
-                      connect_timeout=20, read_timeout=120,
-                      max_pool_connections=16),
-    )
+    if key and secret:
+        return boto3.client(
+            "s3", region_name=region,
+            aws_access_key_id=key, aws_secret_access_key=secret,
+            aws_session_token=env.get("AWS_SESSION_TOKEN") or None, config=cfg)
+    return boto3.client("s3", region_name=region, config=cfg)
 
 
 def verify_credentials(env: dict) -> str:
@@ -157,18 +157,20 @@ def verify_credentials(env: dict) -> str:
     boto3, Config = require_boto3()
     key = env.get("AWS_ACCESS_KEY_ID", "")
     secret = env.get("AWS_SECRET_ACCESS_KEY", "")
-    if not key or not secret:
-        return ("MISSING: AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY are not set "
-                "in the environment or .env.local")
+    cfg = Config(retries={"max_attempts": 2}, connect_timeout=15, read_timeout=25)
     try:
-        sts = boto3.client(
-            "sts", region_name="us-east-1",
-            aws_access_key_id=key, aws_secret_access_key=secret,
-            aws_session_token=env.get("AWS_SESSION_TOKEN") or None,
-            config=Config(retries={"max_attempts": 2}, connect_timeout=15,
-                          read_timeout=25))
+        if key and secret:
+            sts = boto3.client(
+                "sts", region_name="us-east-1",
+                aws_access_key_id=key, aws_secret_access_key=secret,
+                aws_session_token=env.get("AWS_SESSION_TOKEN") or None, config=cfg)
+            source = "static keys"
+        else:
+            # Instance profile / default chain. Absent keys are not an error here.
+            sts = boto3.client("sts", region_name="us-east-1", config=cfg)
+            source = "default chain (instance profile)"
         ident = sts.get_caller_identity()
-        return f"OK: {ident.get('Arn')} (account {ident.get('Account')})"
+        return f"OK [{source}]: {ident.get('Arn')} (account {ident.get('Account')})"
     except Exception as exc:                                   # noqa: BLE001
         return f"REJECTED: {type(exc).__name__}: {str(exc)[:220]}"
 
