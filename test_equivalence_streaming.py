@@ -85,7 +85,13 @@ def ulp_equal(a, b):
 
 def build_subset_cache(cache_root: Path, days, datasets=("node_fills",
                                                          "node_fills_by_block")):
-    """Mirror selected day directories by symlink — no copying of 300 GB."""
+    """Mirror selected days into a real directory tree whose LEAVES are
+    symlinks — no copying of 300 GB.
+
+    The directories have to be real. Path.rglob() does not descend into
+    symlinked directories, so symlinking the day directory itself makes the
+    subset look empty to every consumer that walks it with `**` — which is
+    all three of them (load_s3_fills, spill_archive, and this file)."""
     if SUBSET.exists():
         shutil.rmtree(SUBSET)
     picked = []
@@ -98,10 +104,14 @@ def build_subset_cache(cache_root: Path, days, datasets=("node_fills",
                 if not src.is_dir():
                     continue
                 dst = SUBSET / src.relative_to(cache_root)
-                dst.parent.mkdir(parents=True, exist_ok=True)
-                if not dst.exists():
-                    os.symlink(src, dst)
-                picked.append((ds, day, len(list(src.glob('*.lz4')))))
+                dst.mkdir(parents=True, exist_ok=True)
+                n = 0
+                for obj in sorted(src.glob("*.lz4")):
+                    link = dst / obj.name
+                    if not link.exists():
+                        os.symlink(obj, link)
+                    n += 1
+                picked.append((ds, day, n))
     return picked
 
 
