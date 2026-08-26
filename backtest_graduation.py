@@ -1145,31 +1145,37 @@ def s3_cache_state() -> dict:
             "datasets": out, "reason": ""}
 
 
-def _normalise_s3_fill(rec: dict):
-    """node_fills records appear either flat or wrapped in a node envelope.
-    Returns the fill dict in the same shape fetch_fills() produces, or None if
-    the record is not a fill. A record whose shape is unrecognised is a hard
-    error, not a skipped line: silently dropping unparsed archive rows would
-    manufacture gaps that read as 'this wallet did not trade'."""
-    # Verified real shape (node_fills/hourly/*.lz4): each line is a two-element
-    # JSON array, [address, fill]. This is checked before the dict branches
-    # because a list has no .get() and would otherwise raise.
+def _normalise_s3_fill(rec):
+    """Return [(address, fill), ...] for an archive line, or None if the line's
+    shape is unrecognised. Both layouts below were read off real archive bytes,
+    not inferred: an assumed shape here fails silently as zero coverage, which
+    is indistinguishable from a wallet that did not trade.
+
+    An unrecognised shape is a hard error rather than a skipped line, for the
+    same reason. An empty list is NOT an error: a block containing no fills is
+    a real, measured zero."""
+    # node_fills (legacy, through 2025-07-27): one two-element array per line,
+    # ["0xabc...", {coin, px, sz, side, time, ...}]. Checked before the dict
+    # branches because a list has no .get() and would otherwise raise.
     if isinstance(rec, list):
         if len(rec) == 2 and isinstance(rec[0], str) and isinstance(rec[1], dict):
             return [(rec[0], rec[1])]
-        # node_fills_by_block wraps a block's fills: [meta, [[addr, fill], ...]]
-        if len(rec) == 2 and isinstance(rec[1], list):
-            pairs = []
-            for item in rec[1]:
-                if (isinstance(item, list) and len(item) == 2
-                        and isinstance(item[0], str) and isinstance(item[1], dict)):
-                    pairs.append((item[0], item[1]))
-                else:
-                    return None
-            return pairs
         return None
     if not isinstance(rec, dict):
         return None
+    # node_fills_by_block (primary, from 2025-07-27): one block per line,
+    # {local_time, block_time, block_number, events: [[address, fill], ...]}.
+    # Most blocks carry events: [] — the venue produces blocks faster than
+    # trades arrive — so the empty case is the common case, not a defect.
+    if isinstance(rec.get("events"), list):
+        pairs = []
+        for item in rec["events"]:
+            if (isinstance(item, list) and len(item) == 2
+                    and isinstance(item[0], str) and isinstance(item[1], dict)):
+                pairs.append((item[0], item[1]))
+            else:
+                return None
+        return pairs
     if "raw" in rec and isinstance(rec.get("raw"), dict):
         data = rec["raw"].get("data", rec["raw"])
         if isinstance(data, dict) and "fills" in data:
