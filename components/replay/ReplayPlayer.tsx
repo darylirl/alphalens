@@ -13,12 +13,14 @@
  * reported price, and the running PnL is the sum of the exchange's own
  * closedPnl figures — nothing is mark-priced or reconstructed.
  *
- * The unit of playback is the EPISODE: a round trip of the position leaving
- * zero and coming back to it. The page opens on the wallet's largest-|PnL|
- * episode, a title card names it, the bars FORM (open walking toward close,
- * wicks revealed) rather than being unveiled, every fill announces itself
- * with a card over the chart, and an end card closes with the realized
- * result. Full-range replay stays available as "entire history".
+ * Replay v2.1 — precomputed documents: the player consumes ONE serialized
+ * replay doc per (wallet, coin, range, bar width), served from the
+ * replay_docs cache. A cached doc plays as soon as it parses (the title card
+ * covers the parse); an uncached first view streams the build's REAL
+ * progress — actual fills paged, actual bars loaded — never a spinner over
+ * silence. Docs are memoized in sessionStorage so rewatching and episode
+ * switching are instant, and playback itself never touches the network: the
+ * rAF loop only indexes into the decoded timeline.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -39,19 +41,22 @@ import {
   buildTimeline,
   coarsen,
   cueSchedule,
+  type RCandle,
   type RFill,
   type Timeline,
 } from '@/lib/replay/engine'
-import { detectEpisodes, defaultEpisode, byPnl, type Episode } from '@/lib/replay/episodes'
+import {
+  decodeCandles,
+  decodeEpisodes,
+  decodeFills,
+  rangeKey,
+  type DocEpisode,
+  type ReplayDoc,
+  type WireCoin,
+} from '@/lib/replay/docspec'
 import { collectFlashGroups, flashesAt, drawFlashes } from '@/lib/replay/flash'
 import { drawChart } from '@/lib/replay/chart'
-import {
-  CANDLE_INTERVALS,
-  retentionStart,
-  STEP_MS,
-  paceCandidates,
-  barLabel,
-} from '@/lib/replay/ladder'
+import { STEP_MS, barLabel } from '@/lib/replay/ladder'
 import { play as playCue, prepare as prepareSound, renderCues } from '@/lib/replay/sound'
 import {
   signedUsd,
@@ -75,61 +80,6 @@ function loadClip() {
 
 // ---------------------------------------------------------------------------
 
-interface EpisodeSummaryWire {
-  count: number
-  top: {
-    from: number
-    to: number
-    pnl: number
-    entries: number
-    exits: number
-    fills: number
-    openBeforeCoverage: boolean
-    openAtEnd: boolean
-  } | null
-}
-
-interface ReplayMeta {
-  address: string
-  identity: { label: string | null; archetype: string | null; cohort_member: boolean }
-  coverage: { source: string; note: string; fill_count: number }
-  gap_coins: string[]
-  coins: {
-    coin: string
-    fills: number
-    from: number
-    to: number
-    episodes: EpisodeSummaryWire
-  }[]
-  default_coin: string | null
-}
-
-interface IntervalOption {
-  interval: string
-  interval_ms: number
-  available: boolean
-  source: 'exchange' | 'store' | null
-  reason: string | null
-}
-
-interface CandlesRes {
-  coin: string
-  interval: string
-  interval_ms: number
-  source: 'exchange' | 'store'
-  from: number
-  to: number
-  candles: { t: number; o: number; h: number; l: number; c: number; v: number }[]
-  coverage: {
-    bars: number
-    window_bars: number
-    internal_gaps: number
-    largest_internal_gap_ms: number
-    note: string
-  }
-  intervals: IntervalOption[]
-}
-
 /** With bar formation animated, 8x is already fast — the old 60x/max tiers
  *  reduced the chart to a strobe. */
 const SPEEDS = [
@@ -148,9 +98,19 @@ const TITLE_MS = 2_200
 /** Episodes listed in the picker before "show all". */
 const PICKER_LIMIT = 12
 
+/** Docs bigger than this stay out of sessionStorage (quota is ~5MB). */
+const MEMO_MAX_BYTES = 2_000_000
+
 type SizeMode = 'normal' | 'theater' | 'full'
 type Phase = 'title' | 'run' | 'end'
-type PickState = { kind: 'episode'; index: number } | { kind: 'all' }
+
+/** What the player asks the doc API for. coin '' + range 'default' is the
+ *  landing view — the doc the cohort pre-builder keeps warm. */
+interface DocReq {
+  coin: string
+  range: string
+  interval: string
+}
 
 const hhmm = (ms: number) => new Date(ms).toISOString().slice(11, 16)
 
@@ -161,18 +121,122 @@ function periodLabel(from: number, to: number): string {
     : `${dayStamp(from)} – ${dayStamp(to)}`
 }
 
+// --- sessionStorage memo ----------------------------------------------------
+// Rewatch and episode-switch inside a session never refetch: the doc string
+// is memoized per (address, coin, range, interval). Guarded — storage can be
+// full or blocked, and the replay must work identically without it.
+
+const memoKey = (address: string, r: DocReq) =>
+  `alr1:${address.toLowerCase()}:${r.coin}:${r.range}:${r.interval}`
+
+function memoGet(key: string): ReplayDoc | null {
+  try {
+    const s = sessionStorage.getItem(key)
+    return s ? (JSON.parse(s) as ReplayDoc) : null
+  } catch {
+    return null
+  }
+}
+
+function memoSet(key: string, doc: ReplayDoc) {
+  try {
+    const s = JSON.stringify(doc)
+    if (s.length <= MEMO_MAX_BYTES) sessionStorage.setItem(key, s)
+  } catch {
+    // full or blocked storage: the memo is a convenience, never a dependency
+  }
+}
+
+// --- Doc fetch --------------------------------------------------------------
+
+interface BuildEvent {
+  phase: string
+  [k: string]: unknown
+}
+
+function progressText(ev: BuildEvent): string {
+  switch (ev.phase) {
+    case 'building':
+      return String(ev.note ?? 'building this replay')
+    case 'fills':
+      return `reading real fills — ${Number(ev.fills ?? 0).toLocaleString()} so far`
+    case 'episodes':
+      return `detecting round trips — ${Number(ev.episodes ?? 0)} episodes across ${Number(ev.coins ?? 0)} coin${Number(ev.coins ?? 0) === 1 ? '' : 's'}`
+    case 'candles':
+      return `loading ${String(ev.interval ?? '')} candles — ${Number(ev.bars ?? 0).toLocaleString()} bars`
+    case 'assemble':
+      return 'assembling the replay document'
+    default:
+      return 'building this replay'
+  }
+}
+
+async function fetchDoc(
+  address: string,
+  r: DocReq,
+  onProgress: (text: string) => void
+): Promise<{ doc: ReplayDoc; behind: number }> {
+  const qs = new URLSearchParams()
+  if (r.coin) qs.set('coin', r.coin)
+  qs.set('range', r.range)
+  if (r.interval !== 'auto') qs.set('interval', r.interval)
+  const res = await fetch(`/api/replay/${address}/doc?${qs}`, { cache: 'no-store' })
+  const ct = res.headers.get('content-type') ?? ''
+
+  if (ct.includes('ndjson')) {
+    // A cold build: the server streams real progress lines, then the doc.
+    if (!res.body) throw new Error('the build stream had no body')
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buf = ''
+    let doc: ReplayDoc | null = null
+    let errText: string | null = null
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (value) buf += decoder.decode(value, { stream: true })
+      let nl: number
+      while ((nl = buf.indexOf('\n')) >= 0) {
+        const lineStr = buf.slice(0, nl)
+        buf = buf.slice(nl + 1)
+        if (!lineStr.trim()) continue
+        let ev: BuildEvent
+        try {
+          ev = JSON.parse(lineStr) as BuildEvent
+        } catch {
+          continue
+        }
+        if (ev.phase === 'done' && ev.doc) doc = ev.doc as ReplayDoc
+        else if (ev.phase === 'error') errText = String(ev.error ?? 'could not build this replay')
+        else onProgress(progressText(ev))
+      }
+      if (done) break
+    }
+    if (errText) throw new Error(errText)
+    if (!doc) throw new Error('the build ended without a document')
+    return { doc, behind: 0 }
+  }
+
+  const body = await res.json()
+  if (!res.ok) throw new Error(body?.error ?? `replay doc error ${res.status}`)
+  return {
+    doc: body as ReplayDoc,
+    behind: Number(res.headers.get('x-replay-fills-behind') ?? 0) || 0,
+  }
+}
+
+// ---------------------------------------------------------------------------
+
 export function ReplayPlayer({ address }: { address: string }) {
-  const [meta, setMeta] = useState<ReplayMeta | null>(null)
-  const [metaError, setMetaError] = useState<string | null>(null)
-  const [coin, setCoin] = useState<string | null>(null)
-  const [pick, setPick] = useState<PickState | null>(null) // null = not chosen yet
-  const [pickedInterval, setPickedInterval] = useState<string | null>(null) // null = auto
-  const [allFills, setAllFills] = useState<RFill[] | null>(null)
-  const [fillsMidPosition, setFillsMidPosition] = useState(false)
-  const [candlesRes, setCandlesRes] = useState<CandlesRes | null>(null)
-  const [zoom, setZoom] = useState<(typeof ZOOMS)[number]>(1)
+  const [request, setRequest] = useState<DocReq>({ coin: '', range: 'default', interval: 'auto' })
+  const [doc, setDoc] = useState<ReplayDoc | null>(null)
+  /** Cross-coin picker list: only the default doc carries it, so it is kept
+   *  across coin-scoped docs. */
+  const [coins, setCoins] = useState<WireCoin[] | null>(null)
+  const [behind, setBehind] = useState(0)
+  const [buildLine, setBuildLine] = useState<string | null>(null)
   const [dataError, setDataError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [zoom, setZoom] = useState<(typeof ZOOMS)[number]>(1)
 
   const [phase, setPhase] = useState<Phase>('title')
   const [playing, setPlaying] = useState(false)
@@ -210,159 +274,100 @@ export function ReplayPlayer({ address }: { address: string }) {
     }
   }, [])
 
-  // --- Meta -----------------------------------------------------------------
+  // --- One doc per view: memo → cache → streamed build ----------------------
   useEffect(() => {
-    let dead = false
-    fetch(`/api/replay/${address}`, { cache: 'no-store' })
-      .then(async res => {
-        const body = await res.json()
-        if (dead) return
-        if (!res.ok) setMetaError(body?.error ?? `error ${res.status}`)
-        else {
-          setMeta(body as ReplayMeta)
-          setCoin((body as ReplayMeta).default_coin)
-        }
-      })
-      .catch(() => {
-        if (!dead) setMetaError('Could not reach the replay API just now.')
-      })
-    return () => {
-      dead = true
-    }
-  }, [address])
-
-  const coinInfo = useMemo(
-    () => meta?.coins.find(c => c.coin === coin) ?? null,
-    [meta, coin]
-  )
-
-  // --- Fills, loaded once per coin; episodes detected from them -------------
-  useEffect(() => {
-    if (!coin) return
     let dead = false
     setLoading(true)
     setDataError(null)
-    setAllFills(null)
-    setCandlesRes(null)
-    setPick(null)
-    fetch(`/api/replay/${address}/fills?coin=${encodeURIComponent(coin)}`, { cache: 'no-store' })
-      .then(async res => {
-        const body = await res.json()
+    setBuildLine(null)
+
+    const apply = (next: ReplayDoc, behindNow: number) => {
+      if (dead) return
+      setDoc(next)
+      setBehind(behindNow)
+      if (next.coins) setCoins(next.coins)
+      setZoom(1)
+      at.current = 0
+      setAtDisplay(0)
+      lastCuedBar.current = -1
+      // Every fresh doc opens on the title card and rolls from there — a
+      // replay that opens paused on an empty frame reads as broken.
+      setPhase('title')
+      setPlaying(false)
+      setLoading(false)
+    }
+
+    const requestedKey = memoKey(address, request)
+    const memoized = memoGet(requestedKey)
+    if (memoized) {
+      apply(memoized, 0)
+      return () => {
+        dead = true
+      }
+    }
+
+    fetchDoc(address, request, text => {
+      if (!dead) setBuildLine(text)
+    })
+      .then(({ doc: next, behind: behindNow }) => {
         if (dead) return
-        if (!res.ok) throw new Error(body?.error ?? `fills error ${res.status}`)
-        setAllFills((body.fills ?? []) as RFill[])
-        setFillsMidPosition(Boolean(body.starts_mid_position))
+        memoSet(requestedKey, next)
+        // Also memoize under the RESOLVED identity, so picking the same
+        // episode/coin explicitly later is an instant memo hit.
+        if (next.resolved) {
+          memoSet(
+            memoKey(address, {
+              coin: next.resolved.coin,
+              range: next.resolved.range,
+              interval: request.interval,
+            }),
+            next
+          )
+        }
+        apply(next, behindNow)
       })
       .catch(err => {
         if (dead) return
-        setDataError(err instanceof Error ? err.message : 'could not load fills')
+        setDataError(err instanceof Error ? err.message : 'could not load the replay')
         setLoading(false)
       })
     return () => {
       dead = true
     }
-  }, [address, coin])
+  }, [address, request])
 
-  /** Round-trip episodes for this coin — same detector the meta API ran. */
-  const episodes = useMemo(() => (allFills ? detectEpisodes(allFills) : []), [allFills])
+  // --- Decode the doc -------------------------------------------------------
+  const candlesBase: RCandle[] | null = useMemo(
+    () => (doc?.resolved ? decodeCandles(doc.candles) : null),
+    [doc]
+  )
+  const fills: RFill[] | null = useMemo(
+    () => (doc?.resolved ? decodeFills(doc.fills, doc.dirs) : null),
+    [doc]
+  )
+  const episodes: DocEpisode[] = useMemo(
+    () => (doc ? decodeEpisodes(doc.episodes) : []),
+    [doc]
+  )
 
-  // The page opens on the largest-|PnL| complete episode; a coin with no
-  // episodes plays its entire history.
-  useEffect(() => {
-    if (!allFills || pick !== null) return
-    const top = defaultEpisode(episodes)
-    setPick(top ? { kind: 'episode', index: episodes.indexOf(top) } : { kind: 'all' })
-  }, [allFills, episodes, pick])
+  /** The episode this doc plays, resolved by the server; null = whole range. */
+  const pickedEpisode: DocEpisode | null = useMemo(() => {
+    if (!doc?.resolved || doc.resolved.range === 'all') return null
+    const m = /^ep:(\d+)-(\d+)$/.exec(doc.resolved.range)
+    if (!m) return null
+    const from = Number(m[1])
+    const to = Number(m[2])
+    return episodes.find(e => e.from === from && e.to === to) ?? null
+  }, [doc, episodes])
 
-  const pickedEpisode: Episode | null =
-    pick?.kind === 'episode' ? (episodes[pick.index] ?? null) : null
-
-  // The requested candle window: the episode's own span, or the coin's whole
-  // covered range — padded so the entry bar has context.
-  const window_ = useMemo(() => {
-    if (!coinInfo || !pick) return null
-    const raw =
-      pick.kind === 'episode' && pickedEpisode
-        ? { from: pickedEpisode.from, to: pickedEpisode.to }
-        : { from: coinInfo.from, to: coinInfo.to }
-    const span = Math.max(raw.to - raw.from, 60_000)
-    return {
-      ...raw,
-      padFrom: Math.max(raw.from - Math.max(span * 0.06, 120_000), 0),
-      padTo: Math.min(raw.to + Math.max(span * 0.04, 120_000), Date.now()),
-    }
-  }, [coinInfo, pick, pickedEpisode])
-
-  // --- Candles, loaded per (window, interval) --------------------------------
-  // Pacing (trickshot's approach — bar width from the traded window): the
-  // interval whose bar count sits closest to a 45–90s play at 1x, best first,
-  // with the runners-up as fallbacks. The server re-checks and refuses
-  // anything dishonest; we never fetch finer than the ladder allows.
-  useEffect(() => {
-    if (!coin || !window_ || !allFills) return
-    let dead = false
-    setLoading(true)
-    setDataError(null)
-    setCandlesRes(null)
-
-    const run = async () => {
-      const { padFrom: from, padTo: to } = window_
-      const candidates = pickedInterval ? [pickedInterval] : paceCandidates(to - from)
-
-      let res: CandlesRes | null = null
-      let lastErr = 'no interval can serve this window'
-      for (const iv of candidates) {
-        const url = `/api/replay/candles?coin=${encodeURIComponent(coin)}&interval=${iv}&from=${Math.floor(from)}&to=${Math.ceil(to)}`
-        const r = await fetch(url, { cache: 'no-store' })
-        const body = await r.json()
-        if (dead) return
-        if (r.ok) {
-          res = body as CandlesRes
-          break
-        }
-        lastErr = body?.error ?? `candles error ${r.status}`
-      }
-      if (!res) throw new Error(lastErr)
-
-      setCandlesRes(res)
-      setZoom(1)
-      at.current = 0
-      setAtDisplay(0)
-      lastCuedBar.current = -1
-      // Every fresh load opens on the title card and rolls from there — a
-      // replay that opens paused on an empty frame reads as broken.
-      setPhase('title')
-      setPlaying(false)
-    }
-
-    run()
-      .catch(err => {
-        if (!dead) setDataError(err instanceof Error ? err.message : 'could not load replay data')
-      })
-      .finally(() => {
-        if (!dead) setLoading(false)
-      })
-    return () => {
-      dead = true
-    }
-  }, [address, coin, window_, pickedInterval, allFills])
-
-  // The fills the timeline carries: exactly the episode's own fills, or the
-  // padded window's for "entire history". Padding must not smuggle a
-  // neighbouring episode's fills into this one's story or its realized sum.
-  const fills = useMemo(() => {
-    if (!allFills || !window_) return null
-    const from = pickedEpisode ? pickedEpisode.from : window_.padFrom
-    const to = pickedEpisode ? pickedEpisode.to : window_.padTo
-    return allFills.filter(f => f.t >= from && f.t <= to)
-  }, [allFills, window_, pickedEpisode])
-
-  /** What the chart actually draws: the served bars, browser-merged when the
+  /** What the chart actually draws: the doc's bars, browser-merged when the
    *  zoom asks for wider ones. Coarser only — see engine.coarsen. */
   const display = useMemo(
     () =>
-      candlesRes ? coarsen(candlesRes.candles, candlesRes.interval_ms, zoom) : null,
-    [candlesRes, zoom]
+      candlesBase && doc?.resolved
+        ? coarsen(candlesBase, doc.resolved.interval_ms, zoom)
+        : null,
+    [candlesBase, doc, zoom]
   )
 
   const timeline: Timeline | null = useMemo(() => {
@@ -381,9 +386,10 @@ export function ReplayPlayer({ address }: { address: string }) {
   /** What the title and end cards say — the episode's own numbers, or the
    *  whole range summed from its episodes. */
   const episodeCard: EpisodeCard | null = useMemo(() => {
-    if (!coin || !window_ || !fills) return null
+    if (!doc?.resolved || !fills) return null
+    const coin = doc.resolved.coin
     if (pickedEpisode) {
-      const rank = pick?.kind === 'episode' ? pick.index : 0
+      const index = episodes.indexOf(pickedEpisode)
       return {
         coin,
         period: periodLabel(pickedEpisode.from, pickedEpisode.to),
@@ -392,7 +398,7 @@ export function ReplayPlayer({ address }: { address: string }) {
         maxPosUsd: pickedEpisode.maxPosUsd,
         durationMs: pickedEpisode.to - pickedEpisode.from,
         pnl: pickedEpisode.pnl,
-        which: `episode ${rank + 1} of ${episodes.length}`,
+        which: `episode ${index + 1} of ${episodes.length}`,
         caveat: pickedEpisode.openBeforeCoverage
           ? 'position opened before captured history — partial picture'
           : pickedEpisode.openAtEnd
@@ -413,9 +419,11 @@ export function ReplayPlayer({ address }: { address: string }) {
       durationMs: fills[fills.length - 1].t - fills[0].t,
       pnl: fills.reduce((s, f) => s + f.pnl, 0),
       which: 'entire history',
-      caveat: fillsMidPosition ? 'history starts mid-position — partial picture' : '',
+      caveat: doc.starts_mid_position
+        ? 'history starts mid-position — partial picture'
+        : '',
     }
-  }, [coin, window_, fills, pickedEpisode, pick, episodes, fillsMidPosition])
+  }, [doc, fills, pickedEpisode, episodes])
 
   // --- Title card: hold, then roll ------------------------------------------
   useEffect(() => {
@@ -431,6 +439,7 @@ export function ReplayPlayer({ address }: { address: string }) {
   // Drawn imperatively every animation frame (React state only for the DOM
   // figures, throttled). The forming bar walks its open toward its close with
   // the wicks revealed as it goes — the chart reads as price FORMING.
+  // Playback and seeking only index into the decoded timeline: no network.
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas || !timeline || total === 0 || clipping !== null) return
@@ -551,7 +560,7 @@ export function ReplayPlayer({ address }: { address: string }) {
   // (same painter as the screen), end card — with the coverage strip and
   // watermark on every frame.
   const exportClip = useCallback(async () => {
-    if (!timeline || !candlesRes || !episodeCard || total < 2) return
+    if (!timeline || !doc?.resolved || !episodeCard || total < 2) return
     if (!encoders || encoders === 'probing') return
     const exportStep = stepMs
     const replaySeconds = (total * exportStep) / 1000
@@ -566,7 +575,7 @@ export function ReplayPlayer({ address }: { address: string }) {
     setPlaying(false)
 
     const cardUrl = `${location.host}/card/${address}`
-    const strip = stripLines(candlesRes, timeline, coin ?? '', fillsMidPosition, zoom)
+    const strip = stripLines(doc, timeline, zoom)
     const groups = flashGroups
 
     try {
@@ -610,9 +619,9 @@ export function ReplayPlayer({ address }: { address: string }) {
               barSpacing: 16,
               k: 2,
             },
-            coin: coin ?? '',
+            coin: doc.resolved?.coin ?? '',
             address,
-            label: meta?.identity.label ?? null,
+            label: doc.identity.label ?? null,
             realized: timeline.realizedAfter[bar] ?? 0,
             fillsSoFar: timeline.fillsAfter[bar] ?? 0,
             stripLines: strip,
@@ -636,7 +645,10 @@ export function ReplayPlayer({ address }: { address: string }) {
         },
       })
       if (result && !abortClip.current) {
-        save(result.blob, `alphalens-replay-${coin}-${address.slice(0, 8)}.${result.ext}`)
+        save(
+          result.blob,
+          `alphalens-replay-${doc.resolved.coin}-${address.slice(0, 8)}.${result.ext}`
+        )
       }
     } catch (err) {
       // Nothing is saved; the replay goes back to how it was — but the reason
@@ -645,26 +657,18 @@ export function ReplayPlayer({ address }: { address: string }) {
     } finally {
       setClipping(null)
     }
-  }, [
-    timeline,
-    candlesRes,
-    episodeCard,
-    total,
-    encoders,
-    stepMs,
-    address,
-    coin,
-    meta,
-    fillsMidPosition,
-    zoom,
-    flashGroups,
-  ])
+  }, [timeline, doc, episodeCard, total, encoders, stepMs, address, zoom, flashGroups])
 
   // --- Derived UI state ------------------------------------------------------
   const realizedNow = timeline?.realizedAfter[Math.min(atDisplay, total - 1)] ?? 0
   const fillsNow = timeline?.fillsAfter[Math.min(atDisplay, total - 1)] ?? 0
   const locked = clipping !== null
-  const rankedEpisodes = useMemo(() => byPnl(episodes), [episodes])
+  const rankedEpisodes = useMemo(
+    () => [...episodes].sort((a, b) => Math.abs(b.pnl) - Math.abs(a.pnl)),
+    [episodes]
+  )
+  const resolvedCoin = doc?.resolved?.coin ?? null
+  const resolvedRange = doc?.resolved?.range ?? 'default'
 
   const containerWidth = sizeMode === 'normal' ? 'max-w-2xl' : 'max-w-6xl'
   const chartHeight = sizeMode === 'normal' ? 'h-[300px]' : 'h-[420px] md:h-[520px]'
@@ -677,19 +681,19 @@ export function ReplayPlayer({ address }: { address: string }) {
     setPhase('title')
   }, [])
 
-  if (metaError) {
+  if (dataError && !doc) {
     return (
       <div className="card p-6 text-center max-w-2xl mx-auto">
         <p className="text-sm font-semibold mb-1">Replay unavailable</p>
-        <p className="text-xs text-white/40">{metaError}</p>
+        <p className="text-xs text-white/40">{dataError}</p>
       </div>
     )
   }
-  if (meta && meta.coins.length === 0) {
+  if (doc && !doc.resolved) {
     return (
       <div className="card p-6 text-center max-w-2xl mx-auto">
         <p className="text-sm font-semibold mb-1">Nothing to replay</p>
-        <p className="text-xs text-white/40">{meta.coverage.note}</p>
+        <p className="text-xs text-white/40">{doc.coverage.fills.note}</p>
       </div>
     )
   }
@@ -700,11 +704,11 @@ export function ReplayPlayer({ address }: { address: string }) {
       <div className="flex items-end justify-between gap-3">
         <div className="min-w-0">
           <p className="text-[10px] text-white/40 font-mono tracking-wider">
-            {meta?.identity.label ? `${meta.identity.label} · ` : ''}
+            {doc?.identity.label ? `${doc.identity.label} · ` : ''}
             {address.slice(0, 8)}…{address.slice(-6)}
           </p>
           <p className="font-mono text-lg font-bold text-[#F5A623]">
-            {coin ?? '—'}
+            {resolvedCoin ?? '—'}
             {episodeCard && (
               <span className="ml-2 text-[10px] font-normal text-white/40 uppercase tracking-wider">
                 {episodeCard.which}
@@ -728,11 +732,20 @@ export function ReplayPlayer({ address }: { address: string }) {
       <div className="relative card overflow-hidden">
         <canvas ref={canvasRef} className={`w-full ${chartHeight} block`} />
         {(loading || !timeline) && !dataError && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[#0F1A1E]">
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[#0F1A1E] p-6 text-center">
             <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/[0.12] border-t-[#34EAB9]" />
-            <p className="text-[10px] text-white/40 uppercase tracking-wider">
-              reading this wallet&rsquo;s fills and the tape they landed on
-            </p>
+            {buildLine ? (
+              <>
+                <p className="text-[10px] text-white/55 uppercase tracking-wider">
+                  building this replay — first view does the work, later views are instant
+                </p>
+                <p className="text-[10px] text-[#34EAB9]/80 font-mono">{buildLine}</p>
+              </>
+            ) : (
+              <p className="text-[10px] text-white/40 uppercase tracking-wider">
+                loading the replay document
+              </p>
+            )}
           </div>
         )}
         {dataError && (
@@ -750,8 +763,8 @@ export function ReplayPlayer({ address }: { address: string }) {
             </p>
             <p className="text-[11px] text-white/40 leading-relaxed max-w-md">
               The chosen source holds{' '}
-              {candlesRes
-                ? `${candlesRes.coverage.bars} of ${candlesRes.coverage.window_bars.toLocaleString()} possible ${candlesRes.interval} bars`
+              {doc?.coverage.candles
+                ? `${doc.coverage.candles.bars} of ${doc.coverage.candles.window_bars.toLocaleString()} possible ${doc.resolved?.interval} bars`
                 : 'no bars'}{' '}
               here. A gap in captured data is shown as missing, never filled — try another episode
               or interval.
@@ -839,13 +852,19 @@ export function ReplayPlayer({ address }: { address: string }) {
       </div>
 
       {/* Granularity / coverage strip — always visible, and inside every exported frame */}
-      {candlesRes && timeline && (
+      {doc && timeline && (
         <div className="card px-3 py-2">
-          {stripLines(candlesRes, timeline, coin ?? '', fillsMidPosition, zoom).map((line, i) => (
+          {stripLines(doc, timeline, zoom).map((line, i) => (
             <p key={i} className="text-[10px] text-white/45 font-mono leading-relaxed">
               {line}
             </p>
           ))}
+          {behind > 0 && (
+            <p className="text-[10px] text-[#F5A623]/80 font-mono leading-relaxed">
+              cached document · {behind} newer fill{behind === 1 ? '' : 's'} not yet included —
+              refreshes automatically
+            </p>
+          )}
         </div>
       )}
 
@@ -1010,34 +1029,35 @@ export function ReplayPlayer({ address }: { address: string }) {
       )}
 
       {/* Coin, episode, zoom and interval pickers */}
-      {meta && (
+      {doc && (
         <div className="space-y-2">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-[9px] text-white/35 uppercase tracking-wider w-full sm:w-auto">
-              coin
-            </span>
-            {meta.coins.slice(0, 10).map(c => (
-              <button
-                key={c.coin}
-                type="button"
-                disabled={locked}
-                onClick={() => {
-                  setCoin(c.coin)
-                  setPickedInterval(null)
-                  setShowAllEpisodes(false)
-                }}
-                className={`min-h-[30px] px-2 rounded border font-mono text-[10px] transition-colors ${
-                  coin === c.coin
-                    ? 'border-[#F5A623]/50 bg-[#F5A623]/10 text-[#F5A623]'
-                    : 'border-white/[0.12] text-white/40 hover:text-white/70'
-                }`}
-                title={`${c.fills.toLocaleString()} fills, ${dayStamp(c.from)} – ${dayStamp(c.to)} · ${c.episodes.count} episodes`}
-              >
-                {c.coin}
-                <span className="ml-1 text-white/30">{c.fills}</span>
-              </button>
-            ))}
-          </div>
+          {coins && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[9px] text-white/35 uppercase tracking-wider w-full sm:w-auto">
+                coin
+              </span>
+              {coins.slice(0, 10).map(([c, fillCount, from, to, epCount]) => (
+                <button
+                  key={c}
+                  type="button"
+                  disabled={locked}
+                  onClick={() => {
+                    setRequest({ coin: c, range: 'default', interval: 'auto' })
+                    setShowAllEpisodes(false)
+                  }}
+                  className={`min-h-[30px] px-2 rounded border font-mono text-[10px] transition-colors ${
+                    resolvedCoin === c
+                      ? 'border-[#F5A623]/50 bg-[#F5A623]/10 text-[#F5A623]'
+                      : 'border-white/[0.12] text-white/40 hover:text-white/70'
+                  }`}
+                  title={`${fillCount.toLocaleString()} fills, ${dayStamp(from)} – ${dayStamp(to)} · ${epCount} episodes`}
+                >
+                  {c}
+                  <span className="ml-1 text-white/30">{fillCount}</span>
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Episode picker: largest |PnL| first, PnL-labelled; the whole
               range stays available as "entire history". */}
@@ -1047,16 +1067,20 @@ export function ReplayPlayer({ address }: { address: string }) {
             </span>
             {(showAllEpisodes ? rankedEpisodes : rankedEpisodes.slice(0, PICKER_LIMIT)).map(ep => {
               const index = episodes.indexOf(ep)
-              const active = pick?.kind === 'episode' && pick.index === index
+              const active = pickedEpisode === ep
               const partial = ep.openBeforeCoverage || ep.openAtEnd
               return (
                 <button
                   key={index}
                   type="button"
-                  disabled={locked}
+                  disabled={locked || !resolvedCoin}
                   onClick={() => {
-                    setPick({ kind: 'episode', index })
-                    setPickedInterval(null)
+                    if (!resolvedCoin) return
+                    setRequest({
+                      coin: resolvedCoin,
+                      range: rangeKey({ from: ep.from, to: ep.to }),
+                      interval: 'auto',
+                    })
                   }}
                   title={`${periodLabel(ep.from, ep.to)} · ${ep.entries} entries, ${ep.exits} exits · ${ep.fills} fills${partial ? ' · partial (position open beyond covered fills)' : ''}`}
                   className={`min-h-[30px] px-2 rounded border font-mono text-[10px] transition-colors ${
@@ -1085,20 +1109,20 @@ export function ReplayPlayer({ address }: { address: string }) {
             )}
             <button
               type="button"
-              disabled={locked}
+              disabled={locked || !resolvedCoin}
               onClick={() => {
-                setPick({ kind: 'all' })
-                setPickedInterval(null)
+                if (!resolvedCoin) return
+                setRequest({ coin: resolvedCoin, range: 'all', interval: 'auto' })
               }}
               className={`min-h-[30px] px-2 rounded border font-mono text-[10px] uppercase transition-colors ${
-                pick?.kind === 'all'
+                resolvedRange === 'all'
                   ? 'border-[#34EAB9]/50 bg-[#34EAB9]/10 text-[#34EAB9]'
                   : 'border-white/[0.12] text-white/40 hover:text-white/70'
               }`}
             >
               entire history
             </button>
-            {allFills && episodes.length === 0 && (
+            {doc && episodes.length === 0 && (
               <span className="text-[9px] text-white/30">
                 no round trips detected in the covered fills
               </span>
@@ -1115,26 +1139,26 @@ export function ReplayPlayer({ address }: { address: string }) {
               <button
                 key={z}
                 type="button"
-                disabled={locked || !candlesRes}
+                disabled={locked || !candlesBase}
                 onClick={() => {
-                  if (!candlesRes || !display) return
+                  if (!candlesBase || !display || !doc?.resolved) return
                   // Hold the moment, not the index: wider bars mean fewer of
                   // them, so keeping `at` would jump the replay back in time.
                   const now = display.candles[Math.min(at.current, display.candles.length - 1)]?.t ?? 0
-                  const next = coarsen(candlesRes.candles, candlesRes.interval_ms, z)
+                  const next = coarsen(candlesBase, doc.resolved.interval_ms, z)
                   const i = next.candles.findIndex(c => c.t + next.intervalMs > now)
                   setZoom(z)
                   at.current = i < 0 ? Math.max(next.candles.length - 1, 0) : i
                   setAtDisplay(at.current)
                 }}
-                title={candlesRes ? `${barLabel(candlesRes.interval_ms * z)} bars` : undefined}
+                title={doc?.resolved ? `${barLabel(doc.resolved.interval_ms * z)} bars` : undefined}
                 className={`min-h-[30px] px-2 rounded border font-mono text-[10px] uppercase transition-colors ${
                   zoom === z
                     ? 'border-[#34EAB9]/50 bg-[#34EAB9]/10 text-[#34EAB9]'
                     : 'border-white/[0.12] text-white/40 hover:text-white/70'
                 }`}
               >
-                {candlesRes ? barLabel(candlesRes.interval_ms * z) : `${z}x`}
+                {doc?.resolved ? barLabel(doc.resolved.interval_ms * z) : `${z}x`}
               </button>
             ))}
             <span className="text-[9px] text-white/30 leading-relaxed">
@@ -1148,12 +1172,15 @@ export function ReplayPlayer({ address }: { address: string }) {
             <span className="text-[9px] text-white/35 uppercase tracking-wider w-full sm:w-auto">
               bars
             </span>
-            {(candlesRes?.intervals ?? defaultIntervalOptions(window_)).map(opt => (
+            {doc.intervals.map(opt => (
               <button
                 key={opt.interval}
                 type="button"
-                disabled={locked || !opt.available}
-                onClick={() => setPickedInterval(opt.interval)}
+                disabled={locked || !opt.available || !resolvedCoin}
+                onClick={() => {
+                  if (!resolvedCoin) return
+                  setRequest({ coin: resolvedCoin, range: resolvedRange, interval: opt.interval })
+                }}
                 title={
                   opt.available
                     ? opt.source === 'store'
@@ -1162,7 +1189,7 @@ export function ReplayPlayer({ address }: { address: string }) {
                     : (opt.reason ?? 'not honestly servable for this window')
                 }
                 className={`min-h-[30px] px-2 rounded border font-mono text-[10px] uppercase transition-colors disabled:opacity-35 disabled:line-through ${
-                  candlesRes?.interval === opt.interval
+                  doc.resolved?.interval === opt.interval
                     ? 'border-[#34EAB9]/50 bg-[#34EAB9]/10 text-[#34EAB9]'
                     : 'border-white/[0.12] text-white/40 hover:text-white/70'
                 }`}
@@ -1183,42 +1210,23 @@ export function ReplayPlayer({ address }: { address: string }) {
 
 /** The coverage/granularity strip, one place — shown on the page and painted
  *  into every exported frame, so receipts travel inside the clip. */
-function stripLines(
-  c: CandlesRes,
-  tl: Timeline,
-  coin: string,
-  midPosition: boolean,
-  zoom: number
-): string[] {
+function stripLines(doc: ReplayDoc, tl: Timeline, zoom: number): string[] {
+  const r = doc.resolved
+  const c = doc.coverage.candles
+  if (!r || !c) return []
   const gaps =
-    c.coverage.internal_gaps > 0
-      ? `${c.coverage.internal_gaps} gaps (largest ${durationLabel(c.coverage.largest_internal_gap_ms)}) — drawn, not bridged`
+    c.internal_gaps > 0
+      ? `${c.internal_gaps} gaps (largest ${durationLabel(c.largest_internal_gap_ms)}) — drawn, not bridged`
       : 'no internal gaps'
-  const merge = zoom > 1 ? ` · ×${zoom} browser bar-merge (coarser only)` : ''
+  const mergeFactor = r.coarsen * zoom
+  const merge = mergeFactor > 1 ? ` · ×${mergeFactor} bar-merge (coarser only)` : ''
   const outside =
     tl.fillsOutsideWindow > 0
       ? ` · ${tl.fillsOutsideWindow} fill${tl.fillsOutsideWindow === 1 ? '' : 's'} outside candle coverage`
       : ''
-  const mid = midPosition ? ' · history starts mid-position (partial picture)' : ''
+  const mid = doc.starts_mid_position ? ' · history starts mid-position (partial picture)' : ''
   return [
-    `${coin} · ${c.interval} bars · ${c.source === 'store' ? 'AlphaLens captured tape' : 'exchange candles'} · ${c.coverage.bars.toLocaleString()} of ${c.coverage.window_bars.toLocaleString()} possible bars · ${gaps}${merge}`,
-    `${dayStamp(c.from)} – ${dayStamp(c.to)} · ${tl.totalFills.toLocaleString()} fills at exchange-exact prices${outside}${mid}`,
+    `${r.coin} · ${r.interval} bars · ${c.source === 'store' ? 'AlphaLens captured tape' : 'exchange candles'} · ${c.bars.toLocaleString()} of ${c.window_bars.toLocaleString()} possible bars · ${gaps}${merge}`,
+    `${dayStamp(r.padFrom)} – ${dayStamp(r.padTo)} · ${tl.totalFills.toLocaleString()} fills at exchange-exact prices${outside}${mid}`,
   ]
-}
-
-/** Before the first candles response lands, grey the picker from the ladder
- *  alone (client-side estimate; the server's answer replaces it). */
-function defaultIntervalOptions(
-  window_: { padFrom: number; padTo: number } | null
-): IntervalOption[] {
-  return CANDLE_INTERVALS.map(([interval, ms]) => {
-    const ok = window_ ? window_.padFrom >= retentionStart(interval) : false
-    return {
-      interval,
-      interval_ms: ms,
-      available: ok,
-      source: ok ? 'exchange' : null,
-      reason: ok ? null : 'outside the exchange retention ladder for this window',
-    }
-  })
 }

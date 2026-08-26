@@ -115,7 +115,8 @@ function storeRowToFill(r: StoreFillRow): Fill {
  *  ascending. Only rows the capture daemon wrote (`tid is not null`). */
 async function loadStoreFills(
   address: string,
-  coin?: string
+  coin?: string,
+  onPage?: (fillsSoFar: number) => void
 ): Promise<{ fills: Fill[]; capped: boolean }> {
   const supabase = getSupabase()
   const rows: StoreFillRow[] = []
@@ -132,6 +133,7 @@ async function loadStoreFills(
     if (error) throw error
     const page = (data ?? []) as StoreFillRow[]
     rows.push(...page)
+    onPage?.(rows.length)
     if (page.length < STORE_PAGE) {
       return { fills: rows.reverse().map(storeRowToFill), capped: false }
     }
@@ -159,13 +161,17 @@ async function hlPost<T>(payload: Record<string, unknown>): Promise<T | null> {
  * exchange retains only the most recent ~10K fills, so this converges in a
  * handful of requests and yields exactly the retained window.
  */
-async function loadExchangeFills(address: string): Promise<Fill[]> {
+async function loadExchangeFills(
+  address: string,
+  onPage?: (fillsSoFar: number) => void
+): Promise<Fill[]> {
   const byTid = new Map<number, Fill>()
   let startTime = 1
   for (let page = 0; page < HL_MAX_PAGES; page++) {
     const batch = await hlPost<Fill[]>({ type: 'userFillsByTime', user: address, startTime })
     if (!Array.isArray(batch) || batch.length === 0) break
     for (const f of batch) byTid.set(f.tid, f)
+    onPage?.(byTid.size)
     if (batch.length < HL_PAGE) break
     startTime = batch[batch.length - 1].time + 1
   }
@@ -191,7 +197,7 @@ const fmtDay = (ms: number) => new Date(ms).toISOString().slice(0, 10)
 
 export async function loadWalletFills(
   address: string,
-  opts: { coin?: string } = {}
+  opts: { coin?: string; onPage?: (fillsSoFar: number) => void } = {}
 ): Promise<WalletFills> {
   const wallet = await loadWalletRow(address)
   const isCohort = Boolean(wallet?.capture_enabled)
@@ -199,7 +205,7 @@ export async function loadWalletFills(
   if (isCohort) {
     try {
       const [{ fills, capped }, gapCoins] = await Promise.all([
-        loadStoreFills(address, opts.coin),
+        loadStoreFills(address, opts.coin, opts.onPage),
         loadGapCoins(address),
       ])
       const from = fills.length ? new Date(fills[0].time).toISOString() : null
@@ -227,7 +233,7 @@ export async function loadWalletFills(
     }
   }
 
-  const all = await loadExchangeFills(address)
+  const all = await loadExchangeFills(address, opts.onPage)
   const fills = opts.coin ? all.filter(f => f.coin === opts.coin) : all
   const from = fills.length ? new Date(fills[0].time).toISOString() : null
   const to = fills.length ? new Date(fills[fills.length - 1].time).toISOString() : null
