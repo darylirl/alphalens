@@ -24,9 +24,10 @@ import {
 //
 // First request for an uncached (wallet, coin, range, interval) builds the
 // doc while streaming REAL progress (NDJSON lines with actual page/bar
-// counts — never a spinner over silence), caches it in replay_docs, and
-// finishes with the doc itself. Every later request is a single-row cache
-// read served as plain JSON.
+// counts — never a spinner over silence), then a partial HEAD doc (the
+// opening window, so playback starts while the tail loads — Replay v2.2),
+// then the full doc, then the cache write's outcome. Every later request is
+// a single-row cache read served as plain JSON.
 //
 // Freshness is honest and cheap: a viewer is served a cached cohort doc with
 // its fill-lag DECLARED — x-replay-fills-behind says exactly how many fills
@@ -195,8 +196,14 @@ export async function GET(req: NextRequest, { params }: { params: { address: str
             phase: 'building',
             note: 'building this replay — first view does the work; later views serve the cached document',
           })
-          const built = await buildReplayDoc(addr, docReq, (p: BuildProgress) =>
-            line({ phase: p.phase, ...p.detail })
+          const built = await buildReplayDoc(
+            addr,
+            docReq,
+            (p: BuildProgress) => line({ phase: p.phase, ...p.detail }),
+            // Progressive playback: the opening window streams as a partial
+            // head doc so the player can roll while the tail loads. The
+            // pre-builder only warms the cache — it has no playhead to feed.
+            prebuild ? undefined : head => line({ phase: 'head', doc: head })
           )
           const contentHash = sha256(
             `${addr}|${coin}|${rangeStr}|${interval}|${built.lastFillId ?? 'none'}`
@@ -221,23 +228,41 @@ export async function GET(req: NextRequest, { params }: { params: { address: str
                 ? new Date(Date.now() + PASTED_TTL_MS).toISOString()
                 : null,
           }
+          // A viewer gets the finished doc BEFORE the cache write — the
+          // upsert of a multi-hundred-KB row has no business sitting between
+          // a built replay and the person waiting on it. The write's outcome
+          // still streams afterwards as its own line: the failure is declared
+          // (cache_write), not just logged — a deployment missing the
+          // service-role key would otherwise rebuild on every view and every
+          // pre-build sweep, silently. The pre-builder keeps the old shape
+          // (done last, carrying cache_write) so a mid-deploy worker never
+          // misreads a build.
+          if (!prebuild) {
+            line({
+              phase: 'done',
+              build_ms: built.buildMs,
+              cached: false,
+              doc_bytes: docJson.length,
+              doc: built.doc,
+            })
+          }
           // Replace semantics on the (wallet, coin, params) key; the write
           // failing must not fail the response — the doc was honestly built.
-          // But the failure is declared (cache_write), not just logged: a
-          // deployment missing the service-role key would otherwise rebuild
-          // on every view and every pre-build sweep, silently.
           const { error: upsertErr } = await supabase
             .from('replay_docs')
             .upsert(row, { onConflict: 'wallet_address,coin_key,params_hash' })
           if (upsertErr) console.error('replay_docs upsert failed:', upsertErr.message)
-          line({
-            phase: 'done',
-            build_ms: built.buildMs,
-            cached: false,
-            cache_write: upsertErr ? 'failed' : 'ok',
-            doc_bytes: docJson.length,
-            ...(prebuild ? {} : { doc: built.doc }),
-          })
+          line(
+            prebuild
+              ? {
+                  phase: 'done',
+                  build_ms: built.buildMs,
+                  cached: false,
+                  cache_write: upsertErr ? 'failed' : 'ok',
+                  doc_bytes: docJson.length,
+                }
+              : { phase: 'stored', cache_write: upsertErr ? 'failed' : 'ok' }
+          )
         } catch (err) {
           const refusal = err instanceof DocRefusal
           line({

@@ -301,19 +301,27 @@ export default function ApiDocsPage() {
           that added this section.
         </p>
 
-        <H2 id="replay">Replay metadata, fills, and candles</H2>
+        <H2 id="replay">Replay coins, docs, metadata, fills, and candles</H2>
+        <Endpoint method="GET" path="/api/replay/{address}/coins" />
         <Endpoint method="GET" path="/api/replay/{address}/doc?coin=&range=&interval=" />
         <Endpoint method="GET" path="/api/replay/{address}" />
         <Endpoint method="GET" path="/api/replay/{address}/fills?coin=" />
         <Endpoint method="GET" path="/api/replay/candles?coin=&interval=&from=&to=" />
         <P>
-          The doc endpoint is what the player consumes: one precomputed replay
-          document per (wallet, coin, range, bar width) — coarsened candles,
-          trade events, running position and realized-PnL series, and the
-          coin&rsquo;s episode index — cached in{' '}
-          <code className="font-mono">replay_docs</code> and served as a single
-          row. A first, uncached request builds the document and streams real
-          progress as NDJSON lines; later requests return plain JSON.{' '}
+          The coins endpoint is the replay page&rsquo;s first paint: per-coin
+          fill counts, spans and realized-PnL sums over the covered window
+          (one SQL aggregate for cohort wallets, one exchange-window read for
+          pasted ones — no episode detection, no document building), with a
+          coverage block naming the source. The doc endpoint is what the
+          player consumes: one precomputed replay document per (wallet, coin,
+          range, bar width) — coarsened candles, trade events, running
+          position and realized-PnL series, and the coin&rsquo;s episode index
+          — cached in <code className="font-mono">replay_docs</code> and
+          served as a single row. A first, uncached request builds the
+          document and streams NDJSON: real progress lines, then a partial
+          head document (the opening window, marked{' '}
+          <code className="font-mono">partial</code>, so playback can start),
+          then the full document; later requests return plain JSON.{' '}
           <code className="font-mono">range</code> is{' '}
           <code className="font-mono">default</code>,{' '}
           <code className="font-mono">all</code>, or{' '}

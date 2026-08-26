@@ -179,7 +179,7 @@ async function loadExchangeFills(
 }
 
 /** Capture-gap coins for a wallet — a tiny bounded read (unique per coin). */
-async function loadGapCoins(address: string): Promise<string[]> {
+export async function loadGapCoins(address: string): Promise<string[]> {
   try {
     const supabase = getSupabase()
     const { data } = await supabase
@@ -227,9 +227,15 @@ export async function loadWalletFills(
             : 'AlphaLens capture store: no captured fills yet for this cohort wallet',
         },
       }
-    } catch {
+    } catch (err) {
       // Store unreachable: fall through to the exchange window rather than
-      // failing the page — but the coverage block says which source answered.
+      // failing the page — but the coverage block says which source answered,
+      // and the reason lands in the server log so a cohort wallet silently
+      // serving its shallow exchange window is diagnosable.
+      console.error(
+        'store fills read failed, falling back to exchange window:',
+        err instanceof Error ? err.message : err
+      )
     }
   }
 
