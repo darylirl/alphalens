@@ -15,6 +15,7 @@ import {
   parseRangeKey,
   rangeKey,
   REFRESH_FILL_THRESHOLD,
+  SERVE_STALE_MAX_FILLS,
   PASTED_TTL_MS,
   type ReplayDoc,
 } from '@/lib/replay/docspec'
@@ -27,11 +28,13 @@ import {
 // finishes with the doc itself. Every later request is a single-row cache
 // read served as plain JSON.
 //
-// Freshness is honest and cheap: a cohort doc is served while fewer than
-// REFRESH_FILL_THRESHOLD fills (in its scope) landed after its build — the
-// response says exactly how many via x-replay-fills-behind — and rebuilds at
-// the threshold. Pasted (exchange-window) docs expire on a short TTL because
-// the exchange's ~10K-fill window slides regardless of our capture stream.
+// Freshness is honest and cheap: a viewer is served a cached cohort doc with
+// its fill-lag DECLARED — x-replay-fills-behind says exactly how many fills
+// (in the doc's scope) landed after the build, and the player shows it — up
+// to SERVE_STALE_MAX_FILLS, past which the view rebuilds synchronously. The
+// pre-builder (prebuild=1) refreshes far earlier, at REFRESH_FILL_THRESHOLD.
+// Pasted (exchange-window) docs expire on a short TTL because the exchange's
+// ~10K-fill window slides regardless of our capture stream.
 
 export const dynamic = 'force-dynamic'
 // Cold builds page a cohort wallet's full captured history; give them room.
@@ -146,7 +149,9 @@ export async function GET(req: NextRequest, { params }: { params: { address: str
           fresh = true
         } else if (cached.built_through) {
           behind = await fillsBehind(addr, coin, cached.built_through)
-          fresh = behind < REFRESH_FILL_THRESHOLD
+          // Viewers get the cached doc with the lag declared; the pre-builder
+          // rebuilds at the much lower refresh threshold to keep it small.
+          fresh = behind < (prebuild ? REFRESH_FILL_THRESHOLD : SERVE_STALE_MAX_FILLS)
         }
         // A doc built before any fills existed (built_through null) goes
         // stale the moment a fill lands: fresh stays false.

@@ -22,10 +22,18 @@ export const REPLAY_DOC_SCHEMA = 'replay-doc.v1' as const
  *  format's own outer bound.) */
 export const DOC_MAX_BARS = 4000
 
-/** A cohort doc is served while fewer than this many fills (in its scope)
- *  landed after its build; at the threshold the next view rebuilds and the
- *  pre-builder refreshes. Mirrored in verify-service/prebuild.mjs. */
+/** The pre-builder refreshes a cohort doc once this many fills (in its
+ *  scope) landed after its build. Mirrored in verify-service/prebuild.mjs. */
 export const REFRESH_FILL_THRESHOLD = 25
+
+/** Viewers are served a cached cohort doc with its fill-lag DECLARED
+ *  (x-replay-fills-behind + the on-page note) up to this ceiling; past it
+ *  the view rebuilds synchronously. The two thresholds are deliberately far
+ *  apart: the most active cohort wallets print ~25 fills in under two
+ *  minutes, so rebuilding on the refresh threshold would make every view
+ *  cold and defeat the cache — an episode that already closed is unchanged
+ *  by new fills, and a declared lag is honest where a silent one is not. */
+export const SERVE_STALE_MAX_FILLS = 1000
 
 /** Non-cohort (pasted) wallets read the exchange's sliding recent window, so
  *  their docs expire by time instead of by our capture stream. */
