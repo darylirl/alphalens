@@ -24,7 +24,7 @@ export function generateMetadata({ params }: { params: { slug: string } }): Meta
   if (!entry) return { title: 'Famous replay — AlphaLens' }
   return {
     title: `${entry.title} — Famous replays — AlphaLens`,
-    description: `${entry.story} Replayed from real fills at exchange-exact execution prices, ${usd(entry.pnl_usd)} realized over the window, with honest data coverage.`,
+    description: `${entry.story} Replayed from real fills at exchange-exact execution prices, ${usd(entry.pnl_usd)} realized over the replayed episode, with honest data coverage.`,
     twitter: { card: 'summary_large_image' },
   }
 }

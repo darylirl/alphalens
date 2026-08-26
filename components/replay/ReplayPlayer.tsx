@@ -873,6 +873,7 @@ export function ReplayPlayer({
               <p className="text-[10px] text-[#F5A623]/90">{episodeCard.caveat}</p>
             )}
             {famous && grade && (
+              <>
               <p className="font-mono text-[11px] text-white/70 mt-1">
                 {grade.gradeable && grade.overall ? (
                   <>
@@ -899,6 +900,14 @@ export function ReplayPlayer({
                   </>
                 )}
               </p>
+              {/* The grade is the wallet's report card over ITS covered
+                  history — a different, usually much larger window than the
+                  episode just played. Saying so keeps the end card from
+                  implying the grade scores this replay. */}
+              <p className="text-[9px] text-white/35">
+                the wallet&rsquo;s graded history, not this episode
+              </p>
+              </>
             )}
             <Link
               href={`/card/${address}`}
