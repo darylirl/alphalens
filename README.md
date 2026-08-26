@@ -71,6 +71,12 @@ verify-service/       The canonical verification engine (Node 22, zero deps)
 │                     (claim -> replay -> persist), invariant tests,
 │                     enqueue/backfill CLIs. See verify-service/README.md
 │
+mcp-service/          Read-only MCP server for AI agents (Node 22, zero deps)
+│                     Four tools over the PUBLIC API — pulse, Ledger list,
+│                     Ledger detail, cohort. No database access: the app and
+│                     the MCP are both clients of the same public endpoints.
+│                     See mcp-service/README.md
+│
 verification/         Earlier standalone Python replay stack, kept as
 │                     experimental reference. New work goes in verify-service/
 │
@@ -195,6 +201,13 @@ Apply `supabase/migrations/*.sql` in numeric order to a fresh Supabase
 project. The capture daemon (`capture-service/`) and the verification worker
 (`verify-service/`) run as separate always-on processes (we use Railway);
 both are single-file Node 22 services with zero npm dependencies.
+
+The MCP server (`mcp-service/`) needs no credentials at all — it reads the
+public API over HTTP and nothing else. Point an MCP client at
+`node mcp-service/index.mjs`; see
+[`mcp-service/README.md`](mcp-service/README.md) for Claude Desktop and
+generic client configuration, and [`/docs/api`](https://alphalens-taupe.vercel.app/docs/api)
+for the endpoints it wraps.
 
 Note: public hypothesis submission (`POST /api/verify`) is planned but
 stays admin-gated pending rate limiting. Reads are public.

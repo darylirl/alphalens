@@ -1146,14 +1146,23 @@ def s3_cache_state() -> dict:
 
 
 def _normalise_s3_fill(rec):
-    """Return [(address, fill), ...] for an archive line, or None if the line's
-    shape is unrecognised. Both layouts below were read off real archive bytes,
-    not inferred: an assumed shape here fails silently as zero coverage, which
-    is indistinguishable from a wallet that did not trade.
+    """Normalise one archive line into [(address, fill), ...], in the same
+    fill shape fetch_fills() produces. Returns None when the line is not a
+    recognisable fill record.
 
-    An unrecognised shape is a hard error rather than a skipped line, for the
-    same reason. An empty list is NOT an error: a block containing no fills is
-    a real, measured zero."""
+    The caller COUNTS those Nones and reports the total (`s3: WARNING n
+    archive lines could not be parsed as fills`); it does not abort the run.
+    That count is the point: unparsed lines are a coverage defect, and a defect
+    that is surfaced can be judged, while one that is silently skipped
+    manufactures gaps that read as "this wallet did not trade". Aborting a
+    272 GiB read on a single malformed third-party line would be the wrong
+    trade; hiding the tally would be dishonest. Neither happens.
+
+    Both layouts below were read off real archive bytes rather than inferred.
+    That distinction is not pedantry: the previous by_block branch was written
+    from a guess and kept 0 fills out of 849,573 real lines, which is
+    indistinguishable from a universe that never traded. An empty events list
+    is NOT a parse failure — it is a measured zero."""
     # node_fills (legacy, through 2025-07-27): one two-element array per line,
     # ["0xabc...", {coin, px, sz, side, time, ...}]. Checked before the dict
     # branches because a list has no .get() and would otherwise raise.

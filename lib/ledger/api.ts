@@ -18,8 +18,15 @@ export const CORS_HEADERS: Record<string, string> = {
   'Cache-Control': 'no-store',
 }
 
+// Every public read response leads with a versioned schema marker so a
+// machine reading it can tell which contract it is holding. ledger.v0 is the
+// Ledger's; sibling surfaces (cohort.v0) use the same envelope and headers.
+export function schemaJson(schema: string, body: Record<string, unknown>, status = 200) {
+  return NextResponse.json({ schema, ...body }, { status, headers: CORS_HEADERS })
+}
+
 export function ledgerJson(body: Record<string, unknown>, status = 200) {
-  return NextResponse.json({ schema: LEDGER_SCHEMA, ...body }, { status, headers: CORS_HEADERS })
+  return schemaJson(LEDGER_SCHEMA, body, status)
 }
 
 // PostgREST serializes Postgres numeric columns as strings; the public API
