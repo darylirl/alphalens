@@ -19,6 +19,7 @@ import {
   PASTED_TTL_MS,
   type ReplayDoc,
 } from '@/lib/replay/docspec'
+import { famousPin } from '@/lib/replay/famous'
 
 // The precomputed replay document: build-once-serve-forever.
 //
@@ -138,10 +139,19 @@ export async function GET(req: NextRequest, { params }: { params: { address: str
     if (cacheErr) throw cacheErr
     const cached = (cachedRow as CacheRow | null) ?? null
 
+    // A curated famous replay is closed history: its fills are immutable
+    // facts, so the cached doc is pinned — no TTL, no fill-lag staleness.
+    // Rebuilding could only LOSE data once the exchange's sliding ~10K-fill
+    // window moves past the episode; the doc that was honestly built from the
+    // fills while they were still served is the record.
+    const pinned = Boolean(famousPin(addr, coin, rangeStr, interval))
+
     if (cached) {
       let fresh = false
       let behind = 0
-      if (isCohort && cached.source === 'store') {
+      if (pinned) {
+        fresh = true
+      } else if (isCohort && cached.source === 'store') {
         const newest = await newestStoreFill(addr, coin)
         if (!newest) {
           fresh = true // nothing captured at all — the empty doc stands
@@ -195,8 +205,19 @@ export async function GET(req: NextRequest, { params }: { params: { address: str
             phase: 'building',
             note: 'building this replay — first view does the work; later views serve the cached document',
           })
-          const built = await buildReplayDoc(addr, docReq, (p: BuildProgress) =>
-            line({ phase: p.phase, ...p.detail })
+          // Curated famous episodes load fills around their known window
+          // instead of walking the wallet's whole retained history — some
+          // famous wallets hold 50K+ retained fills, and the episode is a
+          // closed span whose boundaries the padded load detects identically.
+          const buildOpts =
+            pinned && typeof range === 'object'
+              ? { window: { fromMs: range.from, toMs: range.to } }
+              : {}
+          const built = await buildReplayDoc(
+            addr,
+            docReq,
+            (p: BuildProgress) => line({ phase: p.phase, ...p.detail }),
+            buildOpts
           )
           const contentHash = sha256(
             `${addr}|${coin}|${rangeStr}|${interval}|${built.lastFillId ?? 'none'}`

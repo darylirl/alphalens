@@ -224,10 +224,41 @@ async function fetchDoc(
   }
 }
 
+// --- Famous-replay end-card grade -------------------------------------------
+// A famous replay must end on the receipts: the honest grade with its sample
+// size, from the same builder /card renders. Fetched lazily once the doc is
+// up (playback runs ≥45s, plenty of time), and the end card renders an honest
+// absent state if the fetch has not answered — never a placeholder grade.
+
+interface GradeSummary {
+  gradeable: boolean
+  overall: string | null
+  closedRoundTrips: number
+}
+
+/** What the famous page passes down: enough to badge the end card. */
+export interface FamousChrome {
+  title: string
+}
+
 // ---------------------------------------------------------------------------
 
-export function ReplayPlayer({ address }: { address: string }) {
-  const [request, setRequest] = useState<DocReq>({ coin: '', range: 'default', interval: 'auto' })
+export function ReplayPlayer({
+  address,
+  initial,
+  famous,
+}: {
+  address: string
+  /** Pinned starting request (famous replays); defaults to the landing doc. */
+  initial?: Partial<DocReq>
+  /** Present when this view is a curated famous replay. */
+  famous?: FamousChrome
+}) {
+  const [request, setRequest] = useState<DocReq>({
+    coin: initial?.coin ?? '',
+    range: initial?.range ?? 'default',
+    interval: initial?.interval ?? 'auto',
+  })
   const [doc, setDoc] = useState<ReplayDoc | null>(null)
   /** Cross-coin picker list: only the default doc carries it, so it is kept
    *  across coin-scoped docs. */
@@ -257,6 +288,31 @@ export function ReplayPlayer({ address }: { address: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const at = useRef(0) // playhead bar, source of truth for the loop
   const lastCuedBar = useRef(-1)
+
+  const [grade, setGrade] = useState<GradeSummary | null>(null)
+
+  // Famous replays fetch the wallet's grade for the end card, lazily — after
+  // the doc request is in flight, never blocking first paint. A failed fetch
+  // leaves the end card's grade line absent (with the /card link still there);
+  // nothing is invented.
+  useEffect(() => {
+    if (!famous) return
+    let dead = false
+    void fetch(`/api/card/${address}`, { cache: 'no-store' })
+      .then(res => (res.ok ? res.json() : null))
+      .then(body => {
+        if (dead || !body?.grades) return
+        setGrade({
+          gradeable: Boolean(body.grades.gradeable),
+          overall: typeof body.grades.overall === 'string' ? body.grades.overall : null,
+          closedRoundTrips: Number(body.grades.closed_round_trips ?? 0),
+        })
+      })
+      .catch(() => {})
+    return () => {
+      dead = true
+    }
+  }, [famous, address])
 
   // Ask once what this browser can encode; the export button says the answer.
   useEffect(() => {
@@ -792,6 +848,11 @@ export function ReplayPlayer({ address }: { address: string }) {
         {/* End card: the realized result, USD-explicit, with the recap. */}
         {phase === 'end' && timeline && !locked && episodeCard && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[#0F1A1E]/90 p-6 text-center">
+            {famous && (
+              <p className="text-[10px] text-[#F5A623] uppercase tracking-[0.2em]">
+                {famous.title}
+              </p>
+            )}
             <p className="text-[10px] text-white/40 uppercase tracking-wider">
               {episodeCard.coin} · {episodeCard.period} · {episodeCard.which}
             </p>
@@ -810,6 +871,34 @@ export function ReplayPlayer({ address }: { address: string }) {
             </p>
             {episodeCard.caveat && (
               <p className="text-[10px] text-[#F5A623]/90">{episodeCard.caveat}</p>
+            )}
+            {famous && grade && (
+              <p className="font-mono text-[11px] text-white/70 mt-1">
+                {grade.gradeable && grade.overall ? (
+                  <>
+                    report card:{' '}
+                    <span
+                      className={`font-bold text-[13px] ${
+                        grade.overall === 'A' || grade.overall === 'B'
+                          ? 'text-[#34EAB9]'
+                          : grade.overall === 'C'
+                            ? 'text-[#F5A623]'
+                            : 'text-[#FF3B5C]'
+                      }`}
+                    >
+                      {grade.overall}
+                    </span>
+                    {' '}· {grade.closedRoundTrips.toLocaleString()} closed round trips
+                  </>
+                ) : (
+                  <>
+                    report card: not enough covered history to grade
+                    {grade.closedRoundTrips > 0
+                      ? ` (${grade.closedRoundTrips.toLocaleString()} closed round trips)`
+                      : ''}
+                  </>
+                )}
+              </p>
             )}
             <Link
               href={`/card/${address}`}

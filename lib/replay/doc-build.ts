@@ -12,7 +12,7 @@
  * reason — never padded, resampled or silently narrowed.
  */
 
-import { loadWalletFills } from '@/lib/wallet-data/fills'
+import { loadWalletFills, type FillsWindow } from '@/lib/wallet-data/fills'
 import { loadCandles, INTERVAL_MS } from '@/lib/wallet-data/candles'
 import { detectEpisodes, defaultEpisode, summarize, type Episode } from './episodes'
 import { coarsen, buildTimeline, type RFill } from './engine'
@@ -119,10 +119,22 @@ function positionSeries(
   return out
 }
 
+/** How far around a curated episode window fills are loaded. Far wider than
+ *  the 10-minute episode-merge gap, so the pinned episode's boundaries detect
+ *  identically to a full-history load; far narrower than "everything", so a
+ *  famous build on a hyperactive wallet stays bounded. */
+export const CURATED_WINDOW_PAD_MS = 48 * 3_600_000
+
 export async function buildReplayDoc(
   address: string,
   req: DocRequest,
-  onProgress?: (p: BuildProgress) => void
+  onProgress?: (p: BuildProgress) => void,
+  opts: {
+    /** Load fills only around this window (curated famous episodes — the
+     *  episode is closed history with a known span). Padded by
+     *  CURATED_WINDOW_PAD_MS on each side before loading. */
+    window?: FillsWindow
+  } = {}
 ): Promise<BuiltDoc> {
   const t0 = Date.now()
   const progress = (phase: BuildProgress['phase'], detail: BuildProgress['detail']) =>
@@ -132,6 +144,12 @@ export async function buildReplayDoc(
   const { fills, coverage, isCohort, wallet, gapCoins } = await loadWalletFills(address, {
     coin: req.coin || undefined,
     onPage: n => progress('fills', { fills: n }),
+    window: opts.window
+      ? {
+          fromMs: Math.max(opts.window.fromMs - CURATED_WINDOW_PAD_MS, 1),
+          toMs: opts.window.toMs + CURATED_WINDOW_PAD_MS,
+        }
+      : undefined,
   })
   progress('fills', { fills: fills.length })
 

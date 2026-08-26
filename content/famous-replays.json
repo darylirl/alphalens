@@ -1,0 +1,184 @@
+{
+  "_readme": "Famous Replays manifest. Every entry is verified against real fills before it ships (see lib/replay/famous.ts for the contract): pnl_usd is the sum of exchange closedPnl over the pinned episode's fills, detected with the repo's own episode detector over userFillsByTime / capture-store fills. Entries are code-reviewed here, in git — never a database table. Stories attribute reported context to sources; the numbers shown are only what the fills support.",
+  "entries": [
+    {
+      "slug": "uncopyable-scalper",
+      "title": "The scalper you cannot copy",
+      "story": "Run 1 of our autopsy copied this top-Sharpe scalper for 7,499 trades: a 4.8% win rate and −$1,251 after honest frictions, because its edge lives inside the minute a copier arrives late to — watch it grind thousands of fills in one seven-hour session.",
+      "source": "autopsy",
+      "address": "0x847bd1ef4fede0fe191129894d63044843f4d473",
+      "coin": "xyz:MU",
+      "range": "ep:1787578061641-1787603745006",
+      "interval": "auto",
+      "bar_width": "5m bars",
+      "window": { "from": "2026-08-24T13:27:41Z", "to": "2026-08-24T20:35:45Z" },
+      "pnl_usd": -515.4,
+      "pnl_basis": "Net realized PnL over the pinned episode — the sum of the exchange's own closedPnl per fill (2,934 fills).",
+      "coverage_note": "Replayed from the AlphaLens capture store; capture coverage for this wallet begins 2026-08-15. The copy-backtest figures come from backtest_results/ in the repository, not from this window.",
+      "verified": {
+        "at": "2026-08-26",
+        "method": "Episode detected and summed with the repo's own detector over the wallet's real fills (boundary-safe pagination); copy-backtest figures reconciled against backtest_results/summary_by_wallet.csv."
+      },
+      "sources": ["/research/copy-trading-autopsy"],
+      "research_href": "/research/copy-trading-autopsy"
+    },
+    {
+      "slug": "swing-cohort-blowup",
+      "title": "The cohort that blew up",
+      "story": "Run 2 of our autopsy copied ten swing wallets for 28,318 trades and lost $9,704; this wallet alone contributed −$5,246 and drove the $13.6K max drawdown — here is one of its four-day TIA swings, ending −$522.",
+      "source": "autopsy",
+      "address": "0x212444e5ace9d58706f53557a10bb69dee5d68d9",
+      "coin": "TIA",
+      "range": "ep:1787025635591-1787382248636",
+      "interval": "auto",
+      "bar_width": "1h bars",
+      "window": { "from": "2026-08-18T04:00:35Z", "to": "2026-08-22T07:04:08Z" },
+      "pnl_usd": -522.11,
+      "pnl_basis": "Net realized PnL over the pinned episode — the sum of the exchange's own closedPnl per fill (13 fills).",
+      "coverage_note": "Replayed from the AlphaLens capture store; capture coverage begins 2026-08-15 and this position opened before capture began, so the replay is labelled a partial picture. The 13-month copy-backtest window is documented in the research post.",
+      "verified": {
+        "at": "2026-08-26",
+        "method": "Episode detected and summed with the repo's own detector over the wallet's real fills; copy-backtest figures reconciled against backtest_results/v2_summary_by_wallet.csv."
+      },
+      "sources": ["/research/copy-trading-autopsy"],
+      "research_href": "/research/copy-trading-autopsy"
+    },
+    {
+      "slug": "insider-whale-giveback",
+      "title": "The $196M giveback",
+      "story": "The most-watched wallet of the tariff-crash era — reported to have made ~$190M shorting minutes before the October 10 announcement — unwound a $739M ETH long over fifteen January days for −$195.9M realized, ending with almost nothing in the account.",
+      "source": "public",
+      "address": "0xb317d2bc2d3d2df5fa441b5bae0ab9d8b07283ae",
+      "coin": "ETH",
+      "range": "ep:1768576249679-1769885032514",
+      "interval": "auto",
+      "bar_width": "4h bars",
+      "window": { "from": "2026-01-16T15:10:49Z", "to": "2026-01-31T18:43:52Z" },
+      "pnl_usd": -195902275.59,
+      "pnl_basis": "Net realized PnL over the pinned episode — the sum of the exchange's own closedPnl per fill (13,829 fills, peak position $739M).",
+      "coverage_note": "Exchange-retained fills: the position predates the retained window, so the replay opens mid-position and says so. The reported October 2025 tariff-short profits predate retained fills and are quoted from press, never shown as our numbers.",
+      "verified": {
+        "at": "2026-08-26",
+        "method": "Episode detected and summed with the repo's own detector over userFillsByTime fills, boundary-safe pagination, stable across independent load windows."
+      },
+      "sources": [
+        "https://www.theblock.co/post/387927/infamous-hyperunit-whale-exits-entire-eth-position-for-250-million-loss-left-with-53-in-account-arkham",
+        "https://whaleportal.com/blog/trump-insider-wallet-hyperliquid/",
+        "https://decrypt.co/344137/alleged-trump-insider-whale-denies-insider-trading-opens-340-million-bitcoin-short"
+      ]
+    },
+    {
+      "slug": "insider-whale-returns",
+      "title": "The insider whale returns",
+      "story": "Ten days after the tariff crash, the same wallet was back in the water: retained fills open mid-short on October 20 and show a $235M BTC position exited for +$6.4M over three days.",
+      "source": "public",
+      "address": "0xb317d2bc2d3d2df5fa441b5bae0ab9d8b07283ae",
+      "coin": "BTC",
+      "range": "ep:1760965211274-1761182936340",
+      "interval": "auto",
+      "bar_width": "4h bars",
+      "window": { "from": "2025-10-20T13:00:11Z", "to": "2025-10-23T01:28:56Z" },
+      "pnl_usd": 6439487,
+      "pnl_basis": "Net realized PnL over the pinned episode — the sum of the exchange's own closedPnl per fill (10,558 fills).",
+      "coverage_note": "Exchange-retained fills begin 2025-10-20 mid-position: the short's reported opening (October 12–15) is not retained, so the replay covers the verified exit only and is labelled a partial picture.",
+      "verified": {
+        "at": "2026-08-26",
+        "method": "Episode detected and summed with the repo's own detector over userFillsByTime fills, boundary-safe pagination."
+      },
+      "sources": [
+        "https://www.cryptopolitan.com/trader-shorting-the-crypto-crash-is-back/",
+        "https://whaleportal.com/blog/trump-insider-wallet-hyperliquid/"
+      ]
+    },
+    {
+      "slug": "twelve-second-liquidation",
+      "title": "The twelve-second liquidation",
+      "story": "A 50,000-ETH short built patiently over two months died in twelve seconds on August 19, 2026 — 1,614 forced fills unwound roughly $108M notional, and the round trip closed −$24.9M.",
+      "source": "public",
+      "address": "0x0ddf9bae2af4b874b96d287a5ad42eb47138a902",
+      "coin": "ETH",
+      "range": "ep:1781969795895-1787172675479",
+      "interval": "auto",
+      "bar_width": "1d bars",
+      "window": { "from": "2026-06-20T15:36:35Z", "to": "2026-08-19T20:51:15Z" },
+      "pnl_usd": -24909573,
+      "pnl_basis": "Net realized PnL over the pinned episode — the sum of the exchange's own closedPnl per fill (12,990 fills; a complete round trip from flat to flat).",
+      "coverage_note": "Exchange-retained fills cover the full round trip, including the final liquidation cascade (fills timestamped 2026-08-19 20:50:47–20:51:15 UTC). Press reported the loss as $26.66M for the liquidation day; the pinned round trip nets −$24.9M because the wallet had realized gains earlier in the episode.",
+      "verified": {
+        "at": "2026-08-26",
+        "method": "Episode detected and summed with the repo's own detector over userFillsByTime fills, boundary-safe pagination (the cascade's same-millisecond fills are exactly why the pagination fix exists)."
+      },
+      "sources": [
+        "https://www.newsbtc.com/news/hyperliquid-trader-loses-26m-as-ether-short-unwinds-in-seconds/"
+      ]
+    },
+    {
+      "slug": "aguila-giveback-week",
+      "title": "Aguila's giveback week",
+      "story": "AguilaTrades — famous for turning eight-figure unrealized profits into losses — ran a $240M BTC position into a −$6.3M round trip across three July days, 1,656 of the fills forced.",
+      "source": "public",
+      "address": "0x1f250df59a777d61cb8bd043c12970f3afe4f925",
+      "coin": "BTC",
+      "range": "ep:1753167480017-1753434844257",
+      "interval": "auto",
+      "bar_width": "4h bars",
+      "window": { "from": "2025-07-22T06:58:00Z", "to": "2025-07-25T09:14:04Z" },
+      "pnl_usd": -6283113,
+      "pnl_basis": "Net realized PnL over the pinned episode — the sum of the exchange's own closedPnl per fill (7,749 fills; a complete round trip from flat to flat).",
+      "coverage_note": "Exchange-retained fills cover the full round trip. His widely reported −$35M June 2025 stretch predates the retained fills and is quoted from press, never shown as our numbers. 1h bars are past exchange candle retention for July 2025, so the replay uses 4h bars.",
+      "verified": {
+        "at": "2026-08-26",
+        "method": "Episode detected and summed with the repo's own detector over userFillsByTime fills, boundary-safe pagination."
+      },
+      "sources": [
+        "https://www.cryptopolitan.com/hyperliquid-aguila-trades-closes-btc-short/",
+        "https://phemex.com/news/article/aguilatrades-faces-40m-loss-after-hyperliquid-liquidation-14195"
+      ]
+    },
+    {
+      "slug": "aguila-second-collapse",
+      "title": "Aguila does it again",
+      "story": "One week after the giveback week, the same wallet rebuilt to $150M of BTC and rode the next round trip to −$3.2M — the pattern, on tape, twice in ten days.",
+      "source": "public",
+      "address": "0x1f250df59a777d61cb8bd043c12970f3afe4f925",
+      "coin": "BTC",
+      "range": "ep:1753775111946-1754009508698",
+      "interval": "auto",
+      "bar_width": "4h bars",
+      "window": { "from": "2025-07-29T07:45:11Z", "to": "2025-08-01T00:51:48Z" },
+      "pnl_usd": -3174004,
+      "pnl_basis": "Net realized PnL over the pinned episode — the sum of the exchange's own closedPnl per fill (8,039 fills; a complete round trip from flat to flat).",
+      "coverage_note": "Exchange-retained fills cover the full round trip. 1h bars are past exchange candle retention for July 2025, so the replay uses 4h bars.",
+      "verified": {
+        "at": "2026-08-26",
+        "method": "Episode detected and summed with the repo's own detector over userFillsByTime fills, boundary-safe pagination."
+      },
+      "sources": [
+        "https://blockchainreporter.net/aguilatrades-returns-with-high-leverage-bets-on-btc-and-eth-despite-a-massive-40m-in-past-losses/"
+      ]
+    },
+    {
+      "slug": "qwatio-40x-short",
+      "title": "qwatio's $520M forty-x short",
+      "story": "Two days after this wallet's 50x self-liquidation reportedly forced Hyperliquid to cap leverage, it was back with a BTC short that peaked at $521M — the retained tape shows +$5.0M realized across 36,763 fills before the records end with the position still open.",
+      "source": "public",
+      "address": "0xf3f496c9486be5924a93d67e98298733bb47057c",
+      "coin": "BTC",
+      "range": "ep:1741981833425-1742281905658",
+      "interval": "auto",
+      "bar_width": "4h bars",
+      "window": { "from": "2025-03-14T19:50:33Z", "to": "2025-03-18T07:11:45Z" },
+      "pnl_usd": 4967968.36,
+      "pnl_basis": "Net realized PnL over the pinned episode — the sum of the exchange's own closedPnl per fill (36,763 fills; the position outlives the retained fills, so this is a partial picture and labelled so).",
+      "coverage_note": "Exchange-retained fills for this wallet span only 2025-03-14 to 2025-03-18: the March 12 unwind that made it famous predates retention and is quoted from press, never shown as our numbers; the short is still open when the retained records end.",
+      "verified": {
+        "at": "2026-08-26",
+        "method": "Episode detected and summed with the repo's own detector over userFillsByTime fills, boundary-safe pagination."
+      },
+      "sources": [
+        "https://www.coindesk.com/markets/2025/03/12/hyperliquid-loses-usd4m-after-whale-s-over-usd200m-ether-trade-unwinds",
+        "https://x.com/coinphoton/status/1901213175510642958"
+      ]
+    }
+  ]
+}

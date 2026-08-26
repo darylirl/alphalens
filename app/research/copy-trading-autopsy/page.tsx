@@ -102,6 +102,14 @@ export default function CopyTradingAutopsyPage() {
         exchange selects for high frequency traders, and their returns
         structurally cannot survive your delay.
       </P>
+      <p className="text-xs mb-4">
+        <Link
+          href="/replay/famous/uncopyable-scalper"
+          className="inline-flex items-center gap-1 text-[#34EAB9] hover:underline"
+        >
+          Watch this wallet trade — the famous replay <ArrowRight size={10} />
+        </Link>
+      </p>
 
       <H2>Test two: copy the copyable wallets</H2>
       <P>
@@ -135,6 +143,15 @@ export default function CopyTradingAutopsyPage() {
         allocators have known this about human managers for decades. It is
         just as true for anonymous wallets.
       </P>
+      <p className="text-xs mb-4">
+        <Link
+          href="/replay/famous/swing-cohort-blowup"
+          className="inline-flex items-center gap-1 text-[#34EAB9] hover:underline"
+        >
+          Watch the cohort&rsquo;s biggest loser trade — the famous replay{' '}
+          <ArrowRight size={10} />
+        </Link>
+      </p>
 
       <H2>What we verified before believing any of this</H2>
       <P>

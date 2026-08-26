@@ -21,6 +21,10 @@ const HL_URL = 'https://api.hyperliquid.xyz/info'
 const HL_PAGE = 2000
 /** HL retains roughly this many recent fills per wallet; walking further is futile. */
 const HL_MAX_PAGES = 6
+/** Windowed (curated famous-episode) loads target a known window rather than
+ *  "whatever is retained", so they get a deeper page budget. Bounded still:
+ *  80K fills. Hitting it is declared as capped coverage, never silent. */
+const HL_MAX_PAGES_WINDOWED = 40
 
 /** Rows per PostgREST page (under the ~1000 silent cap). */
 const STORE_PAGE = 1000
@@ -111,12 +115,21 @@ function storeRowToFill(r: StoreFillRow): Fill {
   }
 }
 
+/** A time window to load instead of the whole retained/captured history —
+ *  used by curated famous-episode builds, whose episode is a known, closed
+ *  span. Milliseconds since epoch, inclusive. */
+export interface FillsWindow {
+  fromMs: number
+  toMs: number
+}
+
 /** Captured fills from our store, newest-first paged then reversed to
  *  ascending. Only rows the capture daemon wrote (`tid is not null`). */
 async function loadStoreFills(
   address: string,
   coin?: string,
-  onPage?: (fillsSoFar: number) => void
+  onPage?: (fillsSoFar: number) => void,
+  window?: FillsWindow
 ): Promise<{ fills: Fill[]; capped: boolean }> {
   const supabase = getSupabase()
   const rows: StoreFillRow[] = []
@@ -127,6 +140,11 @@ async function loadStoreFills(
       .eq('wallet_address', address.toLowerCase())
       .not('tid', 'is', null)
     if (coin) query = query.eq('asset', coin)
+    if (window) {
+      query = query
+        .gte('timestamp', new Date(window.fromMs).toISOString())
+        .lte('timestamp', new Date(window.toMs).toISOString())
+    }
     const { data, error } = await query
       .order('timestamp', { ascending: false })
       .range(offset, offset + STORE_PAGE - 1)
@@ -157,25 +175,42 @@ async function hlPost<T>(payload: Record<string, unknown>): Promise<T | null> {
 }
 
 /**
- * Walk userFillsByTime forward from the epoch until a short page. The
- * exchange retains only the most recent ~10K fills, so this converges in a
- * handful of requests and yields exactly the retained window.
+ * Walk userFillsByTime forward until a short page (from the epoch by default;
+ * from a curated window's start when one is given).
+ *
+ * The cursor advances TO the last fill's timestamp, not past it: during a
+ * liquidation cascade thousands of fills share the same millisecond, and a
+ * page boundary landing inside such a burst silently drops the same-ms fills
+ * a `last.time + 1` cursor would skip. Measured on a real cascade: the +1
+ * walk lost 756 of 13,829 fills — about $3.5M of realized PnL misreported.
+ * Re-fetching the boundary millisecond and deduplicating by tid loses
+ * nothing; the cursor moves past it only when a page adds no new fills.
  */
 async function loadExchangeFills(
   address: string,
-  onPage?: (fillsSoFar: number) => void
-): Promise<Fill[]> {
+  onPage?: (fillsSoFar: number) => void,
+  window?: FillsWindow
+): Promise<{ fills: Fill[]; capped: boolean }> {
   const byTid = new Map<number, Fill>()
-  let startTime = 1
-  for (let page = 0; page < HL_MAX_PAGES; page++) {
-    const batch = await hlPost<Fill[]>({ type: 'userFillsByTime', user: address, startTime })
+  let startTime = window ? window.fromMs : 1
+  const maxPages = window ? HL_MAX_PAGES_WINDOWED : HL_MAX_PAGES
+  let page = 0
+  for (; page < maxPages; page++) {
+    const payload: Record<string, unknown> = { type: 'userFillsByTime', user: address, startTime }
+    if (window) payload.endTime = window.toMs
+    const batch = await hlPost<Fill[]>(payload)
     if (!Array.isArray(batch) || batch.length === 0) break
+    const before = byTid.size
     for (const f of batch) byTid.set(f.tid, f)
     onPage?.(byTid.size)
     if (batch.length < HL_PAGE) break
-    startTime = batch[batch.length - 1].time + 1
+    const last = batch[batch.length - 1].time
+    startTime = byTid.size > before ? last : last + 1
   }
-  return [...byTid.values()].sort((a, b) => a.time - b.time)
+  return {
+    fills: [...byTid.values()].sort((a, b) => a.time - b.time),
+    capped: page >= maxPages,
+  }
 }
 
 /** Capture-gap coins for a wallet — a tiny bounded read (unique per coin). */
@@ -197,7 +232,13 @@ const fmtDay = (ms: number) => new Date(ms).toISOString().slice(0, 10)
 
 export async function loadWalletFills(
   address: string,
-  opts: { coin?: string; onPage?: (fillsSoFar: number) => void } = {}
+  opts: {
+    coin?: string
+    onPage?: (fillsSoFar: number) => void
+    /** Load only this window (curated famous-episode builds). The coverage
+     *  note names the scope so a windowed doc never reads as full history. */
+    window?: FillsWindow
+  } = {}
 ): Promise<WalletFills> {
   const wallet = await loadWalletRow(address)
   const isCohort = Boolean(wallet?.capture_enabled)
@@ -205,7 +246,7 @@ export async function loadWalletFills(
   if (isCohort) {
     try {
       const [{ fills, capped }, gapCoins] = await Promise.all([
-        loadStoreFills(address, opts.coin, opts.onPage),
+        loadStoreFills(address, opts.coin, opts.onPage, opts.window),
         loadGapCoins(address),
       ])
       const from = fills.length ? new Date(fills[0].time).toISOString() : null
@@ -222,7 +263,7 @@ export async function loadWalletFills(
           fill_count: fills.length,
           capped,
           note: fills.length
-            ? `AlphaLens capture store: ${fills.length.toLocaleString()} fills, ${fmtDay(fills[0].time)} to ${fmtDay(fills[fills.length - 1].time)}` +
+            ? `AlphaLens capture store${opts.window ? ' (curated episode window)' : ''}: ${fills.length.toLocaleString()} fills, ${fmtDay(fills[0].time)} to ${fmtDay(fills[fills.length - 1].time)}` +
               (capped ? ` (most recent ${STORE_MAX_FILLS.toLocaleString()} served; older captured fills exist)` : '')
             : 'AlphaLens capture store: no captured fills yet for this cohort wallet',
         },
@@ -233,7 +274,7 @@ export async function loadWalletFills(
     }
   }
 
-  const all = await loadExchangeFills(address, opts.onPage)
+  const { fills: all, capped } = await loadExchangeFills(address, opts.onPage, opts.window)
   const fills = opts.coin ? all.filter(f => f.coin === opts.coin) : all
   const from = fills.length ? new Date(fills[0].time).toISOString() : null
   const to = fills.length ? new Date(fills[fills.length - 1].time).toISOString() : null
@@ -247,10 +288,13 @@ export async function loadWalletFills(
       from,
       to,
       fill_count: fills.length,
-      capped: fills.length >= HL_PAGE * (HL_MAX_PAGES - 1),
+      capped,
       note: fills.length
-        ? `Recent window only (the exchange serves ~10K most recent fills): ${fills.length.toLocaleString()} fills, ${fmtDay(fills[0].time)} to ${fmtDay(fills[fills.length - 1].time)}`
-        : 'No fills in the exchange-served window (the exchange serves ~10K most recent fills)',
+        ? (opts.window
+            ? `Exchange fills over the curated episode window: ${fills.length.toLocaleString()} fills, ${fmtDay(fills[0].time)} to ${fmtDay(fills[fills.length - 1].time)}`
+            : `Exchange-retained window only (older fills age out of the API): ${fills.length.toLocaleString()} fills, ${fmtDay(fills[0].time)} to ${fmtDay(fills[fills.length - 1].time)}`) +
+          (capped ? ' (page budget reached; the window may hold more fills than served)' : '')
+        : 'No fills in the exchange-served window (older fills age out of the API)',
     },
   }
 }
