@@ -277,6 +277,18 @@ export default async function CohortPage() {
                     </div>
                   </div>
                   <Link
+                    href={`/card/${w.address}`}
+                    className="text-[10px] text-white/40 hover:text-[#34EAB9] transition-colors shrink-0"
+                  >
+                    card
+                  </Link>
+                  <Link
+                    href={`/replay/${w.address}`}
+                    className="text-[10px] text-white/40 hover:text-[#34EAB9] transition-colors shrink-0"
+                  >
+                    replay
+                  </Link>
+                  <Link
                     href={`/wallet/${w.address}`}
                     className="text-[10px] text-white/40 hover:text-[#34EAB9] transition-colors shrink-0"
                   >

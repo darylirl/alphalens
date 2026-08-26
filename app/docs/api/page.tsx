@@ -145,11 +145,12 @@ export default function ApiDocsPage() {
       <div className="px-4 py-4 lg:px-6 max-w-2xl mx-auto">
         <h1 className="text-lg font-bold mb-1">Public read API</h1>
         <P>
-          Five read-only JSON endpoints expose what AlphaLens publishes: the
+          Nine read-only JSON endpoints expose what AlphaLens publishes: the
           Ledger (our public, append-only track record), the cohort positioning
-          behind Pulse, the tracked cohort itself, and the live health of the
-          capture pipeline. They exist so machines — scripts, dashboards, AI
-          agents — can read the record without scraping HTML.
+          behind Pulse, the tracked cohort itself, the live health of the
+          capture pipeline, and the per-wallet report card and replay data.
+          They exist so machines — scripts, dashboards, AI agents — can read
+          the record without scraping HTML.
         </P>
         <P>
           Agents that speak MCP can skip the HTTP layer: the{' '}
@@ -275,12 +276,74 @@ export default function ApiDocsPage() {
           {HEALTH_EXAMPLE}
         </Example>
 
+        <H2 id="card">Wallet report card</H2>
+        <Endpoint method="GET" path="/api/card/{address}" />
+        <P>
+          The JSON twin of{' '}
+          <Link href="/card/0x0000000000000000000000000000000000000000" className="text-[#34EAB9] hover:underline">/card/&#123;address&#125;</Link>{' '}
+          for any valid address. All-time PnL is the exchange&rsquo;s own{' '}
+          <code className="font-mono">allTime</code> portfolio figure (never
+          window arithmetic); win rate, profit factor, hold time, sizing
+          consistency and risk figures are computed from real fills — our
+          capture store for cohort wallets, the exchange&rsquo;s recent window
+          (~10K most recent fills, labelled as such) for everyone else. No
+          dimension is graded below 30 resolved round trips:{' '}
+          <code className="font-mono">grades.gradeable</code> is false and the
+          grade fields are <code className="font-mono">null</code>. The win
+          rate is served raw and with empirical-Bayes shrinkage toward the
+          cohort mean, alongside the prior so the adjustment is auditable.
+          Every response carries a <code className="font-mono">coverage</code>{' '}
+          block naming the fills source and window.
+        </P>
+        <p className="text-[11px] text-white/40 leading-relaxed mb-3">
+          No example response is shown here yet — every example on this page is
+          a real captured response, and this endpoint ships with the change
+          that added this section.
+        </p>
+
+        <H2 id="replay">Replay metadata, fills, and candles</H2>
+        <Endpoint method="GET" path="/api/replay/{address}" />
+        <Endpoint method="GET" path="/api/replay/{address}/fills?coin=" />
+        <Endpoint method="GET" path="/api/replay/candles?coin=&interval=&from=&to=" />
+        <P>
+          The data behind{' '}
+          <Link href="/replay/0x0000000000000000000000000000000000000000" className="text-[#34EAB9] hover:underline">/replay/&#123;address&#125;</Link>.
+          The metadata endpoint lists the coins a wallet traded in its covered
+          window with per-coin fill counts and spans; the fills endpoint serves
+          one coin&rsquo;s fills at exchange-exact execution prices (price,
+          size, side, direction, realized PnL and fee exactly as the exchange
+          reported them); the candles endpoint serves bars from the exchange
+          retention ladder (~4,900 bars per interval: 1m, 5m, 15m, 1h, 4h, 1d)
+          or, for the 1m rung beyond the exchange&rsquo;s ~3.5-day window, from
+          our captured tape.
+        </P>
+        <Params rows={[
+          ['coin', 'the coin symbol, e.g. BTC. Required on the fills and candles endpoints.'],
+          ['interval', 'one of 1m, 5m, 15m, 1h, 4h, 1d. An interval that cannot honestly serve the window is a 400 carrying the reason — bars are never resampled or interpolated. The response’s intervals array reports availability and reasons for the exact window requested.'],
+          ['from, to', 'window bounds as epoch milliseconds. Windows over 2,500 bars at the chosen interval are refused with a 400 naming the cap.'],
+        ]} />
+        <P>
+          Candle responses declare their coverage: bars served versus bars the
+          window could hold, internal gap count and the largest gap. Missing
+          bars stay missing — a gap in the tape is drawn as a gap, never
+          bridged or zero-filled.
+        </P>
+        <p className="text-[11px] text-white/40 leading-relaxed mb-3">
+          No example responses are shown here yet — every example on this page
+          is a real captured response, and these endpoints ship with the change
+          that added this section.
+        </p>
+
         <H2 id="conventions">Conventions</H2>
         <P>
           Ledger responses carry a top-level{' '}
           <code className="font-mono">schema: &quot;ledger.v0&quot;</code>{' '}
-          version marker, and the cohort endpoint carries{' '}
-          <code className="font-mono">schema: &quot;cohort.v0&quot;</code>. Timestamps are ISO-8601 with timezone offsets.
+          version marker, the cohort endpoint carries{' '}
+          <code className="font-mono">schema: &quot;cohort.v0&quot;</code>, the
+          report card carries{' '}
+          <code className="font-mono">schema: &quot;card.v0&quot;</code>, and
+          the replay endpoints carry{' '}
+          <code className="font-mono">schema: &quot;replay.v0&quot;</code>. Timestamps are ISO-8601 with timezone offsets.
           Responses are uncached (<code className="font-mono">Cache-Control:
           no-store</code>) and the Ledger endpoints allow cross-origin GET from
           any origin. Errors are JSON with an{' '}
