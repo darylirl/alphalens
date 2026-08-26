@@ -100,7 +100,16 @@ DATASETS = {
 # AWS list prices, us/ap standard tiers, stated explicitly so the estimate is
 # auditable and correctable rather than a magic number. Requester-pays means
 # these land on our bill, not Hyperliquid's.
-USD_PER_GB_TRANSFER = 0.09       # data transfer out to internet, first 10TB/mo
+# Data transfer OUT of S3 to the internet, first 10TB/mo. This is the right
+# number for a laptop or an out-of-region box, and the wrong one for the
+# deployment this script actually runs in.
+USD_PER_GB_EGRESS = 0.09
+# S3 -> EC2 in the SAME region is $0.00/GB. The archive lives in
+# ap-northeast-1 and the backfill runs in-region on an EC2 instance there, so
+# the full 272 GiB union costs request charges and nothing else. Assuming
+# egress unconditionally overstates that run by ~$24.50 — enough to trip the
+# --max-usd fence and refuse a transfer that is very nearly free.
+USD_PER_GB_IN_REGION = 0.0
 USD_PER_1K_GET = 0.0004          # GET/LIST request charge
 GIB = 1024 ** 3
 
@@ -212,19 +221,33 @@ def list_dataset(client, ds: dict, start: date, end: date, verbose: bool):
     return objects, list_requests, empty_days
 
 
-def estimate_cost(objects, list_requests: int) -> dict:
+def estimate_cost(objects, list_requests: int, in_region: bool = False) -> dict:
+    """Cost of transferring the listed objects, from their real byte sizes.
+
+    `in_region` selects the S3 -> EC2 same-region rate ($0.00/GB) over internet
+    egress ($0.09/GB). It defaults to False so the estimate is never quiet
+    about a cost that is real: understating spend is the failure that matters
+    here, and an operator who is told $24 and pays $0 has lost nothing.
+    Both figures are reported either way, so neither assumption can mislead."""
     total_bytes = sum(sz for _, sz in objects)
     gb = total_bytes / GIB
-    transfer = gb * USD_PER_GB_TRANSFER
+    rate = USD_PER_GB_IN_REGION if in_region else USD_PER_GB_EGRESS
+    transfer = gb * rate
     gets = (len(objects) + list_requests) / 1000.0 * USD_PER_1K_GET
     return {
         "objects": len(objects),
         "list_requests": list_requests,
         "bytes": total_bytes,
         "gib": gb,
+        "in_region": in_region,
+        "usd_per_gb": rate,
         "usd_transfer": transfer,
         "usd_requests": gets,
         "usd_total": transfer + gets,
+        # The counterfactual, always shown, so the assumption in force is
+        # visible rather than buried in a constant.
+        "usd_total_other": gb * (USD_PER_GB_EGRESS if in_region
+                                 else USD_PER_GB_IN_REGION) + gets,
     }
 
 
@@ -243,14 +266,25 @@ def print_estimate(ds_name: str, ds: dict, start: date, end: date, est: dict,
           + (f"  (first: {empty_days[0]}, last: {empty_days[-1]})" if empty_days else ""))
     print(f"  transfer size    {est['gib']:.2f} GiB  ({est['bytes']:,} bytes)")
     print()
-    print(f"  data transfer    {est['gib']:.2f} GiB x ${USD_PER_GB_TRANSFER}/GiB "
+    mode = ("S3 -> EC2 same region" if est["in_region"]
+            else "egress to internet")
+    print(f"  transfer rate    ${est['usd_per_gb']}/GiB  ({mode})")
+    print(f"  data transfer    {est['gib']:.2f} GiB x ${est['usd_per_gb']}/GiB "
           f"= ${est['usd_transfer']:.2f}")
     print(f"  requests         {est['objects'] + est['list_requests']:,} x "
           f"${USD_PER_1K_GET}/1k = ${est['usd_requests']:.4f}")
     print(f"  ESTIMATED TOTAL  ${est['usd_total']:.2f}")
+    other = ("egress to internet" if est["in_region"]
+             else "S3 -> EC2 same region")
+    print(f"  if instead {other:<22} ${est['usd_total_other']:.2f}")
     print(f"  budget ceiling   ${max_usd:.2f} (inner fence; the AWS budget "
           f"action is the outer one)")
     print("=" * 72)
+    if not est["in_region"] and est["usd_transfer"] > 1.0:
+        print("  NOTE: this assumes egress to the internet. The archive is in")
+        print("        ap-northeast-1; running the backfill on an EC2 instance")
+        print("        in that region makes transfer free and leaves only the")
+        print("        request charge. Pass --transfer in-region to price that.")
     if empty_days:
         print("  NOTE: days with zero objects are reported as gaps, not as days")
         print("        with no trading. The backtest treats them as uncovered.")
@@ -331,6 +365,12 @@ def main():
                     help="proceed past the estimate and actually transfer")
     ap.add_argument("--max-usd", type=float, default=25.0,
                     help="inner spend fence; refuses to transfer above this")
+    ap.add_argument("--transfer", choices=("egress", "in-region"),
+                    default="egress",
+                    help="transfer pricing. 'egress' ($0.09/GiB, the default, "
+                         "never understates) or 'in-region' ($0.00/GiB, "
+                         "correct when running on EC2 in the bucket's region "
+                         "-- ap-northeast-1 for this archive)")
     ap.add_argument("--status", action="store_true", help="report the local cache and exit")
     ap.add_argument("--check-credentials", action="store_true",
                     help="validate AWS credentials and exit (no billable calls)")
@@ -372,7 +412,7 @@ def main():
         print("gap to investigate, not a window with no trading.")
         return 3
 
-    est = estimate_cost(objects, list_reqs)
+    est = estimate_cost(objects, list_reqs, in_region=(args.transfer == "in-region"))
     print_estimate(args.dataset, ds, start, end, est, empty_days, args.max_usd)
 
     if est["usd_total"] > args.max_usd:

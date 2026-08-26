@@ -78,13 +78,40 @@ def main():
     check("estimate uses real listed byte sizes",
           est["bytes"] == expected_bytes, f"{est['bytes']} vs {expected_bytes}")
     check("transfer cost = GiB x list price",
-          abs(est["usd_transfer"] - est["gib"] * S.USD_PER_GB_TRANSFER) < 1e-12)
+          abs(est["usd_transfer"] - est["gib"] * S.USD_PER_GB_EGRESS) < 1e-12)
     check("request cost counts GETs and LISTs",
           abs(est["usd_requests"]
               - (len(objects) + list_reqs) / 1000.0 * S.USD_PER_1K_GET) < 1e-12)
     check("total = transfer + requests",
           abs(est["usd_total"] - (est["usd_transfer"] + est["usd_requests"])) < 1e-12,
           f"${est['usd_total']:.4f} for {est['gib']:.2f} GiB")
+
+    # Transfer pricing: egress by default, same-region when told so. The
+    # archive is in ap-northeast-1 and the backfill runs on EC2 in-region,
+    # where S3 -> EC2 transfer is free; assuming egress there overstates a
+    # 272 GiB run by ~$24.50 and can trip the --max-usd fence on a transfer
+    # that costs request charges alone.
+    est_ir = S.estimate_cost(objects, list_reqs, in_region=True)
+    check("in-region transfer is priced at zero",
+          est_ir["usd_transfer"] == 0.0 and est_ir["usd_per_gb"] == 0.0)
+    check("in-region total is request charges only",
+          abs(est_ir["usd_total"] - est_ir["usd_requests"]) < 1e-12,
+          f"${est_ir['usd_total']:.4f}")
+    check("the default stays egress, so spend is never understated",
+          S.estimate_cost(objects, list_reqs)["usd_per_gb"] == S.USD_PER_GB_EGRESS)
+    check("each estimate reports the counterfactual rate too",
+          abs(est_ir["usd_total_other"] - est["usd_total"]) < 1e-12
+          and abs(est["usd_total_other"] - est_ir["usd_total"]) < 1e-12)
+
+    # The real archive union the operator actually faces (d2a9f24 listing):
+    # 10,974 objects, 272.24 GiB across node_fills + node_fills_by_block.
+    real = [(f"k{i}", int(272.24 * S.GIB) // 10974) for i in range(10974)]
+    r_eg = S.estimate_cost(real, 458)
+    r_ir = S.estimate_cost(real, 458, in_region=True)
+    check("full-archive egress estimate lands just under the $25 fence",
+          24.0 < r_eg["usd_total"] < 25.0, f"${r_eg['usd_total']:.2f}")
+    check("full-archive in-region estimate is cents, not dollars",
+          r_ir["usd_total"] < 0.01, f"${r_ir['usd_total']:.4f}")
 
     # --confirm gate and spend fence, via main()'s own control flow.
     argv = sys.argv[:]
