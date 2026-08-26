@@ -81,3 +81,64 @@ Working AWS credentials for the read-only IAM user, at which point
 estimate, `--confirm` transfers, and the gate is re-run against archive depth.
 
 Nothing in this run was degraded, padded, or narrowed to produce a number.
+
+---
+
+## Addendum, 2026-08-26: this report's root cause was incomplete
+
+The heading above ("Why the S3 archive was not used") named one cause. There
+were two, and only the second one is mine to have caught.
+
+**1. No credentials in the run container.** True as written, and still true:
+`.env.local` is gitignored, so it never reached the fresh clone, and the
+default credential chain finds nothing here — no env keys, no
+`~/.aws/credentials`, and IMDS answers 403, so there is no instance role
+either. Every AWS call from this container fails before it can list anything.
+
+**2. The prefix in `s3_backfill.py` was wrong.** The real layout carries an
+`hourly/` segment — `node_fills/hourly/{ymd}/{H}.lz4`, not
+`node_fills/{ymd}/`. On a machine that *does* have credentials, every LIST
+succeeded and correctly returned zero objects, which is indistinguishable from
+a dead bucket unless you check the layout against the archive. `node_fills` is
+also the legacy dataset and stops at 2025-07-27; `node_fills_by_block` carries
+the tape from that day to the present, and the script could not target it at
+all.
+
+Cause 2 was a defect in code I wrote, and it would have produced a false
+"archive empty" result even with working credentials. The archive was never
+unreachable in the general sense this report implied; it was unreachable *from
+here*, and mis-addressed everywhere. Fixed in d2a9f24. The real extent,
+verified by listing:
+
+| dataset | range | days | objects | size |
+| --- | --- | --- | --- | --- |
+| `node_fills` | 2025-05-25 .. 2025-07-27 | 64 | 1,507 | 29.63 GiB |
+| `node_fills_by_block` | 2025-07-27 .. 2026-08-25 | 395 | 9,467 | 242.61 GiB |
+| union | 2025-05-25 .. 2026-08-25 | 458, zero gaps | 10,974 | 272.24 GiB |
+
+Three further defects in the read path, all in code that had never run against
+real archive bytes, were fixed in bc33fa7: an archive line is a two-element
+array `[address, fill]` rather than a dict, so `_normalise_s3_fill` raised on
+it; whole-object decompression held both the compressed object and its full
+expansion in memory; and the two datasets overlap on 2025-07-27, so reading
+both without de-duplicating on `tid` double-counts every fill that day.
+
+`test_s3_archive_shape.py` now exercises all four against real lz4 objects in
+the real directory layout. The original 13 tests passed throughout, because
+every one of them stubbed the archive — they tested the assumptions, not the
+tape.
+
+**What does not change:** the gate result. 0 qualifying decision dates against
+the 12 required, on the classified cohort over API-retention data. The archive
+union above starts 2025-05-25, which is a materially deeper window than the
+run had, so re-running the gate against a populated cache is a genuinely open
+question rather than a foregone one — it has not been run.
+
+**Cost note.** At 272.24 GiB the egress-priced estimate is $24.51, which is
+within $0.49 of the $25 fence and above the USD 5-to-20 range section 7
+pre-registers. But S3 to EC2 *in the same region* is $0.00/GB, and this
+archive is in ap-northeast-1: run in-region, the same transfer costs $0.0046
+in request charges. The estimator assumed internet egress unconditionally and
+would have refused, or alarmed about, a nearly free transfer. It now takes
+`--transfer in-region` and prints both figures, defaulting to egress so that
+it can never understate.
