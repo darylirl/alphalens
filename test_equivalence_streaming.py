@@ -434,6 +434,8 @@ def main():
               f"{mismatches[k]} differ" if mismatches[k] else "")
     print(f"  compared {compared} evaluable (wallet, date) pairs; "
           f"{excluded} excluded identically by both")
+    check("level 2 actually compared something (a vacuous pass is not a pass)",
+          compared > 0, f"{compared} evaluable (wallet, date) pairs")
 
     # ── Level 3: final S scores ─────────────────────────────────────────────
     print("\n── level 3: final S scores ──")
@@ -474,6 +476,13 @@ def main():
     check("identical S scores at every decision date", diff_S == 0,
           f"{diff_S} of {s_total} scored wallet-dates differ" if diff_S
           else f"{s_total} scored wallet-dates identical")
+    # A comparison that compares nothing is not a pass. The first run of this
+    # harness reported "identical S scores — 0 scored wallet-dates identical",
+    # which is vacuous: four days cannot fill a 60-day trailing window, so no
+    # wallet cleared the eligibility floor and level 3 ran empty while showing
+    # green. Same failure mode as a fixture that agrees with its parser.
+    check("level 3 actually compared something (a vacuous pass is not a pass)",
+          s_total > 0, f"{s_total} scored wallet-dates compared")
 
     write_artifact(picked, chosen, counts, liq_wallets, decisions, stats,
                    compared, excluded, s_total, t_old, t_new, tier=args.tier)
