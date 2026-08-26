@@ -65,14 +65,24 @@ DATASETS = {
     "node_fills": {
         "bucket": "hl-mainnet-node-data",
         "region": "ap-northeast-1",
-        "prefix": "node_fills/{ymd}/",
+        "prefix": "node_fills/hourly/{ymd}/",
         "granularity": "day",
         "desc": "per-fill tape by hour (address, coin, px, sz, closedPnl, fee)",
+    },
+    # PRIMARY per-fill dataset. node_fills above is the legacy format and stops
+    # at 2025-07-27; by_block picks up the same day and runs to the present, so
+    # the two are contiguous rather than alternatives. Same hourly .lz4 layout.
+    "node_fills_by_block": {
+        "bucket": "hl-mainnet-node-data",
+        "region": "ap-northeast-1",
+        "prefix": "node_fills_by_block/hourly/{ymd}/",
+        "granularity": "day",
+        "desc": "per-fill tape by block, hourly (primary; supersedes node_fills)",
     },
     "node_trades": {
         "bucket": "hl-mainnet-node-data",
         "region": "ap-northeast-1",
-        "prefix": "node_trades/{ymd}/",
+        "prefix": "node_trades/hourly/{ymd}/",
         "granularity": "day",
         "desc": "public trade tape by hour",
     },
