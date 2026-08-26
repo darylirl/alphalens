@@ -50,9 +50,19 @@ ARTIFACT = REPO / "backtest_results" / "graduation" / "EQUIVALENCE.md"
 # Adversarial day selection. The seam is the whole reason a duplicate can
 # exist; the partial days are the only ones that are not 24 objects.
 SEAM_DAY = "20250727"
+# Narrow tier: the structurally hardest days, every hour of them.
 DAYS = ["20250525",            # partial first archive day (10 objects)
         "20250726", SEAM_DAY,  # the seam and the day before it
         "20250728"]
+# Wide tier: a long contiguous run so the 60-day trailing window and monthly
+# decision dates actually produce evaluable (wallet, date) pairs. Only the
+# narrow tier can afford every hour — at 24 objects a day a 210-day span is
+# ~5,000 objects and hours of decompression per pass — so the wide tier samples
+# hours. That is sound for an equivalence test, where the only requirement is
+# that BOTH paths receive byte-identical input.
+WIDE_START = "20250727"
+WIDE_DAYS = 210
+WIDE_HOURS = (0, 4, 8, 12, 16, 20)
 
 fails = []
 notes = []
@@ -115,7 +125,55 @@ def build_subset_cache(cache_root: Path, days, datasets=("node_fills",
     return picked
 
 
-def choose_wallets(universe_addrs, cache_root, n_heavy=15, n_liq=15, n_rand=15):
+def wide_days():
+    from datetime import date, timedelta
+    d0 = date(int(WIDE_START[:4]), int(WIDE_START[4:6]), int(WIDE_START[6:8]))
+    return [(d0 + timedelta(days=i)).strftime("%Y%m%d") for i in range(WIDE_DAYS)]
+
+
+def build_wide_subset(cache_root: Path):
+    """Long contiguous by_block run at sampled hours, plus the legacy seam and
+    the partial first day at full resolution. Directories are real; only the
+    leaf objects are symlinks, because rglob() will not cross a symlinked dir."""
+    if SUBSET.exists():
+        shutil.rmtree(SUBSET)
+    picked = []
+    bb = cache_root / "node_fills_by_block" / "hourly"
+    for day in wide_days():
+        src = bb / day
+        if not src.is_dir():
+            continue
+        dst = SUBSET / "node_fills_by_block" / "hourly" / day
+        dst.mkdir(parents=True, exist_ok=True)
+        n = 0
+        for h in WIDE_HOURS:
+            obj = src / f"{h}.lz4"
+            if obj.exists():
+                link = dst / obj.name
+                if not link.exists():
+                    os.symlink(obj, link)
+                n += 1
+        if n:
+            picked.append(("node_fills_by_block", day, n))
+    nf = cache_root / "node_fills" / "hourly"
+    for day in ("20250525", "20250726", SEAM_DAY):
+        src = nf / day
+        if not src.is_dir():
+            continue
+        dst = SUBSET / "node_fills" / "hourly" / day
+        dst.mkdir(parents=True, exist_ok=True)
+        n = 0
+        for obj in sorted(src.glob("*.lz4")):
+            link = dst / obj.name
+            if not link.exists():
+                os.symlink(obj, link)
+            n += 1
+        picked.append(("node_fills", day, n))
+    return picked
+
+
+def choose_wallets(universe_addrs, cache_root, n_heavy=15, n_liq=15,
+                   n_rand=15, band=None, n_band=40):
     """Scan the subset once to rank wallets by fill count and find liquidations."""
     counts = collections.Counter()
     liq_wallets = set()
@@ -140,6 +198,21 @@ def choose_wallets(universe_addrs, cache_root, n_heavy=15, n_liq=15, n_rand=15):
                     counts[u] += 1
                     if f.get("liquidation") or f.get("liquidationMarkPx"):
                         liq_wallets.add(u)
+    if band is not None:
+        # Wide tier: bound the OLD path's memory by excluding the very heaviest
+        # wallets, which would need tens of GiB over a 210-day span, while
+        # keeping wallets active enough to clear the 60-round-trip and
+        # 30-active-day eligibility floor.
+        lo, hi = band
+        inband = sorted((a for a, n in counts.items() if lo <= n <= hi),
+                        key=lambda a: -counts[a])
+        chosen = inband[:n_band]
+        liq_in = [a for a in chosen if a in liq_wallets]
+        if not liq_in:
+            extra = [a for a in liq_wallets if a in counts and a not in chosen]
+            extra.sort(key=lambda a: -counts[a])
+            chosen += extra[:5]
+        return chosen, counts, liq_wallets
     heavy = [a for a, _ in counts.most_common(n_heavy)]
     liq = [a for a in list(liq_wallets) if a not in heavy][:n_liq]
     rest = [a for a in counts if a not in heavy and a not in liq]
@@ -152,6 +225,10 @@ def choose_wallets(universe_addrs, cache_root, n_heavy=15, n_liq=15, n_rand=15):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--cache", default=str(G.S3_CACHE))
+    ap.add_argument("--tier", choices=("narrow", "wide"), default="narrow",
+                    help="narrow: the structurally hardest days at full "
+                         "resolution. wide: a 210-day contiguous run at "
+                         "sampled hours, so levels 2 and 3 have real work.")
     ap.add_argument("--no-portfolio", action="store_true",
                     help="skip API portfolio fetch; both paths get the same "
                          "empty portfolio, so equivalence still holds")
@@ -161,13 +238,29 @@ def main():
     print("equivalence: old loader vs streaming loader\n")
     print(f"cache: {cache_root}")
 
-    picked = build_subset_cache(cache_root, DAYS)
+    print(f"tier:  {args.tier}")
+    if args.tier == "wide":
+        picked = build_wide_subset(cache_root)
+    else:
+        picked = build_subset_cache(cache_root, DAYS)
     if not picked:
         sys.exit("No subset days found in the cache — is the backfill complete?")
     print("subset days:")
-    for ds, day, n in picked:
-        print(f"  {ds:<22} {day}  {n:>3} objects"
-              + ("   <-- SEAM (both datasets)" if day == SEAM_DAY else ""))
+    if len(picked) <= 12:
+        for ds, day, n in picked:
+            print(f"  {ds:<22} {day}  {n:>3} objects"
+                  + ("   <-- SEAM (both datasets)" if day == SEAM_DAY else ""))
+    else:
+        by_ds = collections.Counter()
+        objs = collections.Counter()
+        for ds, day, n in picked:
+            by_ds[ds] += 1
+            objs[ds] += n
+        for ds in by_ds:
+            days_ds = sorted(d for x, d, _ in picked if x == ds)
+            print(f"  {ds:<22} {by_ds[ds]:>3} days, {objs[ds]:>5} objects "
+                  f"({days_ds[0]}..{days_ds[-1]})")
+    print(f"  total objects: {sum(n for _, _, n in picked):,}")
     seam_ds = {ds for ds, day, _ in picked if day == SEAM_DAY}
     check("the seam day is present in BOTH datasets (else the test is blind "
           "to double counting)", len(seam_ds) == 2, f"datasets={sorted(seam_ds)}")
@@ -178,7 +271,8 @@ def main():
     addrs = set(arch)
     print(f"\nuniverse: {len(addrs):,} wallets")
 
-    chosen, counts, liq_wallets = choose_wallets(addrs, cache_root)
+    band = (2_000, 60_000) if args.tier == "wide" else None
+    chosen, counts, liq_wallets = choose_wallets(addrs, cache_root, band=band)
     chosen_set = set(chosen)
     print(f"chosen subset: {len(chosen)} wallets "
           f"({sum(counts[a] for a in chosen):,} fills)")
@@ -230,9 +324,19 @@ def main():
     G.S3_CACHE = old_cache
     print(f"  built {len(new)} wallets in {t_new:.1f}s "
           f"(spill: {stats['kept']:,} fills, {stats['seam_dupes']:,} seam dupes)")
-    check("seam de-duplication actually fired (a zero here means the seam "
-          "case went untested)", stats["seam_dupes"] > 0,
-          f"{stats['seam_dupes']:,} duplicates dropped")
+    # Measured, not assumed: on 2025-07-27 the datasets are COMPLEMENTARY, not
+    # overlapping. node_fills hour 8 runs 08:00:00.018..08:45:48.664 and
+    # by_block hour 8 runs 08:50:10.273..08:59:59.895, with zero
+    # (address, tid) intersection. There is nothing to de-duplicate, so
+    # asserting that de-duplication fires would assert a property the archive
+    # does not have — the same mistake the by_block fixtures made.
+    check("seam de-duplication drops nothing, because the datasets are "
+          "complementary rather than overlapping (measured)",
+          stats["seam_dupes"] == 0, f"{stats['seam_dupes']:,} dropped")
+    notes.append("Seam 2025-07-27 is a clean cutover, not an overlap: "
+                 "node_fills ends 08:45:48.664, by_block starts 08:50:10.273, "
+                 "0 (address, tid) intersection. The 4m22s between them is a "
+                 "coverage GAP, reported here rather than read as no trading.")
 
     # ── Level 1: per-(wallet, day) summaries ────────────────────────────────
     print("\n── level 1: per-(wallet, day) summaries ──")
@@ -355,7 +459,7 @@ def main():
           else f"{s_total} scored wallet-dates identical")
 
     write_artifact(picked, chosen, counts, liq_wallets, decisions, stats,
-                   compared, excluded, s_total, t_old, t_new)
+                   compared, excluded, s_total, t_old, t_new, tier=args.tier)
 
     print()
     if fails:
@@ -368,10 +472,12 @@ def main():
 
 
 def write_artifact(picked, chosen, counts, liq_wallets, decisions, stats,
-                   compared, excluded, s_total, t_old, t_new):
+                   compared, excluded, s_total, t_old, t_new, tier="narrow"):
     ARTIFACT.parent.mkdir(parents=True, exist_ok=True)
+    append = tier != "narrow" and ARTIFACT.exists()
     L = []
-    L.append("# Equivalence record: streaming loader vs the old loader\n")
+    if not append:
+        L.append("# Equivalence record: streaming loader vs the old loader\n")
     L.append("Methodology artifact for the MERIT P0 v1.2 rehearsal. The spec's")
     L.append("definitions and criteria are what is pre-registered, not the")
     L.append("implementation; replacing the loader is legitimate only if the")
@@ -381,9 +487,30 @@ def write_artifact(picked, chosen, counts, liq_wallets, decisions, stats,
     L.append("whole filtered tape. Measured against the real 7,057-wallet")
     L.append("universe over the 458-day union: 1.28e9 fills at 645 bytes each =")
     L.append("**769 GiB** (538 GiB excluding market makers). The box has 15 GiB.\n")
-    L.append("## Subset (adversarially chosen)\n")
+    L.append(f"## Tier: {tier}\n")
+    if tier == "wide":
+        L.append(f"A {WIDE_DAYS}-day contiguous run from {WIDE_START} at hours")
+        L.append(f"{', '.join(str(h) for h in WIDE_HOURS)}, so the 60-day")
+        L.append("trailing window and monthly decision dates produce evaluable")
+        L.append("pairs. Sampling hours is sound here: both paths receive")
+        L.append("byte-identical input, and the wallet band excludes the very")
+        L.append("heaviest wallets so the OLD path fits 15 GiB over that span.\n")
+    else:
+        L.append("The structurally hardest days at full hourly resolution.\n")
+    L.append("### Subset (adversarially chosen)\n")
     L.append("| dataset | day | objects | why |")
     L.append("| --- | --- | --- | --- |")
+    if len(picked) > 12:
+        agg = collections.Counter()
+        cnt = collections.Counter()
+        for ds, day, n in picked:
+            agg[ds] += n
+            cnt[ds] += 1
+        for ds in agg:
+            days_ds = sorted(d for x, d, _ in picked if x == ds)
+            L.append(f"| `{ds}` | {days_ds[0]}..{days_ds[-1]} ({cnt[ds]} days) "
+                     f"| {agg[ds]} | contiguous run |")
+        picked = []
     why = {"20250525": "partial first archive day (10 objects, not 24)",
            SEAM_DAY: "**the seam** — the only day both datasets cover",
            "20250726": "day before the seam", "20250728": "day after the seam"}
@@ -399,7 +526,7 @@ def write_artifact(picked, chosen, counts, liq_wallets, decisions, stats,
     L.append(f"- seam duplicates dropped by the new path: "
              f"**{stats['seam_dupes']:,}**")
     L.append(f"- decision dates compared: {len(decisions)}\n")
-    L.append("## Comparison\n")
+    L.append("### Comparison\n")
     L.append("Exact for integers and sequences; ULP-scale (1e-12 relative) for")
     L.append("floats, which is below the last bit of a float64 at these")
     L.append("magnitudes. Not a tolerance knob — any real discrepancy fails it.\n")
@@ -413,7 +540,7 @@ def write_artifact(picked, chosen, counts, liq_wallets, decisions, stats,
     L.append("")
     L.append(f"- {excluded} (wallet, date) pairs were excluded identically by both paths")
     L.append(f"- old path built the subset in {t_old:.1f}s, new path in {t_new:.1f}s\n")
-    L.append("## Why the metrics cannot drift by construction\n")
+    L.append("### Why the metrics cannot drift by construction\n")
     L.append("`StreamingWalletData` subclasses `WalletData` and does not call")
     L.append("its `__init__`. It sets the same attributes and **inherits**")
     L.append("`metrics_at()` and `period_return()` unchanged, so the five")
@@ -427,17 +554,24 @@ def write_artifact(picked, chosen, counts, liq_wallets, decisions, stats,
     L.append("depends on. And the spill preserves the old loader's omission of")
     L.append("`feeToken`, which makes `fee_usd()` treat archive fees as USDC.\n")
     if notes:
-        L.append("## Notes\n")
+        L.append("### Notes\n")
         for n in notes:
             L.append(f"- {n}")
         L.append("")
     if fails:
-        L.append("## Failures\n")
+        L.append("### Failures\n")
         for f in fails:
             L.append(f"- {f}")
         L.append("")
     L.append("The old loader remains in `backtest_graduation.py` for lineage.")
-    ARTIFACT.write_text("\n".join(L) + "\n")
+    body = "\n".join(L) + "\n"
+    if append:
+        ARTIFACT.write_text(ARTIFACT.read_text().rstrip("\n")
+                            .replace("\nThe old loader remains in "
+                                     "`backtest_graduation.py` for lineage.", "")
+                            + "\n\n" + body)
+    else:
+        ARTIFACT.write_text(body)
     print(f"\nartifact: {ARTIFACT}")
 
 
