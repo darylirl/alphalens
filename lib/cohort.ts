@@ -41,6 +41,46 @@ export async function loadCohort(supabase: SupabaseClient): Promise<CohortWallet
   return all
 }
 
+// Example wallets for the /card and /replay index pages: a small, live,
+// archetype-varied sample of the capture cohort so a visitor can try the
+// surface without owning an address. The read is bounded on purpose — an
+// ordered top slice intended as a cap (CLAUDE.md: never an unbounded
+// PostgREST read) — and callers render an honest empty state on failure,
+// never a hardcoded list.
+const EXAMPLE_POOL_LIMIT = 200
+
+export async function loadExampleWallets(
+  supabase: SupabaseClient,
+  count = 4,
+): Promise<CohortWallet[]> {
+  const { data, error } = await supabase
+    .from('wallets')
+    .select('address,archetype,trade_count_30d,created_at,last_updated')
+    .eq('capture_enabled', true)
+    .is('removed_at', null)
+    .order('trade_count_30d', { ascending: false, nullsFirst: false })
+    .limit(EXAMPLE_POOL_LIMIT)
+  if (error) throw error
+  const pool = (data ?? []) as CohortWallet[]
+
+  // One wallet per archetype, most active first, so the examples vary.
+  const picked: CohortWallet[] = []
+  const seenArchetypes = new Set<string>()
+  for (const w of pool) {
+    const key = w.archetype ?? 'unclassified'
+    if (seenArchetypes.has(key)) continue
+    seenArchetypes.add(key)
+    picked.push(w)
+    if (picked.length >= count) break
+  }
+  // Fewer archetypes in the pool than asked for: top up by activity.
+  for (const w of pool) {
+    if (picked.length >= count) break
+    if (!picked.includes(w)) picked.push(w)
+  }
+  return picked
+}
+
 // Deterministic serialization: addresses are already sorted by the query
 // order, fields are raw database values. Same data in, same bytes out — that
 // is what makes the displayed hash auditable against the download.

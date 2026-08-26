@@ -10,20 +10,23 @@ import { Search, ChevronDown } from 'lucide-react'
 // box rendered on top of the last links) and gave the nav no hierarchy.
 // Ledger and Research lead after Pulse: the public track record and the
 // published verdicts are what differentiates the product, so they are never
-// buried in an overflow menu.
+// buried in an overflow menu. Report Card and Replay follow them: they are
+// the consumer surfaces a visitor can use with nothing but a pasted address.
 const primaryLinks = [
   { href: '/pulse', label: 'Pulse' },
   { href: '/ledger', label: 'Ledger' },
   { href: '/research', label: 'Research' },
+  { href: '/card', label: 'Report Card' },
+  { href: '/replay', label: 'Replay' },
   { href: '/hunters', label: 'Explorer' },
   { href: '/wallets', label: 'Wallets' },
-  { href: '/smart-money', label: 'Smart Money' },
-  { href: '/performance', label: 'Performance' },
 ]
 
 // /copy-trade is intentionally absent: quarantined pending repositioning —
 // our own backtests showed naive copy-trading loses money (see app/copy-trade).
 const moreLinks = [
+  { href: '/smart-money', label: 'Smart Money' },
+  { href: '/performance', label: 'Performance' },
   { href: '/signals', label: 'Signals' },
   { href: '/alerts', label: 'Alerts' },
   { href: '/watchlist', label: 'Watchlist' },
