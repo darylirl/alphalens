@@ -47,8 +47,33 @@ async function loadCallIds(): Promise<Array<{ id: number; published_at: string; 
   return all
 }
 
+/** Cohort wallet addresses for /card and /replay permalinks, explicitly
+ *  paged until a short page comes back. */
+async function loadCohortAddresses(): Promise<Array<{ address: string; last_updated: string | null }>> {
+  const all: Array<{ address: string; last_updated: string | null }> = []
+  try {
+    const supabase = getSupabase()
+    for (let offset = 0; all.length < MAX_ENTRIES; offset += PAGE_SIZE) {
+      const { data, error } = await supabase
+        .from('wallets')
+        .select('address,last_updated')
+        .eq('capture_enabled', true)
+        .is('removed_at', null)
+        .order('address', { ascending: true })
+        .range(offset, offset + PAGE_SIZE - 1)
+      if (error) throw error
+      const page = (data || []) as Array<{ address: string; last_updated: string | null }>
+      all.push(...page)
+      if (page.length < PAGE_SIZE) break
+    }
+  } catch {
+    // The static routes still ship; wallet permalinks reappear next fetch.
+  }
+  return all
+}
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const calls = await loadCallIds()
+  const [calls, cohort] = await Promise.all([loadCallIds(), loadCohortAddresses()])
   return [
     ...staticRoutes.map(({ path, priority }) => ({
       url: `${APP_URL}${path}`,
@@ -59,5 +84,17 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       lastModified: c.resolved_at ?? c.published_at,
       priority: 0.6,
     })),
+    ...cohort.flatMap((w) => [
+      {
+        url: `${APP_URL}/card/${w.address}`,
+        lastModified: w.last_updated ?? undefined,
+        priority: 0.5,
+      },
+      {
+        url: `${APP_URL}/replay/${w.address}`,
+        lastModified: w.last_updated ?? undefined,
+        priority: 0.5,
+      },
+    ]),
   ]
 }

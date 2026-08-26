@@ -12,6 +12,10 @@ Documentation with real examples: https://alphalens-taupe.vercel.app/docs/api
 - GET https://alphalens-taupe.vercel.app/api/ledger/calls/{id} — one Ledger call by numeric id, including its resolution and Brier score once scored
 - GET https://alphalens-taupe.vercel.app/api/pulse — rolling 24h positioning of the tracked cohort per coin, aggregated from captured fills, with a coverage block
 - GET https://alphalens-taupe.vercel.app/api/capture/health — live health of the capture daemon; check this before trusting recency
+- GET https://alphalens-taupe.vercel.app/api/card/{address} — the Wallet Report Card as JSON: exchange all-time PnL, statistically-floored grades (no grade under 30 resolved round trips), adjusted win rate with its prior, and a coverage block naming the fills source and window
+- GET https://alphalens-taupe.vercel.app/api/replay/{address} — replay metadata: coins the wallet traded in the covered window, per-coin fill counts and spans, and the coverage block
+- GET https://alphalens-taupe.vercel.app/api/replay/{address}/fills?coin= — one coin's fills at exchange-exact execution prices (our capture store for cohort wallets, the exchange's ~10K-recent-fills window otherwise)
+- GET https://alphalens-taupe.vercel.app/api/replay/candles?coin=&interval=&from=&to= — candles from the retention ladder or our captured 1m tape; intervals that cannot honestly serve the window are refused with the reason, never resampled
 
 ## Key pages
 
@@ -19,5 +23,7 @@ Documentation with real examples: https://alphalens-taupe.vercel.app/docs/api
 - https://alphalens-taupe.vercel.app/research — Published research and verdicts, failures included
 - https://alphalens-taupe.vercel.app/cohort — The tracked cohort: which wallets, classified how, and the capture methodology
 - https://alphalens-taupe.vercel.app/ledger/methodology — How calls are published, scored, and why data gaps are never scored
+- https://alphalens-taupe.vercel.app/card/{address} — Wallet Report Card for any pasted address: graded measured history with statistical floors and honest coverage labels
+- https://alphalens-taupe.vercel.app/replay/{address} — Trade replay for any pasted address: animated playback of real fills on real candles at exchange-exact execution prices, with an exportable clip that carries its coverage strip
 
 Nothing published by AlphaLens is financial advice or a recommendation; it shows data and costs, and decisions stay with the reader.

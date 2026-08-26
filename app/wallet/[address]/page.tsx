@@ -4,7 +4,8 @@ import { useParams } from 'next/navigation'
 import { WalletProfile } from '@/components/wallet/WalletProfile'
 import { SkeletonCard } from '@/components/ui/SkeletonCard'
 import type { WalletDetail, PortfolioEntry } from '@/lib/hyperliquid/types'
-import { Star, RefreshCw } from 'lucide-react'
+import Link from 'next/link'
+import { Star, RefreshCw, Award, Clapperboard } from 'lucide-react'
 import { useWalletStream } from '@/lib/hooks/useWalletStream'
 import { PulseIndicator } from '@/components/ui/PulseIndicator'
 
@@ -184,6 +185,20 @@ export default function WalletPage() {
             ))}
           </div>
           <div className="flex items-center gap-3">
+            <Link
+              href={`/card/${address}`}
+              className="flex items-center gap-1 text-[10px] text-white/40 hover:text-[#34EAB9] transition-colors"
+            >
+              <Award size={10} />
+              Report card
+            </Link>
+            <Link
+              href={`/replay/${address}`}
+              className="flex items-center gap-1 text-[10px] text-white/40 hover:text-[#34EAB9] transition-colors"
+            >
+              <Clapperboard size={10} />
+              Replay
+            </Link>
             <button
               onClick={reclassify}
               disabled={classifying}
