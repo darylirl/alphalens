@@ -231,6 +231,9 @@ export async function loadWalletFills(
 ): Promise<WalletFills> {
   const wallet = opts.wallet !== undefined ? opts.wallet : await loadWalletRow(address)
   const isCohort = Boolean(wallet?.capture_enabled)
+  /** A cohort wallet that had to fall back to the exchange — its captured
+   *  history exists but could not be read. Declared, never quietly served. */
+  let degraded = false
 
   if (isCohort) {
     try {
@@ -259,9 +262,10 @@ export async function loadWalletFills(
       }
     } catch (err) {
       // Store unreachable: fall through to the exchange window rather than
-      // failing the page — but the coverage block says which source answered,
-      // and the reason lands in the server log so a cohort wallet silently
-      // serving its shallow exchange window is diagnosable.
+      // failing the page — but say so. This wallet HAS captured history
+      // deeper than the exchange's window, and serving that shallow window
+      // unremarked would present a degraded read as a complete one.
+      degraded = true
       console.error(
         'store fills read failed, falling back to exchange window:',
         err instanceof Error ? err.message : err
@@ -284,9 +288,13 @@ export async function loadWalletFills(
       to,
       fill_count: fills.length,
       capped: fills.length >= HL_PAGE * (HL_MAX_PAGES - 1),
-      note: fills.length
-        ? `Recent window only (the exchange serves ~10K most recent fills): ${fills.length.toLocaleString()} fills, ${fmtDay(fills[0].time)} to ${fmtDay(fills[fills.length - 1].time)}`
-        : 'No fills in the exchange-served window (the exchange serves ~10K most recent fills)',
+      note:
+        (fills.length
+          ? `Recent window only (the exchange serves ~10K most recent fills): ${fills.length.toLocaleString()} fills, ${fmtDay(fills[0].time)} to ${fmtDay(fills[fills.length - 1].time)}`
+          : 'No fills in the exchange-served window (the exchange serves ~10K most recent fills)') +
+        (degraded
+          ? ' — our capture store did not answer for this cohort wallet, so its deeper captured history is NOT included here'
+          : ''),
     },
   }
 }

@@ -163,6 +163,9 @@ export async function loadCoinMenu(address: string): Promise<CoinMenu> {
     }
   }
 
+  // For a cohort wallet this path is a DEGRADED read (the aggregate above
+  // did not answer), and loadWalletFills labels it as such in its coverage
+  // note — it repeats the store attempt and lands in the same fallback.
   const { fills, coverage, gapCoins: exchangeGaps } = await loadWalletFills(address, {
     wallet,
   })
