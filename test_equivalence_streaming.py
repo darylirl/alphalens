@@ -239,12 +239,29 @@ def main():
     print(f"cache: {cache_root}")
 
     print(f"tier:  {args.tier}")
+    # Distinguish "this harness did not run" from "it ran and found a
+    # problem". Both used to exit 1 with a message blaming the backfill, so on
+    # any machine without a cache — CI, a fresh clone, the sandbox — a red here
+    # read as an equivalence failure. Equivalence is UNDEMONSTRATED in that
+    # case, which is its own honest state and not the same claim as broken.
+    if not cache_root.exists() or not any(cache_root.rglob("*.lz4")):
+        print()
+        print("SKIPPED — no archive cache at this path, so the two loaders were")
+        print("never run against each other. This is NOT a pass: equivalence is")
+        print("UNDEMONSTRATED here, and any streaming result produced on this")
+        print("machine is provisional until this harness runs on real bytes.")
+        print("Populate the cache with s3_backfill.py (in-region box) and re-run.")
+        return 2                                   # not 0, and not 1
+
     if args.tier == "wide":
         picked = build_wide_subset(cache_root)
     else:
         picked = build_subset_cache(cache_root, DAYS)
     if not picked:
-        sys.exit("No subset days found in the cache — is the backfill complete?")
+        sys.exit("Cache is present but holds none of the subset days "
+                 f"({', '.join(DAYS)}) — the backfill is incomplete for the "
+                 "days this harness needs. This IS a real problem: the seam "
+                 "and partial-day cases are exactly what equivalence turns on.")
     print("subset days:")
     if len(picked) <= 12:
         for ds, day, n in picked:
