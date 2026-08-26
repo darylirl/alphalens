@@ -12,8 +12,14 @@
  * reason — never padded, resampled or silently narrowed.
  */
 
-import { loadWalletFills } from '@/lib/wallet-data/fills'
-import { loadCandles, INTERVAL_MS, MAX_BARS, type CandlesResult } from '@/lib/wallet-data/candles'
+import { loadWalletFills, type WalletRow } from '@/lib/wallet-data/fills'
+import {
+  loadCandles,
+  storeCandleStart,
+  INTERVAL_MS,
+  MAX_BARS,
+  type CandlesResult,
+} from '@/lib/wallet-data/candles'
 import { detectEpisodes, defaultEpisode, summarize, type Episode } from './episodes'
 import { coarsen, buildTimeline, type RFill } from './engine'
 import { paceCandidates } from './ladder'
@@ -75,7 +81,8 @@ async function loadCandlesSliced(
   interval: string,
   fromMs: number,
   toMs: number,
-  onHeadSlice: ((head: CandlesResult) => void) | null
+  onHeadSlice: ((head: CandlesResult) => void) | null,
+  storeStart: Promise<number | null> | null
 ): Promise<CandlesResult> {
   const ms = INTERVAL_MS[interval]
   if (!ms) throw new Error(`unknown interval '${interval}'`)
@@ -89,13 +96,16 @@ async function loadCandlesSliced(
     )
   }
   if (!onHeadSlice || windowBars <= HEAD_BARS + MIN_TAIL_BARS) {
-    return loadCandles(coin, interval, fromMs, toMs)
+    return loadCandles(coin, interval, fromMs, toMs, { storeStart })
   }
 
   const headTo = fromMs + HEAD_BARS * ms
-  const head = await loadCandles(coin, interval, fromMs, headTo)
+  const head = await loadCandles(coin, interval, fromMs, headTo, { storeStart })
   if (head.candles.length >= 2) onHeadSlice(head)
-  const tail = await loadCandles(coin, interval, headTo, toMs, { forceSource: head.source })
+  const tail = await loadCandles(coin, interval, headTo, toMs, {
+    forceSource: head.source,
+    storeStart,
+  })
 
   const lastHeadT = head.candles.length ? head.candles[head.candles.length - 1].t : -Infinity
   const candles = [...head.candles, ...tail.candles.filter(c => c.t > lastHeadT)]
@@ -195,16 +205,27 @@ export async function buildReplayDoc(
    *  doc holding the opening window of candles and fills, so the player can
    *  roll while the tail loads. Head docs declare partial: true and must
    *  never be cached — the full doc always follows on success. */
-  onHead?: (head: ReplayDoc) => void
+  onHead?: (head: ReplayDoc) => void,
+  /** The wallets row when the caller already read it — the doc route does,
+   *  to decide cohort freshness. Omit when unknown. */
+  walletRow?: WalletRow | null
 ): Promise<BuiltDoc> {
   const t0 = Date.now()
   const progress = (phase: BuildProgress['phase'], detail: BuildProgress['detail']) =>
     onProgress?.({ phase, detail })
 
+  // A coin-scoped request knows its coin before it knows anything else, so
+  // the candle ladder's "how far back does our captured tape reach" probe
+  // does not have to queue behind the fills load — it only needs the coin.
+  // (Started here, awaited inside loadCandles; a rejection is caught there.)
+  const storeStartAhead =
+    req.coin ? storeCandleStart(req.coin).catch(() => null) : null
+
   progress('fills', { fills: 0 })
   const { fills, coverage, isCohort, wallet, gapCoins } = await loadWalletFills(address, {
     coin: req.coin || undefined,
     onPage: n => progress('fills', { fills: n }),
+    wallet: walletRow,
   })
   progress('fills', { fills: fills.length })
 
@@ -414,7 +435,10 @@ export async function buildReplayDoc(
               headEmitted = true
               emitHeadDoc(head)
             }
-          : null
+          : null,
+        // Only reusable when the request named the coin the doc resolved to;
+        // a server-picked coin was unknown when the probe started.
+        req.coin === coin ? storeStartAhead : null
       )
       break
     } catch (err) {

@@ -227,6 +227,11 @@ export async function loadCandles(
      *  retention must not silently switch source mid-series. The pin is still
      *  honesty-checked — a source that cannot reach the slice is refused. */
     forceSource?: 'exchange' | 'store'
+    /** The coin's earliest stored 1m bar, when the caller already started
+     *  that probe (it depends only on the coin, so the replay builder runs
+     *  it alongside the fills load). Same value, fetched earlier — pass the
+     *  promise, not a guess. */
+    storeStart?: Promise<number | null> | null
   } = {}
 ): Promise<CandlesResult> {
   const ms = INTERVAL_MS[interval]
@@ -238,7 +243,7 @@ export async function loadCandles(
     )
   }
 
-  const storeStart = await storeCandleStart(coin)
+  const storeStart = await (opts.storeStart ?? storeCandleStart(coin))
   const intervals = intervalOptions(fromMs, storeStart)
   const chosen = intervals.find(i => i.interval === interval)
   if (!chosen?.available || !chosen.source) {

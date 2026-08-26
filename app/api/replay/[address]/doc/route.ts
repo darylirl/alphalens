@@ -120,20 +120,22 @@ export async function GET(req: NextRequest, { params }: { params: { address: str
   const paramsHash = sha256(`${coin}|${rangeStr}|${interval}`)
 
   try {
-    const wallet = await loadWalletRow(addr)
-    const isCohort = Boolean(wallet?.capture_enabled)
-
-    // Cache lookup: one row by (wallet, coin, params).
+    // The wallet row and the cache row are independent lookups; serialising
+    // them put two round trips in front of every cold view for nothing.
     const supabase = getSupabase()
-    const { data: cachedRow, error: cacheErr } = await supabase
-      .from('replay_docs')
-      .select('content_hash,source,last_fill_id,built_through,fill_count,doc,built_at,expires_at')
-      .eq('wallet_address', addr)
-      .eq('coin_key', coin)
-      .eq('params_hash', paramsHash)
-      .maybeSingle()
-    if (cacheErr) throw cacheErr
-    const cached = (cachedRow as CacheRow | null) ?? null
+    const [wallet, cacheRes] = await Promise.all([
+      loadWalletRow(addr),
+      supabase
+        .from('replay_docs')
+        .select('content_hash,source,last_fill_id,built_through,fill_count,doc,built_at,expires_at')
+        .eq('wallet_address', addr)
+        .eq('coin_key', coin)
+        .eq('params_hash', paramsHash)
+        .maybeSingle(),
+    ])
+    const isCohort = Boolean(wallet?.capture_enabled)
+    if (cacheRes.error) throw cacheRes.error
+    const cached = (cacheRes.data as CacheRow | null) ?? null
 
     if (cached) {
       let fresh = false
@@ -199,7 +201,8 @@ export async function GET(req: NextRequest, { params }: { params: { address: str
             // Progressive playback: the opening window streams as a partial
             // head doc so the player can roll while the tail loads. The
             // pre-builder only warms the cache — it has no playhead to feed.
-            prebuild ? undefined : head => line({ phase: 'head', doc: head })
+            prebuild ? undefined : head => line({ phase: 'head', doc: head }),
+            wallet
           )
           const contentHash = sha256(
             `${addr}|${coin}|${rangeStr}|${interval}|${built.lastFillId ?? 'none'}`

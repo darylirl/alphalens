@@ -220,9 +220,16 @@ const fmtDay = (ms: number) => new Date(ms).toISOString().slice(0, 10)
 
 export async function loadWalletFills(
   address: string,
-  opts: { coin?: string; onPage?: (fillsSoFar: number) => void } = {}
+  opts: {
+    coin?: string
+    onPage?: (fillsSoFar: number) => void
+    /** The wallets row when the caller already read it (the doc route reads
+     *  it to decide cohort freshness). Saves a second identical round trip
+     *  in the request path; `null` means "known absent", not "unknown". */
+    wallet?: WalletRow | null
+  } = {}
 ): Promise<WalletFills> {
-  const wallet = await loadWalletRow(address)
+  const wallet = opts.wallet !== undefined ? opts.wallet : await loadWalletRow(address)
   const isCohort = Boolean(wallet?.capture_enabled)
 
   if (isCohort) {
