@@ -69,7 +69,9 @@ async function warmWallet(address) {
       return { ok: false, note: 'unparseable response' }
     }
     if (last.cached) return { ok: true, cached: true, behind: last.behind ?? 0 }
-    if (last.phase === 'done') return { ok: true, cached: false, buildMs: last.build_ms }
+    if (last.phase === 'done') {
+      return { ok: true, cached: false, buildMs: last.build_ms, cacheWrite: last.cache_write }
+    }
     return { ok: false, note: last.error || 'build did not finish' }
   } catch (e) {
     return { ok: false, note: e.name === 'AbortError' ? 'timed out' : e.message }
@@ -108,6 +110,14 @@ export function startPrebuildLoop({ isBusy, log }) {
           } else {
             built++
             log(`prebuild ${w.address}: built in ${((r.buildMs ?? 0) / 1000).toFixed(1)}s`)
+            if (r.cacheWrite === 'failed') {
+              // Built but not stored: the app cannot write replay_docs
+              // (missing service-role key?). Every sweep would rebuild every
+              // wallet — stop this sweep and say so, loudly, once.
+              log('prebuild ABORTING sweep: the app reports cache_write=failed — '
+                + 'built docs are not being stored (check SUPABASE_SERVICE_ROLE_KEY on the app)')
+              break
+            }
           }
           await sleep(GAP_MS)
         }

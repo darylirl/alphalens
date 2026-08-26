@@ -145,7 +145,10 @@ export async function GET(req: NextRequest, { params }: { params: { address: str
         const newest = await newestStoreFill(addr, coin)
         if (!newest) {
           fresh = true // nothing captured at all — the empty doc stands
-        } else if (cached.built_through && newest.timestamp <= cached.built_through) {
+        } else if (
+          cached.built_through &&
+          Date.parse(newest.timestamp) <= Date.parse(cached.built_through)
+        ) {
           fresh = true
         } else if (cached.built_through) {
           behind = await fillsBehind(addr, coin, cached.built_through)
@@ -220,6 +223,9 @@ export async function GET(req: NextRequest, { params }: { params: { address: str
           }
           // Replace semantics on the (wallet, coin, params) key; the write
           // failing must not fail the response — the doc was honestly built.
+          // But the failure is declared (cache_write), not just logged: a
+          // deployment missing the service-role key would otherwise rebuild
+          // on every view and every pre-build sweep, silently.
           const { error: upsertErr } = await supabase
             .from('replay_docs')
             .upsert(row, { onConflict: 'wallet_address,coin_key,params_hash' })
@@ -228,6 +234,7 @@ export async function GET(req: NextRequest, { params }: { params: { address: str
             phase: 'done',
             build_ms: built.buildMs,
             cached: false,
+            cache_write: upsertErr ? 'failed' : 'ok',
             doc_bytes: docJson.length,
             ...(prebuild ? {} : { doc: built.doc }),
           })
