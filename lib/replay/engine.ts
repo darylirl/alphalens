@@ -79,8 +79,6 @@ export interface Timeline {
   /** Fills outside the candle window — counted and reported, never dropped silently. */
   fillsOutsideWindow: number
   totalFills: number
-  /** Median |closedPnl| over bars that closed anything — the FX scale unit. */
-  typicalClosePnl: number
 }
 
 const isEntry = (f: RFill) => /^open/i.test(f.dir)
@@ -130,13 +128,6 @@ export function buildTimeline(candles: RCandle[], intervalMs: number, fills: RFi
     fillsAfter.push(count)
   }
 
-  const closeMagnitudes = events
-    .filter(e => e.closedPnl !== 0)
-    .map(e => Math.abs(e.closedPnl))
-    .sort((a, b) => a - b)
-  const typicalClosePnl =
-    closeMagnitudes.length > 0 ? closeMagnitudes[Math.floor(closeMagnitudes.length / 2)] : 0
-
   return {
     candles,
     intervalMs,
@@ -145,8 +136,45 @@ export function buildTimeline(candles: RCandle[], intervalMs: number, fills: RFi
     fillsAfter,
     fillsOutsideWindow: outside,
     totalFills: fills.length,
-    typicalClosePnl,
   }
+}
+
+/**
+ * Merge every `factor` fine bars into one wider bar, in the browser.
+ *
+ * Adapted from trickshot's coarsen (src/components/WalletReplay.tsx): the
+ * open comes from the first bar in the wall-clock bucket and the close from
+ * the last, with the extremes and volume carried across all of them — which
+ * is what a wider bar of the same trades is. Coarser ONLY: merging is
+ * arithmetic on honest bars already in the browser; a finer bar is a
+ * different series and goes back through the ladder's honesty checks.
+ *
+ * Holes stay holes: only bars that exist are merged, buckets nothing landed
+ * in are simply absent, and the gap seam logic keys off the merged interval.
+ */
+export function coarsen(
+  candles: RCandle[],
+  intervalMs: number,
+  factor: number
+): { candles: RCandle[]; intervalMs: number } {
+  if (factor <= 1 || candles.length === 0) return { candles, intervalMs }
+  const merged = intervalMs * factor
+  const out: RCandle[] = []
+  let bucket = NaN
+  for (const c of candles) {
+    const t = Math.floor(c.t / merged) * merged
+    const last = out[out.length - 1]
+    if (!last || t !== bucket) {
+      bucket = t
+      out.push({ ...c, t })
+      continue
+    }
+    last.h = Math.max(last.h, c.h)
+    last.l = Math.min(last.l, c.l)
+    last.c = c.c
+    last.v += c.v
+  }
+  return { candles: out, intervalMs: merged }
 }
 
 /**
@@ -164,14 +192,4 @@ export function cueSchedule(tl: Timeline, stepMs: number): Cued[] {
     if (e.hasLossClose) cues.push({ t: t + 0.05, cue: 'loss' })
   }
   return cues
-}
-
-/** The flash a bar's closes throw, 0..1, scaled by realized PnL against the
- *  wallet's own typical close — restrained by construction: a median close
- *  lands at 0.5, and the curve saturates instead of shouting. */
-export function flashStrength(closedPnl: number, typical: number): number {
-  if (closedPnl === 0) return 0
-  if (typical <= 0) return 0.5
-  const x = Math.abs(closedPnl) / typical
-  return Math.min(x / (x + 1) + 0.15, 1)
 }

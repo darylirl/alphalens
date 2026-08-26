@@ -24,7 +24,7 @@ export function generateMetadata({ params }: { params: { address: string } }): M
   return {
     title,
     description:
-      'Watch a wallet trade: animated playback of real fills on real candles at exchange-exact execution prices, with honest data coverage and an exportable clip.',
+      'Watch a wallet trade, episode by episode: round trips replayed as forming candles with every real fill announced, at exchange-exact execution prices, with honest data coverage and an exportable clip.',
     twitter: { card: 'summary_large_image' },
   }
 }
@@ -39,8 +39,9 @@ export default function ReplayPage({ params }: { params: { address: string } }) 
           <div>
             <h1 className="text-lg font-bold mb-1">Trade replay</h1>
             <p className="text-white/55 text-xs leading-relaxed">
-              The wallet&rsquo;s actual trades, played back on the chart at{' '}
-              <span className="text-[#F0FAF8]">exchange-exact execution prices</span> — every
+              The wallet&rsquo;s actual trades, played back episode by episode — each round trip of
+              the position leaving zero and returning to it — at{' '}
+              <span className="text-[#F0FAF8]">exchange-exact execution prices</span>. Every
               marker is a real fill at its reported price, and the running PnL is the
               exchange&rsquo;s own realized figures. Not a mark-priced reconstruction.
             </p>
