@@ -55,38 +55,34 @@ interface CacheRow {
 const sha256 = (s: string) => createHash('sha256').update(s).digest('hex')
 
 /** Newest captured fill in the doc's scope (whole wallet for the default
- *  doc, one coin otherwise) — a single indexed row. */
+ *  doc, one coin otherwise). Through the wallet-indexed RPC (migration 019)
+ *  — a raw parameterized asset filter can generic-plan onto the (asset,
+ *  timestamp) index and time out on popular coins. */
 async function newestStoreFill(
   address: string,
   coin: string
 ): Promise<{ tid: number; timestamp: string } | null> {
   const supabase = getSupabase()
-  let q = supabase
-    .from('fills')
-    .select('tid,timestamp')
-    .eq('wallet_address', address.toLowerCase())
-    .not('tid', 'is', null)
-  if (coin) q = q.eq('asset', coin)
-  const { data, error } = await q.order('timestamp', { ascending: false }).limit(1)
+  const { data, error } = await supabase.rpc('replay_wallet_newest_fill', {
+    p_wallet: address.toLowerCase(),
+    p_coin: coin,
+  })
   if (error) throw error
   return (data?.[0] as { tid: number; timestamp: string } | undefined) ?? null
 }
 
-/** How many captured fills (in scope) landed after the doc's build. Indexed
- *  on (wallet_address, timestamp); the count is small by construction — the
+/** How many captured fills (in scope) landed after the doc's build. Same
+ *  wallet-indexed RPC family; the count is small by construction — the
  *  pre-builder refreshes docs long before it grows. */
 async function fillsBehind(address: string, coin: string, since: string): Promise<number> {
   const supabase = getSupabase()
-  let q = supabase
-    .from('fills')
-    .select('tid', { count: 'exact', head: true })
-    .eq('wallet_address', address.toLowerCase())
-    .not('tid', 'is', null)
-    .gt('timestamp', since)
-  if (coin) q = q.eq('asset', coin)
-  const { count, error } = await q
+  const { data, error } = await supabase.rpc('replay_wallet_fill_count', {
+    p_wallet: address.toLowerCase(),
+    p_coin: coin,
+    p_since: since,
+  })
   if (error) throw error
-  return count ?? 0
+  return Number(data ?? 0)
 }
 
 export async function GET(req: NextRequest, { params }: { params: { address: string } }) {
