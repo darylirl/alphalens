@@ -21,6 +21,7 @@ import { hostname } from 'node:os'
 import { assertConfigured, sb, rpc, heartbeat } from './lib/db.mjs'
 import { runJob } from './lib/runner.mjs'
 import { ENGINE_VERSION } from './lib/engine.mjs'
+import { startPrebuildLoop } from './prebuild.mjs'
 
 const POLL_MS = parseInt(process.env.POLL_MS || '5000', 10)
 const HEARTBEAT_MS = 60_000
@@ -112,6 +113,10 @@ async function main() {
   state.phase = 'idle'
   setInterval(beat, HEARTBEAT_MS)
   beat()
+
+  // Low-priority cohort replay pre-builder (Replay v2.1): keeps the default
+  // replay doc warm for cohort wallets, yielding whenever a job is running.
+  startPrebuildLoop({ isBusy: () => state.currentJob !== null, log })
 
   for (;;) {
     let ran = false

@@ -302,9 +302,25 @@ export default function ApiDocsPage() {
         </p>
 
         <H2 id="replay">Replay metadata, fills, and candles</H2>
+        <Endpoint method="GET" path="/api/replay/{address}/doc?coin=&range=&interval=" />
         <Endpoint method="GET" path="/api/replay/{address}" />
         <Endpoint method="GET" path="/api/replay/{address}/fills?coin=" />
         <Endpoint method="GET" path="/api/replay/candles?coin=&interval=&from=&to=" />
+        <P>
+          The doc endpoint is what the player consumes: one precomputed replay
+          document per (wallet, coin, range, bar width) — coarsened candles,
+          trade events, running position and realized-PnL series, and the
+          coin&rsquo;s episode index — cached in{' '}
+          <code className="font-mono">replay_docs</code> and served as a single
+          row. A first, uncached request builds the document and streams real
+          progress as NDJSON lines; later requests return plain JSON.{' '}
+          <code className="font-mono">range</code> is{' '}
+          <code className="font-mono">default</code>,{' '}
+          <code className="font-mono">all</code>, or{' '}
+          <code className="font-mono">ep:&#123;fromMs&#125;-&#123;toMs&#125;</code>;{' '}
+          <code className="font-mono">interval</code> is{' '}
+          <code className="font-mono">auto</code> or a ladder interval.
+        </P>
         <P>
           The data behind{' '}
           <Link href="/replay/0x0000000000000000000000000000000000000000" className="text-[#34EAB9] hover:underline">/replay/&#123;address&#125;</Link>.
