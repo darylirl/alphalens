@@ -411,7 +411,7 @@ export function ReplayPlayer({
       }
     }
 
-    let headApplied = false
+    let headDoc: ReplayDoc | null = null
     fetchDoc(
       address,
       request,
@@ -420,7 +420,7 @@ export function ReplayPlayer({
       },
       head => {
         if (dead) return
-        headApplied = true
+        headDoc = head
         apply(head, 0)
       }
     )
@@ -439,7 +439,20 @@ export function ReplayPlayer({
             next
           )
         }
-        if (headApplied) softApply(next)
+        // Swap under the playhead ONLY while the head is a true prefix of
+        // what replaced it — same coin, same range, same bar width. Anything
+        // else is a different series, and keeping the bar index would move
+        // the replay in time: restart it honestly instead.
+        const head: ReplayDoc | null = headDoc
+        const prefix =
+          head !== null &&
+          head.resolved !== null &&
+          next.resolved !== null &&
+          head.resolved.coin === next.resolved.coin &&
+          head.resolved.range === next.resolved.range &&
+          head.resolved.interval_ms === next.resolved.interval_ms &&
+          next.candles.length >= head.candles.length
+        if (head && prefix) softApply(next)
         else apply(next, behindNow)
       })
       .catch(err => {
