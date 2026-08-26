@@ -1,13 +1,19 @@
 import { ImageResponse } from 'next/og'
 import { validateAddress } from '@/lib/validation'
-import { buildReportCard, type ReportCard, type Grade } from '@/lib/wallet-data/card'
+import { buildReportCard, type Grade } from '@/lib/wallet-data/card'
+import { loadWalletFills } from '@/lib/wallet-data/fills'
+import { detectEpisodes, bestAcrossCoins } from '@/lib/replay/episodes'
+import { EpisodeEndCardBody, type OgEpisode } from '@/lib/replay/og-episode'
+import type { RFill } from '@/lib/replay/engine'
+import type { Fill } from '@/lib/hyperliquid/types'
 
-// OG share image for the Wallet Report Card — same pattern as the ledger
-// permalinks (Node runtime: the builder reads Supabase), same builder as the
-// page, so the shared image can never disagree with what the page shows.
-// Below the grade floor it renders the honest "not enough history" panel.
+// OG share image for the Wallet Report Card — an episode end-card frame: the
+// wallet's largest-|PnL| round trip (same fills path and episode detector as
+// the replay), with the overall grade beside it when the wallet clears the
+// grading floor. Node runtime; the honest empty state renders when no round
+// trip completed in the covered fills.
 
-export const alt = 'AlphaLens Wallet Report Card'
+export const alt = 'AlphaLens Wallet Report Card — episode end card'
 export const size = { width: 1200, height: 630 }
 export const contentType = 'image/png'
 
@@ -19,42 +25,57 @@ const GRADE_COLORS: Record<Grade, string> = {
   F: '#FF3B5C',
 }
 
-function fmtUsd(n: number): string {
-  const abs = Math.abs(n)
-  const v =
-    abs >= 1e9
-      ? `$${(abs / 1e9).toFixed(2)}B`
-      : abs >= 1e6
-        ? `$${(abs / 1e6).toFixed(2)}M`
-        : abs >= 1e3
-          ? `$${(abs / 1e3).toFixed(1)}K`
-          : `$${Math.round(abs).toLocaleString()}`
-  return `${n >= 0 ? '+' : '−'}${v}`
-}
-
 function shortAddr(a: string): string {
   return `${a.slice(0, 8)}…${a.slice(-6)}`
 }
 
+function toRFill(f: Fill): RFill {
+  const start = parseFloat(f.startPosition)
+  return {
+    t: f.time,
+    px: Number(f.px),
+    sz: Number(f.sz),
+    side: f.side,
+    dir: f.dir,
+    pnl: Number(f.closedPnl) || 0,
+    fee: Number(f.fee) || 0,
+    start: Number.isFinite(start) ? start : null,
+  }
+}
+
 export default async function Image({ params }: { params: { address: string } }) {
   const address = validateAddress(params.address)
-  let card: ReportCard | null = null
+  let best: OgEpisode | null = null
+  let note = 'wallet not found'
+  let label: string | null = null
+  let grade: Grade | null = null
   if (address) {
     try {
-      card = await buildReportCard(address)
+      const data = await loadWalletFills(address)
+      const byCoin = new Map<string, Fill[]>()
+      for (const f of data.fills) {
+        const held = byCoin.get(f.coin)
+        if (held) held.push(f)
+        else byCoin.set(f.coin, [f])
+      }
+      best = bestAcrossCoins(
+        [...byCoin.entries()].map(([coin, fills]) => ({
+          coin,
+          episodes: detectEpisodes(fills.map(toRFill)),
+        }))
+      )
+      note = data.coverage.note
+      label = data.wallet?.label ?? null
     } catch {
-      card = null
+      note = 'data sources did not answer'
+    }
+    try {
+      const card = await buildReportCard(address)
+      grade = card.grades.gradeable ? (card.grades.overall ?? null) : null
+    } catch {
+      grade = null
     }
   }
-
-  const grades = card?.grades ?? null
-  const pnl = card?.performance.all_time_pnl_usd ?? null
-
-  const tiles: { label: string; grade: Grade | null }[] = [
-    { label: 'PERFORMANCE', grade: grades?.performance ?? null },
-    { label: 'BEHAVIOR', grade: grades?.behavior ?? null },
-    { label: 'RISK', grade: grades?.risk ?? null },
-  ]
 
   return new ImageResponse(
     (
@@ -66,7 +87,7 @@ export default async function Image({ params }: { params: { address: string } })
           flexDirection: 'column',
           justifyContent: 'space-between',
           backgroundColor: '#0F1A1E',
-          padding: 64,
+          padding: 56,
           fontFamily: 'sans-serif',
         }}
       >
@@ -85,143 +106,67 @@ export default async function Image({ params }: { params: { address: string } })
           </div>
           <div
             style={{
-              marginLeft: 'auto',
               color: 'rgba(240,250,248,0.6)',
-              fontSize: 24,
+              fontSize: 22,
               display: 'flex',
+              marginLeft: 12,
             }}
           >
-            {card ? shortAddr(card.address) : 'wallet not found'}
+            {address ? (label ? `${label} · ${shortAddr(address)}` : shortAddr(address)) : ''}
           </div>
-        </div>
-
-        {grades && grades.gradeable ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 40 }}>
+          {grade && (
             <div
               style={{
+                marginLeft: 'auto',
                 display: 'flex',
-                flexDirection: 'column',
                 alignItems: 'center',
-                border: `3px solid ${grades.overall ? GRADE_COLORS[grades.overall] : 'rgba(255,255,255,0.2)'}`,
-                borderRadius: 20,
-                padding: '30px 50px',
+                gap: 12,
+                border: `2px solid ${GRADE_COLORS[grade]}`,
+                borderRadius: 10,
+                padding: '6px 18px',
               }}
             >
               <div
                 style={{
-                  color: grades.overall ? GRADE_COLORS[grades.overall] : '#F0FAF8',
-                  fontSize: 140,
-                  fontWeight: 700,
-                  display: 'flex',
-                  lineHeight: 1,
-                }}
-              >
-                {grades.overall ?? '—'}
-              </div>
-              <div
-                style={{
                   color: 'rgba(240,250,248,0.55)',
-                  fontSize: 20,
+                  fontSize: 18,
                   display: 'flex',
-                  marginTop: 10,
                   letterSpacing: 2,
                 }}
               >
                 OVERALL
               </div>
+              <div
+                style={{
+                  color: GRADE_COLORS[grade],
+                  fontSize: 36,
+                  fontWeight: 700,
+                  display: 'flex',
+                }}
+              >
+                {grade}
+              </div>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 18, flex: 1 }}>
-              {tiles.map(t => (
-                <div
-                  key={t.label}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    backgroundColor: 'rgba(255,255,255,0.04)',
-                    border: '1px solid rgba(255,255,255,0.10)',
-                    borderRadius: 14,
-                    padding: '16px 28px',
-                  }}
-                >
-                  <div
-                    style={{
-                      color: 'rgba(240,250,248,0.6)',
-                      fontSize: 24,
-                      display: 'flex',
-                      letterSpacing: 2,
-                    }}
-                  >
-                    {t.label}
-                  </div>
-                  <div
-                    style={{
-                      color: t.grade ? GRADE_COLORS[t.grade] : 'rgba(240,250,248,0.4)',
-                      fontSize: 44,
-                      fontWeight: 700,
-                      display: 'flex',
-                    }}
-                  >
-                    {t.grade ?? '—'}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : (
+          )}
+        </div>
+
+        <EpisodeEndCardBody best={best} />
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 28 }}>
           <div
             style={{
               display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: 12,
+              color: 'rgba(240,250,248,0.6)',
+              fontSize: 20,
+              backgroundColor: 'rgba(255,255,255,0.04)',
+              border: '1px solid rgba(255,255,255,0.10)',
+              borderRadius: 10,
+              padding: '10px 20px',
+              maxWidth: 800,
             }}
           >
-            <div style={{ color: '#F0FAF8', fontSize: 46, fontWeight: 700, display: 'flex' }}>
-              Not enough history to grade
-            </div>
-            <div style={{ color: 'rgba(240,250,248,0.55)', fontSize: 26, display: 'flex' }}>
-              {card
-                ? `${card.grades.closed_round_trips} of ${card.grades.floor} resolved round trips in the covered window`
-                : 'No card could be built for this address'}
-            </div>
+            {note}
           </div>
-        )}
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 28 }}>
-          {pnl !== null && (
-            <div
-              style={{
-                display: 'flex',
-                color: pnl >= 0 ? '#34EAB9' : '#FF3B5C',
-                fontSize: 30,
-                fontWeight: 700,
-                backgroundColor: 'rgba(255,255,255,0.04)',
-                border: '1px solid rgba(255,255,255,0.10)',
-                borderRadius: 10,
-                padding: '10px 20px',
-              }}
-            >
-              {`${fmtUsd(pnl)} all-time (exchange figure)`}
-            </div>
-          )}
-          {card && (
-            <div
-              style={{
-                display: 'flex',
-                color: 'rgba(240,250,248,0.6)',
-                fontSize: 22,
-                backgroundColor: 'rgba(255,255,255,0.04)',
-                border: '1px solid rgba(255,255,255,0.10)',
-                borderRadius: 10,
-                padding: '10px 20px',
-              }}
-            >
-              {card.coverage.source === 'store'
-                ? 'graded from our capture store'
-                : 'recent exchange window only'}
-            </div>
-          )}
           <div
             style={{
               display: 'flex',

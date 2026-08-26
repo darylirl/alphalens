@@ -25,6 +25,44 @@ export function retentionStart(interval: string, now = Date.now()): number {
 /** Hard cap on bars per candles response — bounded reads, bounded payloads. */
 export const MAX_BARS = 2500
 
+/**
+ * Real milliseconds one bar takes to form at 1x — long enough that the bar
+ * visibly grows rather than blinking into place, short enough that an episode
+ * still replays in a recordable span. (Adapted from trickshot's STEP_MS.)
+ */
+export const STEP_MS = 600
+
+/**
+ * The auto-picked interval aims the chosen episode or range at roughly
+ * 45–90 seconds at 1x: 75–150 bars × 600ms. The ladder's rungs are 3–4×
+ * apart, so a window rarely lands inside the band exactly — the pick is the
+ * interval CLOSEST to it (slightly over 90s beats a quarter-length play),
+ * with the runners-up kept as fallbacks for the server's honesty checks.
+ * A window too short for even ~75 bars at the finest honest interval simply
+ * plays shorter; we never fetch finer than the ladder allows.
+ */
+export const PACE_MIN_BARS = 75
+export const PACE_MAX_BARS = 150
+
+/** Candle intervals for a window, best-paced first. Every returned interval
+ *  is drawable (2..MAX_BARS bars); the caller tries them in order and the
+ *  server refuses any the ladder cannot honestly serve. */
+export function paceCandidates(spanMs: number): string[] {
+  const scored = CANDLE_INTERVALS.map(([interval, ms]) => {
+    const bars = spanMs / ms
+    const inBand = bars >= PACE_MIN_BARS && bars <= PACE_MAX_BARS
+    // How far outside the band, as a ratio ≥ 1; 1 inside it.
+    const badness = inBand ? 1 : Math.max(bars / PACE_MAX_BARS, PACE_MIN_BARS / bars)
+    return { interval, ms, bars, inBand, badness }
+  }).filter(c => c.bars >= 2 && c.bars <= MAX_BARS)
+  scored.sort((a, b) => {
+    if (a.inBand !== b.inBand) return a.inBand ? -1 : 1
+    if (a.inBand) return a.ms - b.ms // finest in-band first: most formation detail
+    return a.badness - b.badness
+  })
+  return scored.map(c => c.interval)
+}
+
 export function barLabel(ms: number): string {
   const sec = ms / 1000
   if (sec >= 86_400) return `${Math.round(sec / 86_400)}d`

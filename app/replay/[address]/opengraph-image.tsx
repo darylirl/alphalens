@@ -1,12 +1,18 @@
 import { ImageResponse } from 'next/og'
 import { validateAddress } from '@/lib/validation'
 import { loadWalletFills } from '@/lib/wallet-data/fills'
+import { detectEpisodes, bestAcrossCoins } from '@/lib/replay/episodes'
+import { EpisodeEndCardBody, type OgEpisode } from '@/lib/replay/og-episode'
+import type { RFill } from '@/lib/replay/engine'
+import type { Fill } from '@/lib/hyperliquid/types'
 
-// OG share image for the replay — also the honest fallback where in-browser
-// clip export is unsupported. Node runtime (reads our store for cohort
-// wallets), same data path as the player's meta endpoint.
+// OG share image for the replay — an episode end-card frame: the wallet's
+// largest-|PnL| round trip, exactly the story the replay opens on. Also the
+// honest fallback where in-browser clip export is unsupported. Node runtime
+// (reads our store for cohort wallets), same fills path and same episode
+// detector as the player, so the shared image cannot disagree with the page.
 
-export const alt = 'AlphaLens Trade Replay'
+export const alt = 'AlphaLens Trade Replay — episode end card'
 export const size = { width: 1200, height: 630 }
 export const contentType = 'image/png'
 
@@ -14,21 +20,41 @@ function shortAddr(a: string): string {
   return `${a.slice(0, 8)}…${a.slice(-6)}`
 }
 
+function toRFill(f: Fill): RFill {
+  const start = parseFloat(f.startPosition)
+  return {
+    t: f.time,
+    px: Number(f.px),
+    sz: Number(f.sz),
+    side: f.side,
+    dir: f.dir,
+    pnl: Number(f.closedPnl) || 0,
+    fee: Number(f.fee) || 0,
+    start: Number.isFinite(start) ? start : null,
+  }
+}
+
 export default async function Image({ params }: { params: { address: string } }) {
   const address = validateAddress(params.address)
-  let coins: { coin: string; fills: number }[] = []
+  let best: OgEpisode | null = null
   let note = 'wallet not found'
   let label: string | null = null
   let cohort = false
   if (address) {
     try {
       const data = await loadWalletFills(address)
-      const byCoin = new Map<string, number>()
-      for (const f of data.fills) byCoin.set(f.coin, (byCoin.get(f.coin) ?? 0) + 1)
-      coins = [...byCoin.entries()]
-        .map(([coin, fills]) => ({ coin, fills }))
-        .sort((a, b) => b.fills - a.fills)
-        .slice(0, 4)
+      const byCoin = new Map<string, Fill[]>()
+      for (const f of data.fills) {
+        const held = byCoin.get(f.coin)
+        if (held) held.push(f)
+        else byCoin.set(f.coin, [f])
+      }
+      best = bestAcrossCoins(
+        [...byCoin.entries()].map(([coin, fills]) => ({
+          coin,
+          episodes: detectEpisodes(fills.map(toRFill)),
+        }))
+      )
       note = data.coverage.note
       label = data.wallet?.label ?? null
       cohort = data.isCohort
@@ -47,7 +73,7 @@ export default async function Image({ params }: { params: { address: string } })
           flexDirection: 'column',
           justifyContent: 'space-between',
           backgroundColor: '#0F1A1E',
-          padding: 64,
+          padding: 56,
           fontFamily: 'sans-serif',
         }}
       >
@@ -63,6 +89,16 @@ export default async function Image({ params }: { params: { address: string } })
           />
           <div style={{ color: '#F0FAF8', fontSize: 28, fontWeight: 700, display: 'flex' }}>
             AlphaLens Trade Replay
+          </div>
+          <div
+            style={{
+              color: 'rgba(240,250,248,0.6)',
+              fontSize: 22,
+              display: 'flex',
+              marginLeft: 12,
+            }}
+          >
+            {address ? (label ? `${label} · ${shortAddr(address)}` : shortAddr(address)) : ''}
           </div>
           {cohort && (
             <div
@@ -84,43 +120,7 @@ export default async function Image({ params }: { params: { address: string } })
           )}
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-          <div style={{ color: '#F0FAF8', fontSize: 44, fontWeight: 700, display: 'flex' }}>
-            {address ? (label ? `${label} · ${shortAddr(address)}` : shortAddr(address)) : 'Trade replay'}
-          </div>
-          <div
-            style={{
-              color: 'rgba(240,250,248,0.6)',
-              fontSize: 26,
-              display: 'flex',
-              maxWidth: 1040,
-            }}
-          >
-            Real fills on real candles, at exchange-exact execution prices — not a mark-priced
-            reconstruction.
-          </div>
-          {coins.length > 0 && (
-            <div style={{ display: 'flex', gap: 16 }}>
-              {coins.map(c => (
-                <div
-                  key={c.coin}
-                  style={{
-                    display: 'flex',
-                    color: '#F5A623',
-                    fontSize: 24,
-                    fontWeight: 700,
-                    backgroundColor: 'rgba(255,255,255,0.04)',
-                    border: '1px solid rgba(255,255,255,0.10)',
-                    borderRadius: 10,
-                    padding: '10px 20px',
-                  }}
-                >
-                  {`${c.coin} · ${c.fills.toLocaleString()} fills`}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        <EpisodeEndCardBody best={best} />
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 28 }}>
           <div

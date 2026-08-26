@@ -8,13 +8,37 @@
  * One frame of an exported clip, painted. The receipts travel INSIDE the
  * clip: every frame carries the coverage/granularity strip and the AlphaLens
  * watermark, so a reposted video still says what data it was drawn from.
+ *
+ * The flashes are drawn by the same painter the live player uses
+ * (lib/replay/flash.ts) — one painter rule: an exported flash cannot differ
+ * from the one on screen.
  */
 
 import { drawChart, COLORS, type ChartState } from './chart'
-import { signedUsd, usdCompact } from './format'
+import { drawFlashes, type PaintFlash } from './flash'
+import { signedUsd, signedUsdExact, usdCompact, dayStamp, durationLabel } from './format'
 import { CLIP_W, CLIP_H } from './clipspec'
 
 const MONO = 'ui-monospace, "JetBrains Mono", "SF Mono", monospace'
+
+/** What the title and end cards say about the episode being replayed. */
+export interface EpisodeCard {
+  /** "BTC" */
+  coin: string
+  /** "2026-07-03 – 2026-07-04" or a single day. */
+  period: string
+  entries: number
+  exits: number
+  /** Largest position held, valued at the fill price that set it. */
+  maxPosUsd: number
+  durationMs: number
+  /** Net realized PnL over the episode (exchange closedPnl figures). */
+  pnl: number
+  /** "episode 2 of 7" / "entire history". */
+  which: string
+  /** Partial-picture caveats, already worded ('' when none). */
+  caveat: string
+}
 
 export interface FrameState {
   chart: ChartState
@@ -27,11 +51,14 @@ export interface FrameState {
   /** The coverage/granularity strip, exactly as the page shows it. */
   stripLines: string[]
   watermark: string
-  /** Flash overlays for recent closes: strength 0..1 and sign. */
-  flashes: { strength: number; win: boolean; alpha: number }[]
+  /** Fill cards over the chart, from the shared flash timeline. */
+  flashes: PaintFlash[]
+  /** 1..0 across the title card (1 = fully shown, 0 = gone; chart underneath). */
+  intro: number
   /** 0 while the replay runs; 0..1 across the end card. */
   outro: number
-  final: { realized: number; fills: number; windowLabel: string; cardUrl: string } | null
+  episode: EpisodeCard | null
+  final: { fills: number; windowLabel: string; cardUrl: string } | null
 }
 
 function text(
@@ -88,30 +115,11 @@ export function paintFrame(ctx: CanvasRenderingContext2D, s: FrameState): void {
     align: 'right',
   })
 
-  drawChart(
-    ctx,
-    { x: PAD, y: HEADER_H, w: CLIP_W - PAD * 2, h: CLIP_H - HEADER_H - STRIP_H },
-    s.chart
-  )
+  const chartRect = { x: PAD, y: HEADER_H, w: CLIP_W - PAD * 2, h: CLIP_H - HEADER_H - STRIP_H }
+  drawChart(ctx, chartRect, s.chart)
 
-  // Restrained flash: a wash off the frame edge, scaled by realized PnL.
-  for (const f of s.flashes) {
-    const a = f.strength * f.alpha * 0.22
-    if (a <= 0.005) continue
-    const tint = f.win ? '52, 234, 185' : '255, 59, 92'
-    const glow = ctx.createRadialGradient(
-      CLIP_W / 2,
-      CLIP_H / 2,
-      0,
-      CLIP_W / 2,
-      CLIP_H / 2,
-      CLIP_W * 0.6
-    )
-    glow.addColorStop(0, `rgba(${tint}, ${a})`)
-    glow.addColorStop(1, `rgba(${tint}, 0)`)
-    ctx.fillStyle = glow
-    ctx.fillRect(0, 0, CLIP_W, CLIP_H)
-  }
+  // Fill announcements — the same painter the live chart uses.
+  drawFlashes(ctx, chartRect, 2, s.flashes)
 
   // Coverage/granularity strip + watermark — on every frame, by design.
   const stripY = CLIP_H - STRIP_H
@@ -134,47 +142,124 @@ export function paintFrame(ctx: CanvasRenderingContext2D, s: FrameState): void {
     align: 'right',
   })
 
+  if (s.intro > 0) paintTitle(ctx, s)
   if (s.outro > 0) paintOutro(ctx, s)
 }
 
-/** The end card: the chart dims behind a scrim and the final realized PnL
- *  settles in, with the pointer to the report card. The last frame doubles
- *  as the thumbnail. */
+/** The title card that opens an episode: coin, period, "N entries, M exits".
+ *  Painted over the opening frame and eased away as the replay starts. */
+function paintTitle(ctx: CanvasRenderingContext2D, s: FrameState): void {
+  const e = s.episode
+  if (!e) return
+  const a = ease(s.intro)
+  ctx.fillStyle = `rgba(10, 20, 23, ${(0.86 * a).toFixed(4)})`
+  ctx.fillRect(0, 0, CLIP_W, CLIP_H - STRIP_H)
+  const lift = (1 - a) * 18
+
+  text(ctx, e.which.toUpperCase(), CLIP_W / 2, 350 - lift, {
+    size: 24,
+    weight: 700,
+    color: 'rgba(240,250,248,0.5)',
+    align: 'center',
+    alpha: a,
+  })
+  text(ctx, e.coin, CLIP_W / 2, 460 - lift, {
+    size: 96,
+    weight: 800,
+    color: '#F5A623',
+    align: 'center',
+    alpha: a,
+  })
+  text(ctx, e.period, CLIP_W / 2, 520 - lift, {
+    size: 30,
+    weight: 700,
+    color: 'rgba(240,250,248,0.65)',
+    align: 'center',
+    alpha: a,
+  })
+  text(
+    ctx,
+    `${e.entries} ${e.entries === 1 ? 'entry' : 'entries'}, ${e.exits} ${e.exits === 1 ? 'exit' : 'exits'} · ${durationLabel(e.durationMs)}`,
+    CLIP_W / 2,
+    580 - lift,
+    {
+      size: 26,
+      weight: 700,
+      color: 'rgba(240,250,248,0.55)',
+      align: 'center',
+      alpha: a,
+    }
+  )
+  if (e.caveat) {
+    text(ctx, e.caveat, CLIP_W / 2, 630 - lift, {
+      size: 20,
+      color: '#F5A623',
+      align: 'center',
+      alpha: a,
+    })
+  }
+}
+
+/** The end card that closes an episode: net realized PnL big and USD-explicit,
+ *  the entries/exits/max-size recap, and the pointer to the report card. The
+ *  last frame doubles as the thumbnail. */
 function paintOutro(ctx: CanvasRenderingContext2D, s: FrameState): void {
-  const veil = ease(s.outro / 0.28) * 0.82
+  const veil = ease(s.outro / 0.28) * 0.86
   ctx.fillStyle = `rgba(10, 20, 23, ${veil})`
   // The scrim covers the chart, not the coverage strip — receipts stay legible.
   ctx.fillRect(0, 0, CLIP_W, CLIP_H - STRIP_H)
 
+  const e = s.episode
   const f = s.final
-  if (!f) return
+  if (!e || !f) return
   const appear = ease((s.outro - 0.12) / 0.3)
   if (appear <= 0) return
   const count = ease((s.outro - 0.12) / 0.45)
   const lift = (1 - appear) * 24
 
-  text(ctx, `${s.coin} · ${f.windowLabel}`, CLIP_W / 2, 380 - lift, {
-    size: 30,
+  text(ctx, `${e.coin} · ${e.period} · ${e.which}`, CLIP_W / 2, 360 - lift, {
+    size: 28,
     weight: 700,
     color: 'rgba(240,250,248,0.6)',
     align: 'center',
     alpha: appear,
   })
-  text(ctx, signedUsd(f.realized * count), CLIP_W / 2, 520 - lift, {
-    size: 120,
+  text(ctx, signedUsdExact(e.pnl * count), CLIP_W / 2, 500 - lift, {
+    size: 112,
     weight: 800,
-    color: f.realized >= 0 ? COLORS.up : COLORS.down,
+    color: e.pnl >= 0 ? COLORS.up : COLORS.down,
     align: 'center',
     alpha: appear,
   })
-  text(ctx, `REALIZED PNL · ${f.fills} FILLS · EXCHANGE-EXACT PRICES`, CLIP_W / 2, 580 - lift, {
+  text(ctx, 'NET REALIZED PNL, USD · EXCHANGE FIGURES', CLIP_W / 2, 556 - lift, {
     size: 22,
     weight: 700,
     color: 'rgba(240,250,248,0.5)',
     align: 'center',
     alpha: appear,
   })
-  text(ctx, `get the grade → ${f.cardUrl}`, CLIP_W / 2, 680 - lift, {
+  text(
+    ctx,
+    `${e.entries} ${e.entries === 1 ? 'entry' : 'entries'} · ${e.exits} ${e.exits === 1 ? 'exit' : 'exits'} · max position ${usdCompact(e.maxPosUsd)} · ${durationLabel(e.durationMs)}`,
+    CLIP_W / 2,
+    620 - lift,
+    {
+      size: 26,
+      weight: 700,
+      color: 'rgba(240,250,248,0.6)',
+      align: 'center',
+      alpha: appear,
+    }
+  )
+  if (e.caveat) {
+    text(ctx, e.caveat, CLIP_W / 2, 664 - lift, {
+      size: 20,
+      color: '#F5A623',
+      align: 'center',
+      alpha: appear,
+    })
+  }
+  text(ctx, `get the grade → ${f.cardUrl}`, CLIP_W / 2, e.caveat ? 724 - lift : 700 - lift, {
     size: 26,
     weight: 700,
     color: '#34EAB9',
@@ -183,4 +268,4 @@ function paintOutro(ctx: CanvasRenderingContext2D, s: FrameState): void {
   })
 }
 
-export { usdCompact }
+export { usdCompact, dayStamp }

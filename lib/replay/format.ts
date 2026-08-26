@@ -16,6 +16,18 @@ export function signedUsd(n: number): string {
   return `${n >= 0 ? '+' : '−'}${usdCompact(Math.abs(n))}`
 }
 
+/** Full-precision signed dollars for the end card — USD-explicit, no compact
+ *  rounding: +$12,431 rather than +$12.4K. Cents only under $1,000, where
+ *  they are the story. */
+export function signedUsdExact(n: number): string {
+  const abs = Math.abs(n)
+  const digits = abs < 1_000 ? 2 : 0
+  return `${n >= 0 ? '+' : '−'}$${abs.toLocaleString('en-US', {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  })}`
+}
+
 /** A moment, short and in UTC — the chart's own timebase. */
 export function stamp(ms: number): string {
   return new Date(ms).toISOString().slice(5, 16).replace('T', ' ') + 'Z'

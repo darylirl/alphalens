@@ -5,6 +5,8 @@
 export const CLIP_W = 1920
 export const CLIP_H = 1080
 export const FPS = 30
+/** The episode title card that opens a clip, in seconds. */
+export const INTRO_SECONDS = 2
 /** The end card, in seconds. */
 export const OUTRO_SECONDS = 3
 /**
