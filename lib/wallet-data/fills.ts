@@ -111,24 +111,89 @@ function storeRowToFill(r: StoreFillRow): Fill {
   }
 }
 
-/** Captured fills from our store, newest-first paged then reversed to
- *  ascending. Only rows the capture daemon wrote (`tid is not null`). */
+/** Concurrent PostgREST pages fetched at once. Small indexed reads — this is
+ *  request-latency hiding, not the heavy aggregation the ops notes ban. */
+const STORE_CONCURRENCY = 5
+
+/** Captured fills from our store, ascending. Only rows the capture daemon
+ *  wrote (`tid is not null`).
+ *
+ *  Sequential newest-first paging cost ~0.5–0.9s per 1,000-row page, which
+ *  made the fills load the whole cold path for active coins. So: count
+ *  first (one cheap indexed aggregate), then fetch every page CONCURRENTLY
+ *  at known offsets. Ordering is ascending with a tid tiebreak — a total
+ *  order, so pages cannot overlap or drop rows at equal timestamps, and
+ *  `fills` is append-only with new rows landing after the last offset, so
+ *  the pages are stable while they load. A wallet over the cap falls back
+ *  to the sequential newest-first walk (most recent STORE_MAX_FILLS,
+ *  declared as capped). */
 async function loadStoreFills(
   address: string,
   coin?: string,
   onPage?: (fillsSoFar: number) => void
 ): Promise<{ fills: Fill[]; capped: boolean }> {
   const supabase = getSupabase()
+
+  let countQ = supabase
+    .from('fills')
+    .select('tid', { count: 'exact', head: true })
+    .eq('wallet_address', address.toLowerCase())
+    .not('tid', 'is', null)
+  if (coin) countQ = countQ.eq('asset', coin)
+  const { count, error: countErr } = await countQ
+  if (countErr) throw countErr
+  const total = count ?? 0
+  if (total === 0) return { fills: [], capped: false }
+
+  if (total <= STORE_MAX_FILLS) {
+    const offsets: number[] = []
+    for (let o = 0; o < total; o += STORE_PAGE) offsets.push(o)
+    const pages: StoreFillRow[][] = new Array(offsets.length)
+    let loaded = 0
+    let next = 0
+    const worker = async () => {
+      for (;;) {
+        const i = next++
+        if (i >= offsets.length) return
+        let query = supabase
+          .from('fills')
+          .select(
+            'asset,side,size,price,fee_usd,realized_pnl,trade_type,timestamp,tid,start_position'
+          )
+          .eq('wallet_address', address.toLowerCase())
+          .not('tid', 'is', null)
+        if (coin) query = query.eq('asset', coin)
+        const { data, error } = await query
+          .order('timestamp', { ascending: true })
+          .order('tid', { ascending: true })
+          .range(offsets[i], offsets[i] + STORE_PAGE - 1)
+        if (error) throw error
+        pages[i] = (data ?? []) as StoreFillRow[]
+        loaded += pages[i].length
+        onPage?.(loaded)
+      }
+    }
+    await Promise.all(
+      Array.from({ length: Math.min(STORE_CONCURRENCY, offsets.length) }, worker)
+    )
+    return { fills: pages.flat().map(storeRowToFill), capped: false }
+  }
+
+  // Over the cap: newest-first sequential walk, so the served slice is the
+  // most recent history; the truncation is declared in coverage.
   const rows: StoreFillRow[] = []
   for (let offset = 0; offset < STORE_MAX_FILLS; offset += STORE_PAGE) {
     let query = supabase
       .from('fills')
-      .select('asset,side,size,price,fee_usd,realized_pnl,trade_type,timestamp,tid,start_position')
+      .select(
+        'asset,side,size,price,fee_usd,realized_pnl,trade_type,timestamp,tid,start_position'
+      )
       .eq('wallet_address', address.toLowerCase())
       .not('tid', 'is', null)
     if (coin) query = query.eq('asset', coin)
     const { data, error } = await query
       .order('timestamp', { ascending: false })
+      .order('tid', { ascending: false })
       .range(offset, offset + STORE_PAGE - 1)
     if (error) throw error
     const page = (data ?? []) as StoreFillRow[]
