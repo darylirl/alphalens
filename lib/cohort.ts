@@ -46,7 +46,10 @@ export async function loadCohort(supabase: SupabaseClient): Promise<CohortWallet
 // surface without owning an address. The read is bounded on purpose — an
 // ordered top slice intended as a cap (CLAUDE.md: never an unbounded
 // PostgREST read) — and callers render an honest empty state on failure,
-// never a hardcoded list.
+// never a hardcoded list. Market makers are excluded from example selection
+// (same exclusion /pulse footnotes): their two-sided inventory churn is not
+// what these surfaces exist to showcase, and a few can remain
+// capture_enabled through the verification-spec reference clause.
 const EXAMPLE_POOL_LIMIT = 200
 
 export async function loadExampleWallets(
@@ -58,6 +61,7 @@ export async function loadExampleWallets(
     .select('address,archetype,trade_count_30d,created_at,last_updated')
     .eq('capture_enabled', true)
     .is('removed_at', null)
+    .or('archetype.neq.market_maker,archetype.is.null')
     .order('trade_count_30d', { ascending: false, nullsFirst: false })
     .limit(EXAMPLE_POOL_LIMIT)
   if (error) throw error

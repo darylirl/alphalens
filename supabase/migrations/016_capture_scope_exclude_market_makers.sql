@@ -13,6 +13,11 @@
 -- The 7 MM wallets referenced by active signals are excluded too — the
 -- exclusion is by behavior, and their existing history stays available to
 -- any replay that needs it.
+--
+-- NOTE: the capture-scope reference clause (migration 014 rule 2: any wallet
+-- referenced by an active signal is capture_enabled) requires signal-source
+-- filtering upstream (lib/signals/generate.ts archetype gate) — otherwise a
+-- new signal on an excluded wallet resurrects excluded archetypes into scope.
 
 update public.wallets
    set capture_enabled = false
