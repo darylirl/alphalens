@@ -1231,38 +1231,55 @@ def load_s3_fills(addresses: set, start_ms: int, end_ms: int) -> dict:
     # is stable between the two datasets; the tuple is the fallback when absent.
     seen: set = set()
     bad = 0
-    kept_by_ds: dict = defaultdict(int)
+    # Per-dataset accounting. A dataset that is ON DISK but yields nothing is
+    # the failure mode this tally exists to make loud: node_fills_by_block once
+    # kept 0 fills from 849,573 lines because its record shape had been guessed,
+    # and the only reason anyone noticed was that someone measured it by hand.
+    # Zero kept is indistinguishable from a universe that never traded unless
+    # the run says which of the two it is.
+    ds_stat: dict = defaultdict(lambda: {"objects": 0, "lines": 0, "unparsed": 0,
+                                         "pairs": 0, "off_universe": 0,
+                                         "off_window": 0, "dupes": 0, "kept": 0})
     for n, path in enumerate(objects, 1):
         ds = path.relative_to(S3_CACHE).parts[0]
+        st = ds_stat[ds]
+        st["objects"] += 1
         try:
             with lz4.frame.open(path, "rb") as fh:
                 for raw in fh:                     # one line at a time
                     line = raw.strip()
                     if not line:
                         continue
+                    st["lines"] += 1
                     try:
                         rec = json.loads(line)
                     except json.JSONDecodeError:
                         bad += 1
+                        st["unparsed"] += 1
                         continue
                     pairs = _normalise_s3_fill(rec)
                     if pairs is None:
                         bad += 1
+                        st["unparsed"] += 1
                         continue
+                    st["pairs"] += len(pairs)
                     for user, f in pairs:
                         if not user:
                             continue
                         u = user.lower()
                         if u not in addresses:
+                            st["off_universe"] += 1
                             continue
                         t = int(f["time"])
                         if not (start_ms <= t <= end_ms):
+                            st["off_window"] += 1
                             continue
                         tid = f.get("tid")
                         key = ((u, "tid", tid) if tid is not None else
                                (u, t, f["coin"], str(f["px"]), str(f["sz"]),
                                 f["side"]))
                         if key in seen:
+                            st["dupes"] += 1
                             continue           # seam overlap, not a second fill
                         seen.add(key)
                         out[u].append({
@@ -1274,7 +1291,7 @@ def load_s3_fills(addresses: set, start_ms: int, end_ms: int) -> dict:
                             "liq": bool(f.get("liquidation")
                                         or f.get("liquidationMarkPx")),
                         })
-                        kept_by_ds[ds] += 1
+                        st["kept"] += 1
         except OSError as exc:
             sys.exit(f"Corrupt archive object {path}: {type(exc).__name__}: "
                      f"{exc}. Re-run s3_backfill.py rather than skipping it.")
@@ -1284,9 +1301,44 @@ def load_s3_fills(addresses: set, start_ms: int, end_ms: int) -> dict:
     if bad:
         # Reported, never hidden: unparsed lines are a coverage defect.
         print(f"  s3: WARNING {bad:,} archive lines could not be parsed as fills")
+    # EVERY dataset present on disk reports, including the ones that yielded
+    # nothing. The old form printed only datasets with a non-zero count, so a
+    # dataset contributing zero was silent — the one case that most needs
+    # saying out loud.
     for ds in S3_FILL_DATASETS:
-        if kept_by_ds.get(ds):
-            print(f"  s3: {ds:<20} contributed {kept_by_ds[ds]:,} in-universe fills")
+        if ds not in ds_stat:
+            continue
+        st = ds_stat[ds]
+        print(f"  s3: {ds:<20} {st['kept']:>10,} kept  "
+              f"({st['objects']:,} objects, {st['lines']:,} lines, "
+              f"{st['pairs']:,} fills seen)")
+        if st["lines"] and not st["kept"]:
+            # Name the cause rather than leaving a bare zero. Each branch is a
+            # different claim about the world and only one of them is "these
+            # wallets did not trade".
+            if st["unparsed"] == st["lines"]:
+                why = ("EVERY line failed to parse — the record shape does not "
+                       "match what _normalise_s3_fill expects. This is a code "
+                       "defect, NOT an absence of trading.")
+            elif not st["pairs"]:
+                why = ("lines parsed but yielded no fills at all — likely an "
+                       "envelope whose fills live under a key this parser does "
+                       "not read. A code defect, NOT an absence of trading.")
+            elif st["off_universe"] and not (st["off_window"] or st["dupes"]):
+                why = (f"{st['off_universe']:,} fills parsed, all outside the "
+                       "requested wallet universe. Genuine, if the universe is "
+                       "the one you meant.")
+            elif st["off_window"] and not st["off_universe"]:
+                why = (f"{st['off_window']:,} fills parsed, all outside the "
+                       "requested time window. Genuine, if the window is the "
+                       "one you meant.")
+            else:
+                why = (f"parsed {st['pairs']:,} fills: "
+                       f"{st['off_universe']:,} off-universe, "
+                       f"{st['off_window']:,} off-window, "
+                       f"{st['dupes']:,} seam duplicates.")
+            print(f"  s3: *** {ds} IS PRESENT BUT CONTRIBUTED NOTHING ***")
+            print(f"  s3:     {why}")
     for v in out.values():
         v.sort(key=lambda f: f["time"])
     return dict(out)

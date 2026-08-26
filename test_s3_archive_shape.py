@@ -143,6 +143,45 @@ def main():
               nf.get("first_day") == "20250727" and nf.get("last_day") == "20250728",
               f"{nf.get('first_day')}..{nf.get('last_day')}")
 
+        # ── 4b. a dataset present but contributing nothing must be LOUD ───
+        # This is the incident that happened twice: by_block kept 0 fills from
+        # 849,573 lines because its shape had been guessed, and the run said
+        # nothing because the summary printed only non-zero datasets.
+        import io, contextlib
+        shapeless = TMP2 = TMP.parent / "archive_zero_test"
+        shutil.rmtree(TMP2, ignore_errors=True)
+        # Lines that are valid JSON but not a shape the parser knows.
+        pth = TMP2 / "node_fills_by_block" / "hourly" / "20250801" / "0.lz4"
+        pth.parent.mkdir(parents=True, exist_ok=True)
+        with lz4.frame.open(pth, "wb") as fh:
+            for i in range(25):
+                fh.write((json.dumps({"totally": "unknown", "n": i}) + "\n").encode())
+        G.S3_CACHE = TMP2
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            got_zero = G.load_s3_fills({"0xaaa"}, 0, 9e12)
+        outp = buf.getvalue()
+        check("a shape-mismatched dataset yields nothing", got_zero == {})
+        check("present-but-zero dataset is announced, not silent",
+              "CONTRIBUTED NOTHING" in outp)
+        check("the zero is diagnosed as a code defect, not absent trading",
+              "NOT an absence of trading" in outp,
+              [l.strip() for l in outp.splitlines() if "s3:" in l][-1][:90])
+
+        # Same cache, but the lines parse fine and simply fall outside the
+        # universe: that zero is genuine and must NOT be blamed on the code.
+        pth2 = TMP2 / "node_fills" / "hourly" / "20250801" / "0.lz4"
+        pth2.parent.mkdir(parents=True, exist_ok=True)
+        write_lz4(pth2, [fill(9001, addr="0xnotours", t=SEAM_T)])
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            G.load_s3_fills({"0xaaa"}, 0, 9e12)
+        outp = buf.getvalue()
+        check("an off-universe zero is reported as genuine, not a defect",
+              "outside the requested wallet universe" in outp)
+        shutil.rmtree(TMP2, ignore_errors=True)
+        G.S3_CACHE = TMP
+
         # ── 5. an empty cache is absence, never zero activity ─────────────
         G.S3_CACHE = TMP / "does-not-exist"
         check("absent cache returns {} rather than a wallet that did not trade",
