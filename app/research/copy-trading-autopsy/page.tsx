@@ -104,10 +104,10 @@ export default function CopyTradingAutopsyPage() {
       </P>
       <p className="text-xs mb-4">
         <Link
-          href="/replay/famous/uncopyable-scalper"
+          href="/replay/famous/scalper-day"
           className="inline-flex items-center gap-1 text-[#34EAB9] hover:underline"
         >
-          Watch this wallet trade — the famous replay <ArrowRight size={10} />
+          Watch one of this wallet&rsquo;s days — 3,011 real fills <ArrowRight size={10} />
         </Link>
       </p>
 
@@ -145,10 +145,10 @@ export default function CopyTradingAutopsyPage() {
       </P>
       <p className="text-xs mb-4">
         <Link
-          href="/replay/famous/swing-cohort-blowup"
+          href="/replay/famous/swing-trade-tia"
           className="inline-flex items-center gap-1 text-[#34EAB9] hover:underline"
         >
-          Watch the cohort&rsquo;s biggest loser trade — the famous replay{' '}
+          Watch one position from this cohort — four days in TIA{' '}
           <ArrowRight size={10} />
         </Link>
       </p>

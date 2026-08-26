@@ -43,12 +43,28 @@ export interface FamousReplay {
   pnl_basis: string
   /** Honest coverage: which data window we can actually serve, and its source. */
   coverage_note: string
+  /** Which tape the pinned episode comes from. Normally omitted — the loader's
+   *  own rule decides (cohort wallets read our capture store, everyone else
+   *  the exchange window). Set to 'exchange' when a curated episode lies
+   *  OUTSIDE a cohort wallet's captured range: the wallet is capture_enabled,
+   *  so the default rule would read the store and find nothing there. The
+   *  coverage note must say why. */
+  fills_source?: 'store' | 'exchange'
+  /** A claim about this wallet we can NAME but have not verified from fills,
+   *  with the reason and the path that would verify it. Rendered as an
+   *  explicit not-verified note — never merged into any figure above. */
+  pending_verification?: string
   /** When and how the entry was verified against real fills. */
   verified: { at: string; method: string }
   /** Public entries: where the story was reported. Autopsy entries: our page. */
   sources: string[]
   /** Autopsy entries link back to the research post. */
   research_href?: string
+  /** Autopsy entries: the exact relationship between this replay and the
+   *  research run, stated per entry. A research run is a separate measurement
+   *  over a different window; an entry must never let its title, story or
+   *  figure borrow the run's findings. */
+  research_context?: string
 }
 
 interface ManifestFile {
@@ -73,6 +89,18 @@ function validate(entries: FamousReplay[]): FamousReplay[] {
       throw new Error(`famous ${e.slug}: missing verification block`)
     if (e.source === 'autopsy' && !e.research_href)
       throw new Error(`famous ${e.slug}: autopsy entries must link the research post`)
+    // An autopsy entry sits next to a published research run, which is a
+    // DIFFERENT measurement over a DIFFERENT window. Without the relationship
+    // spelled out, a title drifts into claiming the run's findings — which is
+    // exactly how "The scalper you cannot copy" ended up labelling a −$503
+    // day with run 1's −$1,251 verdict. The pairing is required, not optional.
+    if (e.source === 'autopsy' && !e.research_context)
+      throw new Error(
+        `famous ${e.slug}: autopsy entries must state research_context — how this replay ` +
+          `relates to the research run, so the title cannot borrow the run's findings`
+      )
+    if (e.fills_source && e.fills_source !== 'store' && e.fills_source !== 'exchange')
+      throw new Error(`famous ${e.slug}: fills_source must be 'store' or 'exchange'`)
   }
   return entries
 }

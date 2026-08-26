@@ -271,12 +271,19 @@ export async function loadWalletFills(
     /** Load only this window (curated famous-episode builds). The coverage
      *  note names the scope so a windowed doc never reads as full history. */
     window?: FillsWindow
+    /** Override the source rule. Only curated famous episodes set this, and
+     *  only to 'exchange': a capture_enabled wallet whose curated episode
+     *  predates its captured range would otherwise read the store and find
+     *  nothing there — an absence of capture rendered as an absence of
+     *  trading. The entry's coverage note states why. `isCohort` below still
+     *  reports what the wallet IS, not which tape answered. */
+    forceSource?: 'store' | 'exchange'
   } = {}
 ): Promise<WalletFills> {
   const wallet = await loadWalletRow(address)
   const isCohort = Boolean(wallet?.capture_enabled)
 
-  if (isCohort) {
+  if (isCohort && opts.forceSource !== 'exchange') {
     try {
       const [{ fills, capped }, gapCoins] = await Promise.all([
         loadStoreFills(address, opts.coin, opts.onPage, opts.window),

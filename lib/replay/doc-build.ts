@@ -134,6 +134,9 @@ export async function buildReplayDoc(
      *  episode is closed history with a known span). Padded by
      *  CURATED_WINDOW_PAD_MS on each side before loading. */
     window?: FillsWindow
+    /** Curated entries only: read this tape instead of the source the
+     *  wallet's cohort membership would pick. See loadWalletFills. */
+    forceSource?: 'store' | 'exchange'
   } = {}
 ): Promise<BuiltDoc> {
   const t0 = Date.now()
@@ -150,6 +153,7 @@ export async function buildReplayDoc(
           toMs: opts.window.toMs + CURATED_WINDOW_PAD_MS,
         }
       : undefined,
+    forceSource: opts.forceSource,
   })
   progress('fills', { fills: fills.length })
 

@@ -144,7 +144,8 @@ export async function GET(req: NextRequest, { params }: { params: { address: str
     // Rebuilding could only LOSE data once the exchange's sliding ~10K-fill
     // window moves past the episode; the doc that was honestly built from the
     // fills while they were still served is the record.
-    const pinned = Boolean(famousPin(addr, coin, rangeStr, interval))
+    const pin = famousPin(addr, coin, rangeStr, interval)
+    const pinned = Boolean(pin)
 
     if (cached) {
       let fresh = false
@@ -210,8 +211,11 @@ export async function GET(req: NextRequest, { params }: { params: { address: str
           // famous wallets hold 50K+ retained fills, and the episode is a
           // closed span whose boundaries the padded load detects identically.
           const buildOpts =
-            pinned && typeof range === 'object'
-              ? { window: { fromMs: range.from, toMs: range.to } }
+            pin && typeof range === 'object'
+              ? {
+                  window: { fromMs: range.from, toMs: range.to },
+                  forceSource: pin.fills_source,
+                }
               : {}
           const built = await buildReplayDoc(
             addr,

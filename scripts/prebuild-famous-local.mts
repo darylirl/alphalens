@@ -37,7 +37,7 @@ async function main() {
       e.address,
       { coin: e.coin, range, interval: e.interval },
       p => process.stdout.write(`  ${p.phase} ${JSON.stringify(p.detail)}\n`),
-      { window: { fromMs: range.from, toMs: range.to } }
+      { window: { fromMs: range.from, toMs: range.to }, forceSource: e.fills_source }
     )
     const paramsHash = sha256(`${e.coin}|${e.range}|${e.interval}`)
     const contentHash = sha256(

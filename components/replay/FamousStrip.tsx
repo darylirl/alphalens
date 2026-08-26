@@ -33,7 +33,7 @@ export function FamousStrip({ entries }: { entries: FamousReplay[] }) {
             className="snap-start shrink-0 w-[260px] md:w-auto bg-white/[0.03] border border-white/[0.08] rounded-lg p-3 hover:border-[#F5A623]/40 transition-colors flex flex-col gap-1.5"
           >
             <p className="text-[9px] font-mono text-[#F5A623] uppercase tracking-wider">
-              {e.source === 'autopsy' ? 'from our copy-trading autopsy' : 'public episode'}
+              {e.source === 'autopsy' ? 'wallet from our copy-trading autopsy' : 'public episode'}
             </p>
             <p className="text-[13px] font-semibold leading-snug text-[#F0FAF8]">{e.title}</p>
             <p className="text-[11px] text-white/50 leading-relaxed line-clamp-2">{e.story}</p>

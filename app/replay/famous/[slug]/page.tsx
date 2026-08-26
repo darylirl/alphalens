@@ -53,7 +53,9 @@ export default function FamousReplayPage({ params }: { params: { slug: string } 
           <div>
             <p className="text-[10px] font-mono text-[#F5A623] uppercase tracking-[0.2em] mb-1">
               Famous replay ·{' '}
-              {entry.source === 'autopsy' ? 'from our copy-trading autopsy' : 'public episode'}
+              {entry.source === 'autopsy'
+                ? 'wallet from our copy-trading autopsy'
+                : 'public episode'}
             </p>
             <h1 className="text-xl md:text-2xl font-bold leading-tight mb-2">{entry.title}</h1>
             <p className="text-white/60 text-sm leading-relaxed">{entry.story}</p>
@@ -72,6 +74,17 @@ export default function FamousReplayPage({ params }: { params: { slug: string } 
             {entry.pnl_basis} · verified against real fills {entry.verified.at.slice(0, 10)} ·{' '}
             {entry.coverage_note}
           </p>
+
+          {entry.pending_verification && (
+            <div className="border border-[#F5A623]/25 bg-[#F5A623]/[0.04] rounded-lg p-3">
+              <p className="text-[10px] font-mono text-[#F5A623] uppercase tracking-wider mb-1">
+                Not verified
+              </p>
+              <p className="text-[10px] text-white/50 leading-relaxed">
+                {entry.pending_verification}
+              </p>
+            </div>
+          )}
         </div>
 
         <ReplayPlayer
@@ -81,13 +94,13 @@ export default function FamousReplayPage({ params }: { params: { slug: string } 
         />
 
         <div className="max-w-2xl mx-auto space-y-3">
-          {entry.source === 'autopsy' && entry.research_href && (
-            <p className="text-[11px] text-white/45 text-center">
-              This wallet is one of the two we dissected in{' '}
+          {entry.research_context && entry.research_href && (
+            <p className="text-[11px] text-white/45 leading-relaxed">
+              {entry.research_context}{' '}
               <Link href={entry.research_href} className="text-[#34EAB9] hover:underline">
-                the copy-trading autopsy
-              </Link>{' '}
-              — 28,318 replayed trades, honest frictions, and the receipts.
+                Read the autopsy
+              </Link>
+              .
             </p>
           )}
           {entry.source === 'public' && entry.sources.length > 0 && (

@@ -2,9 +2,9 @@
   "_readme": "Famous Replays manifest. Every entry is verified against real fills before it ships (see lib/replay/famous.ts for the contract): pnl_usd is the sum of exchange closedPnl over the pinned episode's fills, detected with the repo's own episode detector over userFillsByTime / capture-store fills. Entries are code-reviewed here, in git — never a database table. Stories attribute reported context to sources; the numbers shown are only what the fills support.",
   "entries": [
     {
-      "slug": "uncopyable-scalper",
-      "title": "The scalper you cannot copy",
-      "story": "Run 1 of our autopsy copied this top-Sharpe scalper for 7,499 trades: a 4.8% win rate and −$1,251 after honest frictions, because its edge lives inside the minute a copier arrives late to — watch it grind 3,011 fills in one ten-hour session.",
+      "slug": "scalper-day",
+      "title": "A scalper's day: 3,011 fills, −$503",
+      "story": "Ten hours and 3,011 real fills on one coin, ending −$502.97 — a single day of the wallet our copy-trading autopsy took as its run-1 subject.",
       "source": "autopsy",
       "address": "0x847bd1ef4fede0fe191129894d63044843f4d473",
       "coin": "xyz:MU",
@@ -14,18 +14,19 @@
       "window": { "from": "2026-08-24T13:27:41Z", "to": "2026-08-24T23:11:08Z" },
       "pnl_usd": -502.97,
       "pnl_basis": "Net realized PnL over the pinned episode — the sum of the exchange's own closedPnl per fill (3,011 fills).",
-      "coverage_note": "Replayed from the AlphaLens capture store; capture coverage for this wallet begins 2026-08-15. The copy-backtest figures come from backtest_results/ in the repository, not from this window.",
+      "coverage_note": "Replayed from the AlphaLens capture store; capture coverage for this wallet begins 2026-08-15. This is one episode, not the autopsy's measurement: run 1 replayed 7,499 COPIED trades over a different window and is reported in the research post, not here.",
+      "research_context": "This is the wallet our copy-trading autopsy used for run 1. That run is a separate measurement over a different window — 7,499 copied trades, 4.8% win rate, −$1,251 after frictions — and none of it is what this replay shows. What you see here is one of its trading days.",
       "verified": {
         "at": "2026-08-26",
-        "method": "Episode detected and summed with the repo's own detector over the wallet's real fills (boundary-safe pagination); copy-backtest figures reconciled against backtest_results/summary_by_wallet.csv."
+        "method": "Episode detected and summed with the repo's own detector over the wallet's real fills; both episode boundaries are real flat gaps over 10 minutes, and the doc rebuilds byte-identically."
       },
       "sources": ["/research/copy-trading-autopsy"],
       "research_href": "/research/copy-trading-autopsy"
     },
     {
-      "slug": "swing-cohort-blowup",
-      "title": "The cohort that blew up",
-      "story": "Run 2 of our autopsy copied ten swing wallets for 28,318 trades and lost $9,704; this wallet alone contributed −$5,246 and drove the $13.6K max drawdown — here is one of its four-day TIA swings, ending −$522.",
+      "slug": "swing-trade-tia",
+      "title": "A swing trade: four days in TIA, −$522",
+      "story": "Thirteen fills across four days in TIA, ending −$522.11 — one position from one of the ten wallets our copy-trading autopsy took as its run-2 cohort.",
       "source": "autopsy",
       "address": "0x212444e5ace9d58706f53557a10bb69dee5d68d9",
       "coin": "TIA",
@@ -35,10 +36,11 @@
       "window": { "from": "2026-08-18T04:00:35Z", "to": "2026-08-22T07:04:08Z" },
       "pnl_usd": -522.11,
       "pnl_basis": "Net realized PnL over the pinned episode — the sum of the exchange's own closedPnl per fill (13 fills).",
-      "coverage_note": "Replayed from the AlphaLens capture store; capture coverage begins 2026-08-15 and this position opened before capture began, so the replay is labelled a partial picture. The 13-month copy-backtest window is documented in the research post.",
+      "coverage_note": "Replayed from the AlphaLens capture store; capture coverage begins 2026-08-15 and this position opened before capture began, so the replay is labelled a partial picture. This is one position, not the autopsy's measurement: run 2 replayed 28,318 COPIED trades across ten wallets over 13 months and is reported in the research post, not here.",
+      "research_context": "This wallet is one of the ten in our copy-trading autopsy's run-2 cohort. That run is a separate measurement over a different window — 28,318 copied trades across all ten wallets, −$9,704 after frictions — and none of it is what this replay shows. What you see here is one of this wallet's positions.",
       "verified": {
         "at": "2026-08-26",
-        "method": "Episode detected and summed with the repo's own detector over the wallet's real fills; copy-backtest figures reconciled against backtest_results/v2_summary_by_wallet.csv."
+        "method": "Episode detected and summed with the repo's own detector over the wallet's real fills; the doc rebuilds byte-identically."
       },
       "sources": ["/research/copy-trading-autopsy"],
       "research_href": "/research/copy-trading-autopsy"
@@ -178,6 +180,31 @@
       "sources": [
         "https://www.coindesk.com/markets/2025/03/12/hyperliquid-loses-usd4m-after-whale-s-over-usd200m-ether-trade-unwinds",
         "https://x.com/coinphoton/status/1901213175510642958"
+      ]
+    },
+    {
+      "slug": "the-comeback",
+      "title": "A comeback trade: +$2.6M in HYPE",
+      "story": "Fifty-six hours and 23,734 fills in a $20M HYPE position, closed +$2,599,616.99 — one round trip out of the July–August window in which this wallet, reported liquidated 145 times after the October 2025 crash, ran net +$8.11M.",
+      "source": "public",
+      "address": "0x020ca66c30bec2c4fe3861a94e4db4a498a35872",
+      "coin": "HYPE",
+      "range": "ep:1787172309970-1787373782062",
+      "interval": "auto",
+      "bar_width": "1h bars",
+      "window": { "from": "2026-08-19T20:45:09Z", "to": "2026-08-22T04:43:02Z" },
+      "pnl_usd": 2599616.99,
+      "pnl_basis": "Net realized PnL over the pinned episode — the sum of the exchange's own closedPnl per fill (23,734 fills; a complete round trip from flat to flat, peak position $20.0M, fees $32,097.98 on top).",
+      "fills_source": "exchange",
+      "coverage_note": "Replayed from exchange-retained fills, NOT our capture store: this wallet is capture_enabled, but our store covers 2026-04-19 to 2026-06-29 only, so the store would answer this window with silence. Two separate, non-overlapping measurements exist for this wallet and MUST NOT be summed — the 8-day gap between them (2026-06-29 to 2026-07-07) is unrecoverable from either source. (1) Exchange window 2026-07-07 to 2026-08-26T20:37Z: 194,737 fills, closed PnL +$8,622,358.65, fees $508,518.70, net +$8,113,839.96, ETH-dominated (+$7.94M of it). (2) Our capture store 2026-04-19 to 2026-06-29: 63,903 fills, realized −$1,019,426.43. Those window totals are context for the story only; the replay plays the pinned 56-hour HYPE round trip and shows its own +$2,599,616.99. The exchange window is still growing — this wallet trades daily — so (1) is stated as of its cut, not as a final figure.",
+      "pending_verification": "The October 10–11 2025 crash — when this wallet was reported to lose ~$14M and begin a run of 145 liquidations — is NOT verified here and contributes to no figure on this page. It predates both exchange retention for this wallet and our capture store; verifying it requires the Hyperliquid S3 archive (s3_backfill.py), which has not been run for this address. Until it is, the October episode is a reported claim, not a measurement.",
+      "verified": {
+        "at": "2026-08-26",
+        "method": "Episode detected and summed with the repo's own detector over an uncapped, instrumented walk of userFillsByTime (99 pages, 194,737 fills, zero same-millisecond overflows); the store window read separately by SQL aggregate. The two were never combined."
+      },
+      "sources": [
+        "https://www.thestreet.com/crypto/markets/machi-big-brother-liquidated-145-times",
+        "https://x.com/OnchainLens/status/2059994894937276761"
       ]
     }
   ]
