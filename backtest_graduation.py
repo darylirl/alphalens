@@ -165,6 +165,19 @@ DAY_MS = 86_400_000
 REPO = Path(__file__).resolve().parent
 CACHE = REPO / "data" / "backtest_cache"
 RESULTS = REPO / "backtest_results" / "graduation"
+
+# Set by --rehearsal. A rehearsal exercises the whole pipeline on data that
+# cannot satisfy the coverage gate, so its outputs must never be mistakable for
+# the binding run's: they go to their own directory AND carry a REHEARSAL_
+# filename prefix, because a file read out of context still has to say what it
+# is. Nothing in this script writes to Supabase or the Ledger in either mode —
+# the only POST here is the Hyperliquid /info read endpoint.
+REHEARSAL_MODE = False
+
+
+def R(name: str):
+    """Output path, labelled when the run is a rehearsal."""
+    return RESULTS / (("REHEARSAL_" + name) if REHEARSAL_MODE else name)
 CACHE.mkdir(parents=True, exist_ok=True)
 RESULTS.mkdir(parents=True, exist_ok=True)
 
@@ -1380,16 +1393,43 @@ def main():
                          "S scores observable behavior, not our labels. The "
                          "narrower scopes are diagnostics and are labelled as "
                          "such in every output.")
+    ap.add_argument("--streaming", action="store_true",
+                    help="read the archive through s3_stream (spill + lazy "
+                         "merge) instead of load_s3_fills. Required at "
+                         "full-universe scale: the old loader needs 769 GiB.")
+    ap.add_argument("--spill-dir", default=None,
+                    help="where the streaming pass writes per-wallet spills "
+                         "(default: <repo>/s3_spill)")
+    ap.add_argument("--rehearsal", action="store_true",
+                    help="label every output REHEARSAL and write to a separate "
+                         "directory. For a run that exercises the pipeline on "
+                         "data that cannot satisfy the coverage gate.")
     ap.add_argument("--limit", type=int, default=0,
                     help="DEV ONLY: cap the wallet universe for a smoke run; "
                          "results produced with --limit are not the test")
     args = ap.parse_args()
 
+    global REHEARSAL_MODE, RESULTS
+    if args.rehearsal:
+        REHEARSAL_MODE = True
+        RESULTS = REPO / "backtest_results" / "graduation_REHEARSAL"
+        RESULTS.mkdir(parents=True, exist_ok=True)
+
     t_start = time.time()
     now_ms = int(time.time() * 1000)
     print("=" * 74)
+    if REHEARSAL_MODE:
+        print("REHEARSAL — NOT A BINDING RUN, NOT A VERDICT")
+        print("=" * 74)
     print("MERIT P0 — GRADUATED-BOOK BACKTEST (docs/merit_p0_backtest_spec.md v1.2)")
     print("=" * 74)
+    if REHEARSAL_MODE:
+        print("This run exercises the full v1.2 pipeline on an archive that")
+        print("cannot satisfy the spec §7 coverage gate. Every output is")
+        print("labelled REHEARSAL and written to backtest_results/")
+        print("graduation_REHEARSAL/. Nothing here publishes to the Ledger, and")
+        print("no result in it may be cited as a verdict on the hypothesis.")
+        print("=" * 74)
     print("Hypothesis (pre-registered): wallets ranked highly on a continuous")
     print("process score S beat passive HLP exposure risk-adjusted, with lower")
     print("drawdown, as a top-quintile score-weighted book. No returns, PnL,")
@@ -1426,8 +1466,25 @@ def main():
     # ── Fetch + preprocess ──────────────────────────────────────────────────
     addresses = {row["address"].lower() for row in universe}
     s3_fills_by_addr = {}
-    if s3["present"]:
-        print("\nReading node_fills from the local archive cache...")
+    spill_dir = None
+    if s3["present"] and args.streaming:
+        # Streaming path (s3_stream). Equivalence to the loader below is
+        # demonstrated by test_equivalence_streaming.py, whose artifact ships
+        # with the run; StreamingWalletData inherits metrics_at() unchanged, so
+        # only the attributes can differ and the harness compares those.
+        import s3_stream
+        spill_dir = Path(args.spill_dir) if args.spill_dir else (REPO / "s3_spill")
+        print(f"\nStreaming the archive into per-wallet spills at {spill_dir} ...")
+        st = s3_stream.spill_archive(addresses, spill_dir, 0, now_ms)
+        print(f"  spilled {st['kept']:,} in-universe fills from "
+              f"{st['objects']:,} objects "
+              f"({st['seam_dupes']:,} seam duplicates dropped)")
+    elif s3["present"]:
+        print("\nReading the archive cache with the in-memory loader...")
+        print("  NOTE: this retains the whole filtered tape. Measured at "
+              "full-universe")
+        print("  scale that is 769 GiB — use --streaming for anything "
+              "beyond a subset.")
         s3_fills_by_addr = load_s3_fills(addresses, 0, now_ms)
         print(f"  archive supplied fills for {len(s3_fills_by_addr):,} of "
               f"{len(addresses):,} universe wallets")
@@ -1437,13 +1494,35 @@ def main():
     for i, row in enumerate(universe):
         addr = row["address"]
         fills, complete = fetch_fills(addr)
+        portfolio = fetch_portfolio(addr)
+        if spill_dir is not None:
+            import s3_stream
+            # Mirror the loader's rule exactly: an API pull that hit the page
+            # cap is complete again once the archive covers behind it, but only
+            # if this wallet actually HAS archive data. Passing True
+            # unconditionally would silently readmit wallets whose history is
+            # genuinely truncated.
+            has_arch = any(
+                s3_stream.spill_path(spill_dir, ds, addr.lower()).exists()
+                for ds in S3_FILL_DATASETS)
+            wd = s3_stream.build_streaming_wallet(
+                addr.lower(), row.get("archetype") or "unclassified",
+                spill_dir, fills, complete or has_arch, portfolio)
+            if wd.n_fills == 0:
+                fetch_log.append(
+                    f"{addr} no perp fills in archive or API — excluded")
+                continue
+            wallets.append(wd)
+            if (i + 1) % 25 == 0:
+                print(f"  built {i + 1}/{len(universe)} wallets "
+                      f"({time.time() - t_start:.0f}s elapsed)", flush=True)
+            continue
         arch = s3_fills_by_addr.get(addr.lower(), [])
         if arch:
             fills = merge_fills(fills, arch)
             # The archive reaches behind the API's retention, so a wallet whose
             # API pull hit the page cap is complete again once merged.
             complete = True
-        portfolio = fetch_portfolio(addr)
         if not fills:
             fetch_log.append(f"{addr} no fills retrievable — excluded from universe")
             continue
@@ -1823,13 +1902,13 @@ def main():
 
     block = "\n".join(verdict_lines)
     print("\n" + block)
-    (RESULTS / "verdict.txt").write_text(block + "\n")
+    (R("verdict.txt")).write_text(block + "\n")
     print(f"\nCSVs written to {RESULTS}/. Runtime {time.time() - t_start:.0f}s.")
     return 0
 
 
 def write_coverage_csv(coverage_rows, in_window: set):
-    with open(RESULTS / "coverage.csv", "w", newline="") as fh:
+    with open(R("coverage.csv"), "w", newline="") as fh:
         fields = ["decision_date", "active", "excluded", "unscorable", "eligible",
                   "qualifying", "n_book", "S_p50", "S_p90", "S_max",
                   "in_walkforward_window"]
@@ -1857,11 +1936,12 @@ def write_outputs(headline, robustness_rows, coverage_rows, decisions, boundarie
                   book_returns, hlp_returns, btc_returns, metrics_cache, wallets,
                   return_cache, fetch_log, score_cache, percorr_rows):
     # Per-period book CSVs (the receipt: one CSV per decision period).
-    for stale in RESULTS.glob("book_*.csv"):
+    for stale in list(RESULTS.glob("book_*.csv")) + \
+                 list(RESULTS.glob("REHEARSAL_book_*.csv")):
         stale.unlink()
     for p in headline:
         name = datetime.fromtimestamp(p["t"] / 1000, tz=timezone.utc).strftime("%Y-%m")
-        with open(RESULTS / f"book_{name}.csv", "w", newline="") as fh:
+        with open(R(f"book_{name}.csv"), "w", newline="") as fh:
             w = csv.DictWriter(fh, fieldnames=(
                 ["wallet", "archetype", "score_S"]
                 + [name for name, _ in SCORE_DIMS]
@@ -1872,7 +1952,7 @@ def write_outputs(headline, robustness_rows, coverage_rows, decisions, boundarie
                 w.writerow(r)
 
     # Equity curves + period summary.
-    with open(RESULTS / "book_periods.csv", "w", newline="") as fh:
+    with open(R("book_periods.csv"), "w", newline="") as fh:
         w = csv.writer(fh)
         w.writerow(["period_start", "period_end", "n_eligible", "n_book",
                     "mean_S_in_book", "invested_weight",
@@ -1902,7 +1982,7 @@ def write_outputs(headline, robustness_rows, coverage_rows, decisions, boundarie
             if r["haircut"]:
                 a["haircut_periods"] += 1
             a["sources"].add(r["source"])
-    with open(RESULTS / "contributions.csv", "w", newline="") as fh:
+    with open(R("contributions.csv"), "w", newline="") as fh:
         w = csv.writer(fh)
         w.writerow(["wallet", "archetype", "periods_in_book", "total_contribution",
                     "capacity_haircut_periods", "return_sources"])
@@ -1912,7 +1992,7 @@ def write_outputs(headline, robustness_rows, coverage_rows, decisions, boundarie
                         "|".join(sorted(a["sources"]))])
 
     # Robustness battery table.
-    with open(RESULTS / "robustness.csv", "w", newline="") as fh:
+    with open(R("robustness.csv"), "w", newline="") as fh:
         w = csv.writer(fh)
         w.writerow(["variant", "book_sharpe", "hlp_sharpe", "sharpe_advantage",
                     "avg_wallets_in_book", "sign_survives"])
@@ -1924,7 +2004,7 @@ def write_outputs(headline, robustness_rows, coverage_rows, decisions, boundarie
                         r["sign_survives"]])
 
     # Exclusions log (wallet-dates excluded from evaluation, with reasons).
-    with open(RESULTS / "exclusions.csv", "w", newline="") as fh:
+    with open(R("exclusions.csv"), "w", newline="") as fh:
         w = csv.writer(fh)
         w.writerow(["decision_date", "wallet", "reason"])
         for line in fetch_log:
@@ -1942,7 +2022,7 @@ def write_outputs(headline, robustness_rows, coverage_rows, decisions, boundarie
 
     # Actuarial seed: per-window distribution of graduated-wallet outcomes
     # (spec §9 — the first row of MERIT's loss dataset).
-    with open(RESULTS / "actuarial_seed.csv", "w", newline="") as fh:
+    with open(R("actuarial_seed.csv"), "w", newline="") as fh:
         w = csv.writer(fh)
         w.writerow(["period_start", "period_end", "wallet", "archetype",
                     "forward_return", "weight", "capacity_haircut", "contribution",
@@ -1960,7 +2040,7 @@ def write_outputs(headline, robustness_rows, coverage_rows, decisions, boundarie
 
     # Per-date score distribution over ALL eligible wallets (spec §9), so the
     # selection can be audited against the population it was drawn from.
-    with open(RESULTS / "score_distribution.csv", "w", newline="") as fh:
+    with open(R("score_distribution.csv"), "w", newline="") as fh:
         w = csv.writer(fh)
         w.writerow(["decision_date", "wallet", "archetype", "score_S", "selected"]
                    + [name for name, _ in SCORE_DIMS]
@@ -1978,7 +2058,7 @@ def write_outputs(headline, robustness_rows, coverage_rows, decisions, boundarie
 
     # Predictive validity per decision date (spec §6/§9): S against forward
     # risk-adjusted performance, alongside the trailing-Sharpe foil.
-    with open(RESULTS / "predictive_validity.csv", "w", newline="") as fh:
+    with open(R("predictive_validity.csv"), "w", newline="") as fh:
         w = csv.writer(fh)
         w.writerow(["decision_date", "n_wallets", "rank_corr_S_vs_forward",
                     "rank_corr_trailing_sharpe_vs_forward"])
