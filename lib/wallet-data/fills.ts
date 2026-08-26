@@ -22,8 +22,6 @@ const HL_PAGE = 2000
 /** HL retains roughly this many recent fills per wallet; walking further is futile. */
 const HL_MAX_PAGES = 6
 
-/** Rows per PostgREST page (under the ~1000 silent cap). */
-const STORE_PAGE = 1000
 /** Hard cap on store fills served per request — an indexed per-wallet read,
  *  bounded. When hit, the truncation is declared in coverage, never silent. */
 const STORE_MAX_FILLS = 20_000
@@ -80,122 +78,90 @@ export async function loadWalletRow(address: string): Promise<WalletRow | null> 
   }
 }
 
-interface StoreFillRow {
-  asset: string
-  side: string
-  size: number
-  price: number
-  fee_usd: number | null
-  realized_pnl: number | null
-  trade_type: string | null
-  timestamp: string
-  tid: number
-  start_position: number | null
-}
+/** One captured fill as `replay_wallet_fills_json` packs it, positionally:
+ *  [asset, side, size, price, fee_usd, realized_pnl, trade_type,
+ *   timestamp_ms, tid, start_position]. */
+type StoreFillRow = [
+  string,
+  string,
+  number,
+  number,
+  number | null,
+  number | null,
+  string | null,
+  number,
+  number,
+  number | null,
+]
 
 function storeRowToFill(r: StoreFillRow): Fill {
+  const [asset, side, size, price, fee, pnl, dir, timeMs, tid, start] = r
   return {
-    coin: r.asset,
-    px: String(r.price),
-    sz: String(r.size),
-    side: r.side === 'B' ? 'B' : 'A',
-    time: Date.parse(r.timestamp),
-    startPosition: r.start_position === null ? 'NaN' : String(r.start_position),
-    dir: r.trade_type ?? '',
-    closedPnl: r.realized_pnl === null ? '0' : String(r.realized_pnl),
+    coin: asset,
+    px: String(price),
+    sz: String(size),
+    side: side === 'B' ? 'B' : 'A',
+    time: Number(timeMs),
+    startPosition: start === null ? 'NaN' : String(start),
+    dir: dir ?? '',
+    closedPnl: pnl === null ? '0' : String(pnl),
     hash: '',
     oid: 0,
     crossed: false,
-    fee: r.fee_usd === null ? '0' : String(r.fee_usd),
-    tid: r.tid,
+    fee: fee === null ? '0' : String(fee),
+    tid,
   }
 }
 
-/** Concurrent PostgREST pages fetched at once. Small indexed reads — this is
- *  request-latency hiding, not the heavy aggregation the ops notes ban. */
-const STORE_CONCURRENCY = 5
-
-/** Captured fills from our store, ascending. Only rows the capture daemon
- *  wrote (`tid is not null`).
+/** Captured fills from our store, ascending by (timestamp, tid). Only rows
+ *  the capture daemon wrote (`tid is not null`).
  *
- *  Two lessons are baked in here, both measured in production paths:
+ *  ONE round trip, through `replay_wallet_fills_json` (migration 020). Three
+ *  things were measured on the way here, and all three are load-bearing:
  *
- *  - Reads go through the `replay_wallet_fills_*` / `replay_wallet_fill_count`
- *    RPCs (migration 019), never raw parameterized filters: Postgres'
- *    generic plan for "wallet = $1 AND asset = $2 ORDER BY timestamp" can
- *    drive from the (asset, timestamp) index — the whole asset, every
- *    wallet — and hit statement_timeout on popular coins. The RPCs' coin
- *    guard is structurally unservable by the asset index, so every plan
- *    drives from the wallet index.
- *  - Sequential paging cost ~0.5–0.9s per 1,000-row page even from Vercel,
- *    which made the fills load the whole cold path. So: count first (one
- *    indexed aggregate), then fetch every page CONCURRENTLY at known
- *    offsets. Ordering is (timestamp, tid) — a total order, so pages cannot
- *    overlap or drop rows at equal timestamps — and `fills` is append-only
- *    with new rows landing after the last offset, so pages are stable while
- *    they load. A wallet over the cap falls back to the sequential
- *    newest-first walk (most recent STORE_MAX_FILLS, declared as capped). */
+ *  - PostgREST truncates at ~1,000 rows for RPCs exactly as it does for
+ *    table reads (asked a set-returning function for 5,000/10,000/30,000
+ *    rows, got 1,000 back every time, silently). So a 26,000-fill coin was
+ *    27 HTTP round trips.
+ *  - Those round trips WERE the cold path: the database answers a page in
+ *    18-35 ms, but 27 of them cost ~13 s of the 16 s to first bar. Paging
+ *    concurrently helped and was still the wrong shape.
+ *  - The 1,000 cap counts ROWS, so a function returning a single jsonb row
+ *    escapes it. The whole scope now arrives at once, as compact positional
+ *    arrays with epoch-ms timestamps.
+ *
+ *  Reads never use a raw parameterized asset filter: Postgres' generic plan
+ *  for "wallet = $1 AND asset = $2" can drive from the (asset, timestamp)
+ *  index — the whole asset, every wallet — and hit statement_timeout on a
+ *  popular coin. The RPC's coin guard is structurally unservable by that
+ *  index, so every plan drives from the wallet index (migration 019).
+ *
+ *  Truncation is declared, never inferred: the RPC returns the exact `total`
+ *  alongside the rows it served, and when the cap bites the rows served are
+ *  the most RECENT ones. */
 async function loadStoreFills(
   address: string,
   coin?: string,
   onPage?: (fillsSoFar: number) => void
 ): Promise<{ fills: Fill[]; capped: boolean }> {
   const supabase = getSupabase()
-  const args = { p_wallet: address.toLowerCase(), p_coin: coin ?? '' }
-
-  const { data: countData, error: countErr } = await supabase.rpc(
-    'replay_wallet_fill_count',
-    args
-  )
-  if (countErr) throw countErr
-  const total = Number(countData ?? 0)
-  if (total === 0) return { fills: [], capped: false }
-
-  if (total <= STORE_MAX_FILLS) {
-    const offsets: number[] = []
-    for (let o = 0; o < total; o += STORE_PAGE) offsets.push(o)
-    const pages: StoreFillRow[][] = new Array(offsets.length)
-    let loaded = 0
-    let next = 0
-    const worker = async () => {
-      for (;;) {
-        const i = next++
-        if (i >= offsets.length) return
-        const { data, error } = await supabase.rpc('replay_wallet_fills_asc', {
-          ...args,
-          p_limit: STORE_PAGE,
-          p_offset: offsets[i],
-        })
-        if (error) throw error
-        pages[i] = (data ?? []) as StoreFillRow[]
-        loaded += pages[i].length
-        onPage?.(loaded)
-      }
-    }
-    await Promise.all(
-      Array.from({ length: Math.min(STORE_CONCURRENCY, offsets.length) }, worker)
-    )
-    return { fills: pages.flat().map(storeRowToFill), capped: false }
+  const { data, error } = await supabase.rpc('replay_wallet_fills_json', {
+    p_wallet: address.toLowerCase(),
+    p_coin: coin ?? '',
+    p_limit: STORE_MAX_FILLS,
+  })
+  if (error) throw error
+  const payload = (data ?? { total: 0, n: 0, rows: [] }) as {
+    total: number
+    n: number
+    rows: StoreFillRow[]
   }
-
-  // Over the cap: newest-first sequential walk, so the served slice is the
-  // most recent history; the truncation is declared in coverage.
-  const rows: StoreFillRow[] = []
-  for (let offset = 0; offset < STORE_MAX_FILLS; offset += STORE_PAGE) {
-    const { data, error } = await supabase.rpc('replay_wallet_fills_desc', {
-      ...args,
-      p_limit: STORE_PAGE,
-      p_offset: offset,
-    })
-    if (error) throw error
-    const page = (data ?? []) as StoreFillRow[]
-    rows.push(...page)
-    onPage?.(rows.length)
-    if (page.length < STORE_PAGE) {
-      return { fills: rows.reverse().map(storeRowToFill), capped: false }
-    }
+  const rows = payload.rows ?? []
+  onPage?.(rows.length)
+  return {
+    fills: rows.map(storeRowToFill),
+    capped: Number(payload.total) > rows.length,
   }
-  return { fills: rows.reverse().map(storeRowToFill), capped: true }
 }
 
 async function hlPost<T>(payload: Record<string, unknown>): Promise<T | null> {
