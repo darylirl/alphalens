@@ -23,7 +23,9 @@ Documentation with real examples: https://alphalens-taupe.vercel.app/docs/api
 - https://alphalens-taupe.vercel.app/research — Published research and verdicts, failures included
 - https://alphalens-taupe.vercel.app/cohort — The tracked cohort: which wallets, classified how, and the capture methodology
 - https://alphalens-taupe.vercel.app/ledger/methodology — How calls are published, scored, and why data gaps are never scored
+- https://alphalens-taupe.vercel.app/card — Wallet Report Card entry point: paste any address, or try a live example wallet from the capture cohort
 - https://alphalens-taupe.vercel.app/card/{address} — Wallet Report Card for any pasted address: graded measured history with statistical floors and honest coverage labels
+- https://alphalens-taupe.vercel.app/replay — Trade replay entry point: paste any address, or try a live example wallet from the capture cohort
 - https://alphalens-taupe.vercel.app/replay/{address} — Trade replay for any pasted address: animated playback of real fills on real candles at exchange-exact execution prices, with an exportable clip that carries its coverage strip
 
 Nothing published by AlphaLens is financial advice or a recommendation; it shows data and costs, and decisions stay with the reader.

@@ -12,6 +12,8 @@ const staticRoutes: Array<{ path: string; priority: number }> = [
   { path: '/research', priority: 0.9 },
   { path: '/research/copy-trading-autopsy', priority: 0.8 },
   { path: '/cohort', priority: 0.8 },
+  { path: '/card', priority: 0.8 },
+  { path: '/replay', priority: 0.8 },
   { path: '/ledger/methodology', priority: 0.7 },
   { path: '/docs/api', priority: 0.7 },
   { path: '/pulse', priority: 0.7 },

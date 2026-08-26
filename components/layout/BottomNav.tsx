@@ -2,20 +2,23 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { TrendingUp, BookOpenCheck, FlaskConical, Crosshair, MoreHorizontal } from 'lucide-react'
+import { TrendingUp, BookOpenCheck, FlaskConical, Award, Clapperboard, MoreHorizontal } from 'lucide-react'
 
 // Mirrors the desktop nav ranking: Pulse, then the differentiators (Ledger,
-// Research), then Explorer; everything else is one tap away under More.
+// Research), then the paste-an-address consumer surfaces (Card, Replay);
+// everything else is one tap away under More.
 const tabs = [
   { href: '/pulse', icon: TrendingUp, label: 'Pulse' },
   { href: '/ledger', icon: BookOpenCheck, label: 'Ledger' },
   { href: '/research', icon: FlaskConical, label: 'Research' },
-  { href: '/hunters', icon: Crosshair, label: 'Explorer' },
+  { href: '/card', icon: Award, label: 'Card' },
+  { href: '/replay', icon: Clapperboard, label: 'Replay' },
 ]
 
 // /copy-trade is intentionally absent: quarantined pending repositioning —
 // our own backtests showed naive copy-trading loses money (see app/copy-trade).
 const moreLinks = [
+  { href: '/hunters', label: 'Explorer' },
   { href: '/wallets', label: 'Wallets' },
   { href: '/smart-money', label: 'Smart Money' },
   { href: '/performance', label: 'Performance' },
