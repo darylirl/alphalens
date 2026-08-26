@@ -123,8 +123,21 @@ export interface FillsWindow {
   toMs: number
 }
 
-/** Captured fills from our store, newest-first paged then reversed to
- *  ascending. Only rows the capture daemon wrote (`tid is not null`). */
+/** Captured fills from our store. Only rows the capture daemon wrote
+ *  (`tid is not null`).
+ *
+ *  Ordering is (timestamp, tid) — deterministic. Ordering by timestamp alone
+ *  left same-millisecond fills in arbitrary per-query order, and a burst's
+ *  internal order decides where the running position crosses zero: two reads
+ *  of the SAME data detected different episode boundaries.
+ *
+ *  Unwindowed reads page newest-first (the most recent STORE_MAX_FILLS) and
+ *  reverse. Windowed (curated-episode) reads page OLDEST-first instead:
+ *  the capture daemon inserts live rows inside a window whose pad reaches
+ *  "now", and with descending offset pagination each insert shifts every
+ *  later offset — rows drop out between pages and the false gaps read as
+ *  episode breaks. Ascending pages are prefixes of an append-only sequence,
+ *  so concurrent inserts cannot displace them. */
 async function loadStoreFills(
   address: string,
   coin?: string,
@@ -132,6 +145,7 @@ async function loadStoreFills(
   window?: FillsWindow
 ): Promise<{ fills: Fill[]; capped: boolean }> {
   const supabase = getSupabase()
+  const ascending = Boolean(window)
   const rows: StoreFillRow[] = []
   for (let offset = 0; offset < STORE_MAX_FILLS; offset += STORE_PAGE) {
     let query = supabase
@@ -146,31 +160,50 @@ async function loadStoreFills(
         .lte('timestamp', new Date(window.toMs).toISOString())
     }
     const { data, error } = await query
-      .order('timestamp', { ascending: false })
+      .order('timestamp', { ascending })
+      .order('tid', { ascending })
       .range(offset, offset + STORE_PAGE - 1)
     if (error) throw error
     const page = (data ?? []) as StoreFillRow[]
     rows.push(...page)
     onPage?.(rows.length)
     if (page.length < STORE_PAGE) {
-      return { fills: rows.reverse().map(storeRowToFill), capped: false }
+      if (!ascending) rows.reverse()
+      return { fills: rows.map(storeRowToFill), capped: false }
     }
   }
-  return { fills: rows.reverse().map(storeRowToFill), capped: true }
+  if (!ascending) rows.reverse()
+  return { fills: rows.map(storeRowToFill), capped: true }
 }
 
-async function hlPost<T>(payload: Record<string, unknown>): Promise<T | null> {
-  try {
-    const res = await fetch(HL_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-      cache: 'no-store',
-    })
-    if (!res.ok) return null
-    return (await res.json()) as T
-  } catch {
-    return null
+/** POST to the exchange info API. A failed request THROWS — it must never
+ *  yield null that a caller could mistake for "no fills": an empty array
+ *  dressed as no trades is the exact dishonesty this module's contract
+ *  forbids (a rate-limited build once cached an empty doc this way).
+ *  Rate limits (429) and transient 5xx get two bounded retries. */
+async function hlPost<T>(payload: Record<string, unknown>): Promise<T> {
+  const delays = [2_000, 8_000]
+  for (let attempt = 0; ; attempt++) {
+    let status = 0
+    try {
+      const res = await fetch(HL_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        cache: 'no-store',
+      })
+      if (res.ok) return (await res.json()) as T
+      status = res.status
+      if (attempt >= delays.length || (status < 500 && status !== 429)) {
+        throw new Error(`Hyperliquid info API answered ${status}`)
+      }
+    } catch (err) {
+      const transient = status === 429 || status >= 500 || status === 0
+      if (attempt >= delays.length || !transient) {
+        throw err instanceof Error ? err : new Error('Hyperliquid info API unreachable')
+      }
+    }
+    await new Promise(r => setTimeout(r, delays[attempt]))
   }
 }
 
