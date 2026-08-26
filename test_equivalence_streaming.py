@@ -229,6 +229,11 @@ def main():
                     help="narrow: the structurally hardest days at full "
                          "resolution. wide: a 210-day contiguous run at "
                          "sampled hours, so levels 2 and 3 have real work.")
+    ap.add_argument("--band-lo", type=int, default=2_000,
+                    help="wide tier: minimum subset fill count for a wallet")
+    ap.add_argument("--band-hi", type=int, default=60_000,
+                    help="wide tier: maximum subset fill count. Bounds the OLD "
+                         "path's memory, which is what caps this tier.")
     ap.add_argument("--no-portfolio", action="store_true",
                     help="skip API portfolio fetch; both paths get the same "
                          "empty portfolio, so equivalence still holds")
@@ -288,7 +293,7 @@ def main():
     addrs = set(arch)
     print(f"\nuniverse: {len(addrs):,} wallets")
 
-    band = (2_000, 60_000) if args.tier == "wide" else None
+    band = (args.band_lo, args.band_hi) if args.tier == "wide" else None
     chosen, counts, liq_wallets = choose_wallets(addrs, cache_root, band=band)
     chosen_set = set(chosen)
     print(f"chosen subset: {len(chosen)} wallets "
@@ -449,8 +454,16 @@ def main():
               f"{mismatches[k]} differ" if mismatches[k] else "")
     print(f"  compared {compared} evaluable (wallet, date) pairs; "
           f"{excluded} excluded identically by both")
-    check("level 2 actually compared something (a vacuous pass is not a pass)",
-          compared > 0, f"{compared} evaluable (wallet, date) pairs")
+    if args.tier == "wide":
+        check("level 2 actually compared something (a vacuous pass is not a pass)",
+              compared > 0, f"{compared} evaluable (wallet, date) pairs")
+    elif compared == 0:
+        print("  NOTE  level 2 not exercised by the narrow tier — four days "
+              "cannot fill a 60-day window. The wide tier covers it.")
+        notes.append("Narrow tier does not exercise levels 2-3: its four days "
+                     "cannot fill a 60-day trailing window, so no wallet clears "
+                     "the eligibility floor. That is a property of the subset, "
+                     "not a result; the wide tier exercises them.")
 
     # ── Level 3: final S scores ─────────────────────────────────────────────
     print("\n── level 3: final S scores ──")
@@ -496,8 +509,11 @@ def main():
     # which is vacuous: four days cannot fill a 60-day trailing window, so no
     # wallet cleared the eligibility floor and level 3 ran empty while showing
     # green. Same failure mode as a fixture that agrees with its parser.
-    check("level 3 actually compared something (a vacuous pass is not a pass)",
-          s_total > 0, f"{s_total} scored wallet-dates compared")
+    if args.tier == "wide":
+        check("level 3 actually compared something (a vacuous pass is not a pass)",
+              s_total > 0, f"{s_total} scored wallet-dates compared")
+    elif s_total == 0:
+        print("  NOTE  level 3 not exercised by the narrow tier (see above).")
 
     write_artifact(picked, chosen, counts, liq_wallets, decisions, stats,
                    compared, excluded, s_total, t_old, t_new, tier=args.tier)
