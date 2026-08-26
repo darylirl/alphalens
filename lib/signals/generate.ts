@@ -25,20 +25,23 @@ interface GeneratedSignal {
 }
 
 /**
- * Fetch label, tags, and confidence for a wallet in a single query.
- * Confidence derives from the measured win rate (real round trips only —
- * the seed pipeline stores null when there is no evidence).
+ * Fetch label, tags, archetype, and confidence for a wallet in a single
+ * query. Confidence derives from the measured win rate (real round trips
+ * only — the seed pipeline stores null when there is no evidence). A failed
+ * read returns archetype null, which the caller treats as ineligible — a
+ * wallet we cannot classify right now must not produce a signal.
  */
 async function getWalletProfile(address: string): Promise<{
   label: string | null
   tags: string[]
+  archetype: string | null
   confidence: 'high' | 'medium' | 'low'
 }> {
   try {
     const supabase = getSupabase()
     const { data } = await supabase
       .from('wallets')
-      .select('win_rate, label, tags')
+      .select('win_rate, label, tags, archetype')
       .eq('address', address)
       .single()
 
@@ -50,10 +53,26 @@ async function getWalletProfile(address: string): Promise<{
       else confidence = 'low'
     }
 
-    return { label: data?.label || null, tags: data?.tags || [], confidence }
+    return {
+      label: data?.label || null,
+      tags: data?.tags || [],
+      archetype: data?.archetype ?? null,
+      confidence,
+    }
   } catch {
-    return { label: null, tags: [], confidence: 'medium' }
+    return { label: null, tags: [], archetype: null, confidence: 'medium' }
   }
+}
+
+/**
+ * Archetype gate: signals may only come from wallets with a classified,
+ * non-market_maker archetype. Market-maker flow is two-sided inventory
+ * churn, not directional signal (see migration 016); an unclassified wallet
+ * is ineligible because we cannot call flow smart money before knowing what
+ * kind of flow it is.
+ */
+function isSignalEligible(archetype: string | null): boolean {
+  return archetype !== null && archetype !== 'market_maker'
 }
 
 /**
@@ -94,6 +113,7 @@ export async function maybeGenerateSignal(trade: TradeEvent): Promise<GeneratedS
     if (existing && existing.length > 0) continue
 
     const profile = await getWalletProfile(address)
+    if (!isSignalEligible(profile.archetype)) continue
 
     const signal: GeneratedSignal = {
       signal_id: crypto.randomUUID(),
