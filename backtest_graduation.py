@@ -1476,9 +1476,9 @@ def main():
         spill_dir = Path(args.spill_dir) if args.spill_dir else (REPO / "s3_spill")
         print(f"\nStreaming the archive into per-wallet spills at {spill_dir} ...")
         st = s3_stream.spill_archive(addresses, spill_dir, 0, now_ms)
-        print(f"  spilled {st['kept']:,} in-universe fills from "
+        print(f"  spilled {st['kept']:,} in-universe fill records from "
               f"{st['objects']:,} objects "
-              f"({st['seam_dupes']:,} seam duplicates dropped)")
+              f"(duplicates are removed per wallet at read time)")
     elif s3["present"]:
         print("\nReading the archive cache with the in-memory loader...")
         print("  NOTE: this retains the whole filtered tape. Measured at "

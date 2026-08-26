@@ -40,11 +40,13 @@ replacement path, built to be provably equivalent rather than plausibly so:
     concatenates in the same first-appearance order before the same sort.
     Anything else could reorder equal close_ts and shift the post-loss pool.
 
-Two details are load-bearing and deliberate. The spill stores exactly the
-nine-key dict the old loader built, including its omission of feeToken, which
-makes fee_usd() treat archive fees as USDC. And seam de-duplication is scoped
-to the days both datasets actually cover: a global `seen` set over 1.28 billion
-fills would cost more than the fills it guards.
+Two details are load-bearing and deliberate. The spill stores the nine-key
+dict the old loader built — including its omission of feeToken, which makes
+fee_usd() treat archive fees as USDC — plus tid, which the read path needs to
+reproduce the old de-duplication key. And de-duplication happens at READ time,
+per wallet: the old loader's global `seen` set would span 1.28 billion fills,
+but its keys embed the address, so per-wallet de-duplication is equivalent to
+it, and a time-ordered stream bounds the working set to one timestamp group.
 """
 
 import heapq
@@ -142,27 +144,19 @@ def spill_archive(addresses: set, spill_dir: Path, start_ms: int, end_ms: int,
                   cache_root: Path = None, progress_every: int = 250) -> dict:
     """One pass over the archive cache, writing per-(dataset, wallet) spills.
 
-    Produces exactly the records load_s3_fills() would have kept — same address
-    filter, same time bounds, same nine-key shape, same seam de-duplication on
-    the venue trade id — but on disk, in chronological order, instead of in RAM.
+    Same address filter, same time bounds, same record shape as
+    load_s3_fills(), but on disk and in chronological order. Duplicates are NOT
+    removed here — that happens per wallet in merged_fills(), where it can be
+    done exactly without a universe-wide set.
     """
     frame = _lz4()
     cache_root = cache_root or G.S3_CACHE
     present = [d for d in G.S3_FILL_DATASETS if (cache_root / d).exists()]
     if not present:
-        return {"objects": 0, "kept": 0, "bad": 0, "seam_dupes": 0, "datasets": []}
+        return {"objects": 0, "kept": 0, "bad": 0, "datasets": []}
 
-    # Seam scope: only days covered by more than one dataset can duplicate, so
-    # only those need a `seen` set. Over the real union that is a single day.
-    day_counts: dict = defaultdict(int)
-    for d in present:
-        for day in dataset_days(cache_root, d):
-            day_counts[day] += 1
-    seam_days = {d for d, n in day_counts.items() if n > 1}
-
-    kept = bad = dupes = 0
+    kept = bad = 0
     total_objs = 0
-    seen: set = set()
     for dataset in present:
         root = cache_root / dataset
         objects = sorted((p for p in root.rglob("*.lz4") if p.is_file()),
@@ -170,7 +164,6 @@ def spill_archive(addresses: set, spill_dir: Path, start_ms: int, end_ms: int,
         total_objs += len(objects)
         writer = _SpillWriter(spill_dir, dataset)
         for n, path in enumerate(objects, 1):
-            in_seam = path.parent.name in seam_days
             try:
                 with frame.open(path, "rb") as fh:
                     for raw in fh:
@@ -195,16 +188,12 @@ def spill_archive(addresses: set, spill_dir: Path, start_ms: int, end_ms: int,
                             t = int(f["time"])
                             if not (start_ms <= t <= end_ms):
                                 continue
-                            if in_seam:
-                                tid = f.get("tid")
-                                key = ((u, "tid", tid) if tid is not None else
-                                       (u, t, f["coin"], str(f["px"]),
-                                        str(f["sz"]), f["side"]))
-                                if key in seen:
-                                    dupes += 1
-                                    continue
-                                seen.add(key)
                             writer.add(u, {
+                                # tid is carried so the READ path can reproduce
+                                # load_s3_fills' de-duplication key. It is inert
+                                # for the metrics: WalletData reads named keys
+                                # and ignores anything extra.
+                                "tid": f.get("tid"),
                                 "time": t, "coin": f["coin"], "px": f["px"],
                                 "sz": f["sz"], "side": f["side"],
                                 "startPosition": f.get("startPosition"),
@@ -219,13 +208,23 @@ def spill_archive(addresses: set, spill_dir: Path, start_ms: int, end_ms: int,
                          f"{exc}. Re-run s3_backfill.py rather than skipping it.")
             if n % progress_every == 0 or n == len(objects):
                 print(f"  spill[{dataset}]: {n}/{len(objects)} objects, "
-                      f"{kept:,} fills, {dupes:,} seam dupes", flush=True)
+                      f"{kept:,} fills", flush=True)
         writer.flush()
     if bad:
         print(f"  spill: WARNING {bad:,} archive lines could not be parsed as fills")
     return {"objects": total_objs, "kept": kept, "bad": bad,
-            "seam_dupes": dupes, "datasets": present,
-            "seam_days": sorted(seam_days)}
+            "datasets": present}
+
+
+def dedup_key(address: str, f: dict):
+    """load_s3_fills' de-duplication key, verbatim. Keys embed the address, so
+    de-duplicating within one wallet's stream is equivalent to the old loader's
+    global set — two wallets can never collide."""
+    tid = f.get("tid")
+    if tid is not None:
+        return (address, "tid", tid)
+    return (address, int(f["time"]), f["coin"], str(f["px"]), str(f["sz"]),
+            f["side"])
 
 
 def iter_spill(spill_dir: Path, dataset: str, address: str):
@@ -244,25 +243,49 @@ def iter_spill(spill_dir: Path, dataset: str, address: str):
 
 def merged_fills(spill_dir: Path, address: str, api_fills: list,
                  datasets=None):
-    """Lazy k-way merge of the API tape and each dataset's spill, in time order.
+    """Lazy k-way merge of the API tape and each dataset's spill, in time order,
+    de-duplicated exactly as load_s3_fills + merge_fills were.
 
-    Reproduces merge_fills(): the API tape wins, and an archive fill matching
-    one on (time, coin, px, sz, side) is dropped rather than double-counted.
-    Nothing here builds a list, so peak memory is one fill, not one wallet.
+    De-duplication lives HERE, not in the spill. The old loader holds one global
+    `seen` set across the whole tape; at full-universe scale that set would span
+    1.28e9 fills and cost more than the fills it guards. But its keys embed the
+    address, so two wallets can never collide, and de-duplicating within one
+    wallet's stream is therefore equivalent to the global set — with memory
+    bounded by one wallet instead of the universe.
+
+    Bounded further: the merged archive stream is time-ordered and a duplicate
+    of a fill carries that fill's timestamp, so duplicates are always adjacent.
+    Only the keys of the current timestamp group need to be held, which is a
+    handful of fills rather than a wallet's worth.
+
+    The API tape then wins over the archive on (time, coin, px, sz, side),
+    reproducing merge_fills().
     """
     datasets = datasets or G.S3_FILL_DATASETS
     api_sorted = sorted(api_fills or [], key=lambda f: f["time"])
-    seen = {(f["time"], f["coin"], str(f["px"]), str(f["sz"]), f["side"])
-            for f in api_sorted}
+    api_seen = {(f["time"], f["coin"], str(f["px"]), str(f["sz"]), f["side"])
+                for f in api_sorted}
 
-    def archive_stream(ds):
-        for f in iter_spill(spill_dir, ds, address):
-            k = (f["time"], f["coin"], str(f["px"]), str(f["sz"]), f["side"])
-            if k not in seen:
-                yield f
+    archive = heapq.merge(*(iter_spill(spill_dir, d, address) for d in datasets),
+                          key=lambda f: f["time"])
 
-    streams = [iter(api_sorted)] + [archive_stream(d) for d in datasets]
-    return heapq.merge(*streams, key=lambda f: f["time"])
+    def deduped():
+        group_t = object()
+        group: set = set()
+        for f in archive:
+            t = f["time"]
+            if t != group_t:
+                group_t, group = t, set()
+            k = dedup_key(address, f)
+            if k in group:
+                continue                      # same fill seen twice
+            group.add(k)
+            if (f["time"], f["coin"], str(f["px"]), str(f["sz"]),
+                    f["side"]) in api_seen:
+                continue                      # the API tape already has it
+            yield f
+
+    return heapq.merge(iter(api_sorted), deduped(), key=lambda f: f["time"])
 
 
 class StreamingWalletData(G.WalletData):

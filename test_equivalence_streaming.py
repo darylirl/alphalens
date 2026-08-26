@@ -340,20 +340,35 @@ def main():
     t_new = time.time() - t0
     G.S3_CACHE = old_cache
     print(f"  built {len(new)} wallets in {t_new:.1f}s "
-          f"(spill: {stats['kept']:,} fills, {stats['seam_dupes']:,} seam dupes)")
-    # Measured, not assumed: on 2025-07-27 the datasets are COMPLEMENTARY, not
-    # overlapping. node_fills hour 8 runs 08:00:00.018..08:45:48.664 and
-    # by_block hour 8 runs 08:50:10.273..08:59:59.895, with zero
-    # (address, tid) intersection. There is nothing to de-duplicate, so
-    # asserting that de-duplication fires would assert a property the archive
-    # does not have — the same mistake the by_block fixtures made.
-    check("seam de-duplication drops nothing, because the datasets are "
-          "complementary rather than overlapping (measured)",
-          stats["seam_dupes"] == 0, f"{stats['seam_dupes']:,} dropped")
+          f"(spill: {stats['kept']:,} raw fill records)")
+    # How much de-duplication the read path actually did. The spill is raw, so
+    # this is the count merged_fills() removed. Reported rather than asserted
+    # non-zero: whether duplicates exist is a property of the archive, not of
+    # the code, and asserting one would repeat the seam mistake.
+    dupes_removed = 0
+    for a in chosen:
+        raw = sum(1 for ds in G.S3_FILL_DATASETS
+                  for _ in S.iter_spill(SPILL, ds, a))
+        ded = sum(1 for _ in S.merged_fills(SPILL, a, []))
+        dupes_removed += raw - ded
+    print(f"  read-path de-duplication removed {dupes_removed:,} duplicate "
+          f"archive records across {len(chosen)} wallets")
+    notes.append(f"Read-path de-duplication removed {dupes_removed:,} duplicate "
+                 f"archive records in this subset. The old loader removes these "
+                 f"with one global set; the streaming path removes them per "
+                 f"wallet, which is equivalent because the key embeds the "
+                 f"address.")
+
+    # The spill keeps duplicates; merged_fills() removes them per wallet at
+    # read time. What matters is that the wallets agree, which levels 1-3 test.
+    # Recorded for the artifact: on 2025-07-27 the two datasets are
+    # COMPLEMENTARY, not overlapping — node_fills hour 8 runs
+    # 08:00:00.018..08:45:48.664, by_block hour 8 runs 08:50:10.273..08:59:59.895,
+    # zero (address, tid) intersection.
     notes.append("Seam 2025-07-27 is a clean cutover, not an overlap: "
                  "node_fills ends 08:45:48.664, by_block starts 08:50:10.273, "
                  "0 (address, tid) intersection. The 4m22s between them is a "
-                 "coverage GAP, reported here rather than read as no trading.")
+                 "coverage GAP, reported rather than read as no trading.")
 
     # ── Level 1: per-(wallet, day) summaries ────────────────────────────────
     print("\n── level 1: per-(wallet, day) summaries ──")
@@ -549,8 +564,8 @@ def write_artifact(picked, chosen, counts, liq_wallets, decisions, stats,
     L.append(f"- heaviest wallet in subset: {counts[chosen[0]]:,} fills")
     L.append(f"- wallets with liquidations in subset: "
              f"{len(set(chosen) & liq_wallets)}")
-    L.append(f"- seam duplicates dropped by the new path: "
-             f"**{stats['seam_dupes']:,}**")
+    L.append(f"- raw fill records spilled: {stats['kept']:,} "
+             f"(duplicates removed per wallet at read time, not in the spill)")
     L.append(f"- decision dates compared: {len(decisions)}\n")
     L.append("### Comparison\n")
     L.append("Exact for integers and sequences; ULP-scale (1e-12 relative) for")
