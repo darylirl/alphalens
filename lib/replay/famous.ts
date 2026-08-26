@@ -47,8 +47,16 @@ export interface FamousReplay {
    *  own rule decides (cohort wallets read our capture store, everyone else
    *  the exchange window). Set to 'exchange' when a curated episode lies
    *  OUTSIDE a cohort wallet's captured range: the wallet is capture_enabled,
-   *  so the default rule would read the store and find nothing there. The
-   *  coverage note must say why. */
+   *  so the default rule would read the store and find nothing there.
+   *
+   *  This also makes the entry REPRODUCIBLE, which is not a hypothetical:
+   *  the comeback entry's wallet entered capture scope the same day it was
+   *  curated, and the daemon began backfilling it — our store for that wallet
+   *  went from 63,903 fills ending 2026-06-29 to 79,579 ending 2026-07-23
+   *  within six hours, and is still advancing toward the pinned episode.
+   *  Without a pinned source, the tape answering a rebuild would depend on
+   *  WHEN it ran. The coverage note must say which source and why.
+   */
   fills_source?: 'store' | 'exchange'
   /** A claim about this wallet we can NAME but have not verified from fills,
    *  with the reason and the path that would verify it. Rendered as an
