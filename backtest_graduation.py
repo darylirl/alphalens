@@ -1146,11 +1146,17 @@ def s3_cache_state() -> dict:
 
 
 def _normalise_s3_fill(rec: dict):
-    """node_fills records appear either flat or wrapped in a node envelope.
-    Returns the fill dict in the same shape fetch_fills() produces, or None if
-    the record is not a fill. A record whose shape is unrecognised is a hard
-    error, not a skipped line: silently dropping unparsed archive rows would
-    manufacture gaps that read as 'this wallet did not trade'."""
+    """Normalise one archive line into [(address, fill), ...], in the same
+    fill shape fetch_fills() produces. Returns None when the line is not a
+    recognisable fill record.
+
+    The caller COUNTS those Nones and reports the total (`s3: WARNING n
+    archive lines could not be parsed as fills`); it does not abort the run.
+    That count is the point: unparsed lines are a coverage defect, and a defect
+    that is surfaced can be judged, while one that is silently skipped
+    manufactures gaps that read as "this wallet did not trade". Aborting a
+    272 GiB read on a single malformed third-party line would be the wrong
+    trade; hiding the tally would be dishonest. Neither happens."""
     # Verified real shape (node_fills/hourly/*.lz4): each line is a two-element
     # JSON array, [address, fill]. This is checked before the dict branches
     # because a list has no .get() and would otherwise raise.
