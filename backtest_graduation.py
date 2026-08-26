@@ -1125,8 +1125,14 @@ def s3_cache_state() -> dict:
         ds = parts[0]
         datasets[ds]["objects"] += 1
         datasets[ds]["bytes"] += p.stat().st_size
-        if len(parts) > 1 and len(parts[1]) == 8 and parts[1].isdigit():
-            datasets[ds]["days"].add(parts[1])
+        # The cache mirrors the S3 key, whose depth varies by dataset
+        # (node_fills/hourly/{ymd}/{H}.lz4 vs asset_ctxs/{ymd}.csv.lz4), so the
+        # day is located by shape, not by position.
+        for seg in parts[1:]:
+            stem = seg.split(".")[0]
+            if len(stem) == 8 and stem.isdigit():
+                datasets[ds]["days"].add(stem)
+                break
     out = {}
     for ds, v in datasets.items():
         days = sorted(v["days"])
@@ -1145,6 +1151,25 @@ def _normalise_s3_fill(rec: dict):
     the record is not a fill. A record whose shape is unrecognised is a hard
     error, not a skipped line: silently dropping unparsed archive rows would
     manufacture gaps that read as 'this wallet did not trade'."""
+    # Verified real shape (node_fills/hourly/*.lz4): each line is a two-element
+    # JSON array, [address, fill]. This is checked before the dict branches
+    # because a list has no .get() and would otherwise raise.
+    if isinstance(rec, list):
+        if len(rec) == 2 and isinstance(rec[0], str) and isinstance(rec[1], dict):
+            return [(rec[0], rec[1])]
+        # node_fills_by_block wraps a block's fills: [meta, [[addr, fill], ...]]
+        if len(rec) == 2 and isinstance(rec[1], list):
+            pairs = []
+            for item in rec[1]:
+                if (isinstance(item, list) and len(item) == 2
+                        and isinstance(item[0], str) and isinstance(item[1], dict)):
+                    pairs.append((item[0], item[1]))
+                else:
+                    return None
+            return pairs
+        return None
+    if not isinstance(rec, dict):
+        return None
     if "raw" in rec and isinstance(rec.get("raw"), dict):
         data = rec["raw"].get("data", rec["raw"])
         if isinstance(data, dict) and "fills" in data:
@@ -1157,66 +1182,96 @@ def _normalise_s3_fill(rec: dict):
     return None
 
 
+# The per-fill tape lives in two datasets that are contiguous in time, not
+# alternatives: node_fills is the legacy format and stops at 2025-07-27;
+# node_fills_by_block picks up the same day and runs to the present. Both are
+# read, and the seam day is de-duplicated below.
+S3_FILL_DATASETS = ("node_fills", "node_fills_by_block")
+
+
 def load_s3_fills(addresses: set, start_ms: int, end_ms: int) -> dict:
-    """Read node_fills objects from the local cache into {address: [fills]}.
+    """Read the archive tape from the local cache into {address: [fills]}.
+
+    Objects are STREAM-decompressed one line at a time. The whole-file
+    lz4.frame.decompress(read_bytes()) form this replaced held both the
+    compressed object and its full expansion in memory at once; at ~0.6 GiB of
+    compressed tape per archive day that is not survivable, and it is the
+    reason the cache must be consumed incrementally rather than loaded.
 
     Only the requested addresses are retained; the archive is a full-venue tape
-    and holding all of it in memory is neither necessary nor possible. Returns
-    {} when the cache holds no node_fills dataset — the caller reports that as
-    absent coverage, never as a wallet that did not trade."""
-    root = S3_CACHE / "node_fills"
-    if not root.exists():
+    and holding all of it is neither necessary nor possible. Returns {} when
+    the cache holds no fills dataset — the caller reports that as absent
+    coverage, never as a wallet that did not trade."""
+    roots = [S3_CACHE / d for d in S3_FILL_DATASETS if (S3_CACHE / d).exists()]
+    if not roots:
         return {}
     try:
         import lz4.frame
     except ImportError:
-        sys.exit("s3_cache/node_fills is present but python-lz4 is missing: "
+        sys.exit("s3_cache/ holds archive objects but python-lz4 is missing: "
                  "pip3 install lz4")
     out: dict = defaultdict(list)
-    objects = sorted(p for p in root.rglob("*") if p.is_file())
+    objects = sorted(p for r in roots for p in r.rglob("*.lz4") if p.is_file())
+    # Identity of a fill across the format seam. tid is the venue's trade id and
+    # is stable between the two datasets; the tuple is the fallback when absent.
+    seen: set = set()
     bad = 0
-    for n, p in enumerate(objects, 1):
+    kept_by_ds: dict = defaultdict(int)
+    for n, path in enumerate(objects, 1):
+        ds = path.relative_to(S3_CACHE).parts[0]
         try:
-            blob = lz4.frame.decompress(p.read_bytes())
-        except Exception as exc:                               # noqa: BLE001
-            sys.exit(f"Corrupt archive object {p}: {type(exc).__name__}. "
-                     "Re-run s3_backfill.py rather than skipping it.")
-        for line in blob.decode("utf-8", "strict").splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                rec = json.loads(line)
-            except json.JSONDecodeError:
-                bad += 1
-                continue
-            pairs = _normalise_s3_fill(rec)
-            if pairs is None:
-                bad += 1
-                continue
-            for user, f in pairs:
-                if not user:
-                    continue
-                u = user.lower()
-                if u not in addresses:
-                    continue
-                t = int(f["time"])
-                if not (start_ms <= t <= end_ms):
-                    continue
-                out[u].append({
-                    "time": t, "coin": f["coin"], "px": f["px"], "sz": f["sz"],
-                    "side": f["side"],
-                    "startPosition": f.get("startPosition"),
-                    "closedPnl": f.get("closedPnl"),
-                    "fee": f.get("fee"),
-                    "liq": bool(f.get("liquidation") or f.get("liquidationMarkPx")),
-                })
-        if n % 200 == 0:
+            with lz4.frame.open(path, "rb") as fh:
+                for raw in fh:                     # one line at a time
+                    line = raw.strip()
+                    if not line:
+                        continue
+                    try:
+                        rec = json.loads(line)
+                    except json.JSONDecodeError:
+                        bad += 1
+                        continue
+                    pairs = _normalise_s3_fill(rec)
+                    if pairs is None:
+                        bad += 1
+                        continue
+                    for user, f in pairs:
+                        if not user:
+                            continue
+                        u = user.lower()
+                        if u not in addresses:
+                            continue
+                        t = int(f["time"])
+                        if not (start_ms <= t <= end_ms):
+                            continue
+                        tid = f.get("tid")
+                        key = ((u, "tid", tid) if tid is not None else
+                               (u, t, f["coin"], str(f["px"]), str(f["sz"]),
+                                f["side"]))
+                        if key in seen:
+                            continue           # seam overlap, not a second fill
+                        seen.add(key)
+                        out[u].append({
+                            "time": t, "coin": f["coin"], "px": f["px"],
+                            "sz": f["sz"], "side": f["side"],
+                            "startPosition": f.get("startPosition"),
+                            "closedPnl": f.get("closedPnl"),
+                            "fee": f.get("fee"),
+                            "liq": bool(f.get("liquidation")
+                                        or f.get("liquidationMarkPx")),
+                        })
+                        kept_by_ds[ds] += 1
+        except OSError as exc:
+            sys.exit(f"Corrupt archive object {path}: {type(exc).__name__}: "
+                     f"{exc}. Re-run s3_backfill.py rather than skipping it.")
+        if n % 200 == 0 or n == len(objects):
             print(f"  s3: {n}/{len(objects)} objects, "
                   f"{sum(len(v) for v in out.values()):,} fills kept", flush=True)
     if bad:
         # Reported, never hidden: unparsed lines are a coverage defect.
         print(f"  s3: WARNING {bad:,} archive lines could not be parsed as fills")
+    for ds in S3_FILL_DATASETS:
+        if kept_by_ds.get(ds):
+            print(f"  s3: {ds:<20} contributed {kept_by_ds[ds]:,} in-universe fills")
     for v in out.values():
         v.sort(key=lambda f: f["time"])
     return dict(out)
