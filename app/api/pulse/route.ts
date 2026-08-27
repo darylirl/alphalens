@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getSupabase } from '@/lib/db/supabase'
+import { shapePulseRow, type PulseRow } from '@/lib/pulse/shape'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,33 +30,12 @@ export async function GET() {
         .eq('service', 'capture').order('ts', { ascending: true }).limit(1),
     ])
 
-    const coins = (rows || [])
+    // Shaped by the shared mapper, not inline: the admin console's
+    // cohort-signal form derives calls from these same numbers, and two copies
+    // of this arithmetic could disagree while both looked authoritative.
+    const coins = ((rows || []) as PulseRow[])
       .filter(r => Number(r.notional_24h) > 0)
-      .map(r => {
-        const notional = Number(r.notional_24h)
-        const netFlow = Number(r.net_flow_24h)
-        const longPct = notional > 0 ? Math.round(((notional + netFlow) / (2 * notional)) * 100) : 50
-        const notionalPrev = Number(r.notional_prev)
-        const netFlowPrev = Number(r.net_flow_prev)
-        const longPctPrev = notionalPrev > 0
-          ? Math.round(((notionalPrev + netFlowPrev) / (2 * notionalPrev)) * 100)
-          : null
-        return {
-          coin: r.coin,
-          notionalUsd: Math.round(notional),
-          netFlowUsd: Math.round(netFlow),
-          longPct: Math.min(100, Math.max(0, longPct)),
-          longPctChange: longPctPrev !== null ? longPct - longPctPrev : null,
-          notionalChangePct: notionalPrev > 0
-            ? Math.round(((notional - notionalPrev) / notionalPrev) * 100)
-            : null,
-          newLongs: Number(r.new_longs_24h),
-          newShorts: Number(r.new_shorts_24h),
-          newNotionalUsd: Math.round(Number(r.new_notional_24h)),
-          addNotionalUsd: Math.round(Number(r.add_notional_24h)),
-          activeWallets: Number(r.wallets_24h),
-        }
-      })
+      .map(shapePulseRow)
 
     const lastTs = latest?.[0]?.ts ? new Date(latest[0].ts).getTime() : null
     const computedAt = rows?.[0]?.computed_at ?? null
