@@ -155,7 +155,44 @@ def spill_archive(addresses: set, spill_dir: Path, start_ms: int, end_ms: int,
     if not present:
         return {"objects": 0, "kept": 0, "bad": 0, "datasets": []}
 
-    kept = bad = 0
+    # Resume support. Spilling the full union takes hours and writes ~93 GiB;
+    # a re-run that appended a second copy would both double the disk and be a
+    # silent correctness hazard. Objects already spilled are skipped.
+    #
+    # Partial objects are safe to redo: merged_fills() de-duplicates per wallet
+    # at read time, so a handful of records written twice by an interrupted
+    # object are removed on the way back out. That is why the manifest can be
+    # flushed periodically rather than after every object.
+    manifest_path = spill_dir / "spill_manifest.json"
+    done: set = set()
+    prior_addrs = None
+    if manifest_path.exists():
+        try:
+            m = json.loads(manifest_path.read_text())
+            done = set(m.get("objects", []))
+            prior_addrs = set(m.get("addresses", [])) or None
+        except (json.JSONDecodeError, OSError):
+            done, prior_addrs = set(), None
+    if done:
+        print(f"  spill: resuming — {len(done):,} objects already spilled")
+
+    # The universe is live and can grow between a spill and the run that reads
+    # it. Wallets added afterwards have no archive coverage in this spill, and
+    # that has to be visible rather than read as a wallet that did not trade.
+    added = sorted(addresses - prior_addrs) if prior_addrs else []
+    if added:
+        print(f"  spill: WARNING {len(added):,} wallet(s) entered the universe "
+              f"after this spill was written and have NO archive coverage here")
+
+    spilled_addrs = set(prior_addrs) if prior_addrs else set(addresses)
+    spilled_addrs |= set(addresses)
+
+    def save_manifest(objs):
+        spill_dir.mkdir(parents=True, exist_ok=True)
+        manifest_path.write_text(json.dumps(
+            {"objects": sorted(objs), "addresses": sorted(spilled_addrs)}))
+
+    kept = bad = skipped = 0
     total_objs = 0
     for dataset in present:
         root = cache_root / dataset
@@ -164,6 +201,10 @@ def spill_archive(addresses: set, spill_dir: Path, start_ms: int, end_ms: int,
         total_objs += len(objects)
         writer = _SpillWriter(spill_dir, dataset)
         for n, path in enumerate(objects, 1):
+            rel = str(path.relative_to(cache_root))
+            if rel in done:
+                skipped += 1
+                continue
             try:
                 with frame.open(path, "rb") as fh:
                     for raw in fh:
@@ -206,14 +247,19 @@ def spill_archive(addresses: set, spill_dir: Path, start_ms: int, end_ms: int,
             except OSError as exc:
                 sys.exit(f"Corrupt archive object {path}: {type(exc).__name__}: "
                          f"{exc}. Re-run s3_backfill.py rather than skipping it.")
+            done.add(rel)
             if n % progress_every == 0 or n == len(objects):
+                writer.flush()
+                save_manifest(done)
                 print(f"  spill[{dataset}]: {n}/{len(objects)} objects, "
                       f"{kept:,} fills", flush=True)
         writer.flush()
+        save_manifest(done)
     if bad:
         print(f"  spill: WARNING {bad:,} archive lines could not be parsed as fills")
     return {"objects": total_objs, "kept": kept, "bad": bad,
-            "datasets": present}
+            "skipped": skipped, "datasets": present,
+            "addresses_without_coverage": added}
 
 
 def dedup_key(address: str, f: dict):
