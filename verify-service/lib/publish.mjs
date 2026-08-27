@@ -365,7 +365,9 @@ export function cohortSignalCall({
  * snapshot must not mint a second call for the same reading. A genuinely new
  * call needs a genuinely new snapshot.
  *
- * @returns {{published: boolean, call?: object, reasons?: string[]}}
+ * @param {object} input as accepted by cohortSignalCall
+ * @param {{log?: (msg: string) => void, db?: typeof sb}} [opts]
+ * @returns {Promise<{published: boolean, call?: object, reasons?: string[]}>}
  */
 export async function publishCohortSignal(input, { log = () => {}, db = sb } = {}) {
   const row = cohortSignalCall(input)

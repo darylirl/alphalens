@@ -7,6 +7,7 @@ import { EnqueuePanel } from './EnqueuePanel'
 import { JobsPanel } from './JobsPanel'
 import { WalletsPanel } from './WalletsPanel'
 import { PublishPanel } from './PublishPanel'
+import { CohortSignalPanel } from './CohortSignalPanel'
 import { MonitorPanel } from './MonitorPanel'
 
 const TABS = [
@@ -14,6 +15,7 @@ const TABS = [
   { id: 'jobs', label: 'Jobs' },
   { id: 'wallets', label: 'Wallets' },
   { id: 'publish', label: 'Ledger publishing' },
+  { id: 'signal', label: 'Publish cohort signal' },
   { id: 'monitor', label: 'Monitor' },
 ] as const
 
@@ -175,6 +177,7 @@ export function AdminConsole({
           {tab === 'jobs' && <JobsPanel publishStatus={publishStatus} />}
           {tab === 'wallets' && <WalletsPanel />}
           {tab === 'publish' && <PublishPanel publishStatus={publishStatus} />}
+          {tab === 'signal' && <CohortSignalPanel />}
           {tab === 'monitor' && <MonitorPanel />}
         </>
       )}
