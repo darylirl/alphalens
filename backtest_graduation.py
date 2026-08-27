@@ -205,7 +205,7 @@ UA = "alphalens-backtest-graduation/1.0"
 _last_hl_call = [0.0]
 
 
-def http_json(url: str, method: str = "GET", body=None, headers=None, retries: int = 4):
+def http_json(url: str, method: str = "GET", body=None, headers=None, retries: int = 8):
     payload = json.dumps(body).encode() if body is not None else None
     hdrs = {"Content-Type": "application/json", "User-Agent": UA}
     if headers:
@@ -218,10 +218,23 @@ def http_json(url: str, method: str = "GET", body=None, headers=None, retries: i
                 text = r.read().decode()
                 return json.loads(text) if text else None
         except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError,
-                json.JSONDecodeError):
+                json.JSONDecodeError) as exc:
             if attempt == retries:
                 raise
-            time.sleep(delay)
+            wait = delay
+            # 429 is a rate limit, not a fault: back off far harder than the
+            # generic case and honour Retry-After when the server sends one.
+            # The v1.2 run makes ~13 paginated calls per wallet across 7,064
+            # wallets, which is sustained enough that the old 2/4/8/16s ladder
+            # exhausted itself mid-run and lost the whole pass.
+            if isinstance(exc, urllib.error.HTTPError) and exc.code == 429:
+                ra = exc.headers.get("Retry-After") if exc.headers else None
+                try:
+                    wait = max(float(ra), delay) if ra else max(delay, 15.0)
+                except (TypeError, ValueError):
+                    wait = max(delay, 15.0)
+                wait = min(wait, 300.0)
+            time.sleep(wait)
             delay *= 2
     return None
 
@@ -347,8 +360,16 @@ def fetch_portfolio(address: str) -> dict:
             blob[key] = {
                 "avh": [[int(t), float(v)] for t, v in (seg.get("accountValueHistory") or [])],
                 "pnl": [[int(t), float(v)] for t, v in (seg.get("pnlHistory") or [])]}
-    except Exception:
-        blob["allTime"] = blob["perpAllTime"] = {"avh": [], "pnl": []}
+    except Exception as exc:                                   # noqa: BLE001
+        # A failed fetch is NOT an empty history. Caching {} here would record
+        # the absence of a measurement as a measurement: the wallet would be
+        # excluded as "no_equity_history" on every later run, permanently and
+        # silently, from one transient 429. Nothing is written, so a resumed
+        # run retries this wallet. (Repo invariant: missing data is never zero.)
+        raise RuntimeError(
+            f"portfolio fetch failed for {address}: {type(exc).__name__}: "
+            f"{str(exc)[:160]}. Not cached — re-run to retry this wallet."
+        ) from exc
     cache_file.write_text(json.dumps(blob))
     return blob
 
@@ -1379,6 +1400,7 @@ def merge_fills(api_fills: list, s3_fills: list) -> list:
 # ── Main ────────────────────────────────────────────────────────────────────
 
 def main():
+    global REHEARSAL_MODE, RESULTS, HL_THROTTLE_S
     ap = argparse.ArgumentParser(description="MERIT P0 graduated-book backtest v1.2")
     ap.add_argument("--coverage-only", action="store_true",
                     help="print the honest data coverage report and stop")
@@ -1393,6 +1415,9 @@ def main():
                          "S scores observable behavior, not our labels. The "
                          "narrower scopes are diagnostics and are labelled as "
                          "such in every output.")
+    ap.add_argument("--hl-throttle", type=float, default=None,
+                    help="seconds between Hyperliquid /info calls (default "
+                         "%.2f). Raise it if the run is taking 429s." % HL_THROTTLE_S)
     ap.add_argument("--streaming", action="store_true",
                     help="read the archive through s3_stream (spill + lazy "
                          "merge) instead of load_s3_fills. Required at "
@@ -1409,7 +1434,9 @@ def main():
                          "results produced with --limit are not the test")
     args = ap.parse_args()
 
-    global REHEARSAL_MODE, RESULTS
+    if args.hl_throttle is not None:
+        HL_THROTTLE_S = args.hl_throttle
+        print(f"Hyperliquid throttle set to {HL_THROTTLE_S:.2f}s between calls.")
     if args.rehearsal:
         REHEARSAL_MODE = True
         RESULTS = REPO / "backtest_results" / "graduation_REHEARSAL"
