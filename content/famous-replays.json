@@ -9,12 +9,11 @@
       "address": "0x847bd1ef4fede0fe191129894d63044843f4d473",
       "coin": "xyz:MU",
       "range": "ep:1787578061641-1787613068764",
-      "interval": "auto",
+      "interval": "5m",
       "bar_width": "5m bars",
-      "window": {
-        "from": "2026-08-24T13:27:41Z",
-        "to": "2026-08-24T23:11:08Z"
-      },
+      "fills_source": "store",
+      "interval_constraint": "Pinned to 5m. All six rungs (1m..1d) still reached this window when it was pinned on 2026-08-27; 5m is the rung the doc was built and verified on. The exchange retains ~4,900 bars per interval, so the 5m rung stops reaching this window around 2026-09-10 — after that a rebuild REFUSES rather than silently coarsening to 15m, and the entry needs re-pinning.",
+      "window": { "from": "2026-08-24T13:27:41Z", "to": "2026-08-24T23:11:08Z" },
       "pnl_usd": -502.97,
       "pnl_basis": "Net realized PnL over the pinned episode — the sum of the exchange's own closedPnl per fill (3,011 fills).",
       "coverage_note": "Replayed from the AlphaLens capture store; capture coverage for this wallet begins 2026-08-15. This is one episode, not the autopsy's measurement: run 1 replayed 7,499 COPIED trades over a different window and is reported in the research post, not here.",
@@ -23,9 +22,7 @@
         "at": "2026-08-26",
         "method": "Episode detected and summed with the repo's own detector over the wallet's real fills; both episode boundaries are real flat gaps over 10 minutes, and the doc rebuilds byte-identically."
       },
-      "sources": [
-        "/research/copy-trading-autopsy"
-      ],
+      "sources": ["/research/copy-trading-autopsy"],
       "research_href": "/research/copy-trading-autopsy"
     },
     {
@@ -36,12 +33,11 @@
       "address": "0x212444e5ace9d58706f53557a10bb69dee5d68d9",
       "coin": "TIA",
       "range": "ep:1787025635591-1787382248636",
-      "interval": "auto",
+      "interval": "1h",
       "bar_width": "1h bars",
-      "window": {
-        "from": "2026-08-18T04:00:35Z",
-        "to": "2026-08-22T07:04:08Z"
-      },
+      "fills_source": "store",
+      "interval_constraint": "Pinned to 1h. Servable rungs when pinned: 1m (from our own captured candles), 5m, 15m, 1h, 4h, 1d. The 1h rung stops reaching this window around 2027-03-10.",
+      "window": { "from": "2026-08-18T04:00:35Z", "to": "2026-08-22T07:04:08Z" },
       "pnl_usd": -522.11,
       "pnl_basis": "Net realized PnL over the pinned episode — the sum of the exchange's own closedPnl per fill (13 fills).",
       "coverage_note": "Replayed from the AlphaLens capture store; capture coverage begins 2026-08-15 and this position opened before capture began, so the replay is labelled a partial picture. This is one position, not the autopsy's measurement: run 2 replayed 28,318 COPIED trades across ten wallets over 13 months and is reported in the research post, not here.",
@@ -50,9 +46,7 @@
         "at": "2026-08-26",
         "method": "Episode detected and summed with the repo's own detector over the wallet's real fills; the doc rebuilds byte-identically."
       },
-      "sources": [
-        "/research/copy-trading-autopsy"
-      ],
+      "sources": ["/research/copy-trading-autopsy"],
       "research_href": "/research/copy-trading-autopsy"
     },
     {
@@ -63,12 +57,11 @@
       "address": "0xb317d2bc2d3d2df5fa441b5bae0ab9d8b07283ae",
       "coin": "ETH",
       "range": "ep:1768576249679-1769885032514",
-      "interval": "auto",
+      "interval": "4h",
       "bar_width": "4h bars",
-      "window": {
-        "from": "2026-01-16T15:10:49Z",
-        "to": "2026-01-31T18:43:52Z"
-      },
+      "fills_source": "exchange",
+      "interval_constraint": "Pinned to 4h. Only 4h and 1d still reach this January 2026 window — 1h aged past the exchange's ~4,900-bar retention, and we do not resample coarser data into finer bars. The 4h rung stops reaching it around 2028-04-11.",
+      "window": { "from": "2026-01-16T15:10:49Z", "to": "2026-01-31T18:43:52Z" },
       "pnl_usd": -195902275.59,
       "pnl_basis": "Net realized PnL over the pinned episode — the sum of the exchange's own closedPnl per fill (13,829 fills, peak position $739M).",
       "coverage_note": "Exchange-retained fills: the position predates the retained window, so the replay opens mid-position and says so. The reported October 2025 tariff-short profits predate retained fills and are quoted from press, never shown as our numbers.",
@@ -90,12 +83,11 @@
       "address": "0xb317d2bc2d3d2df5fa441b5bae0ab9d8b07283ae",
       "coin": "BTC",
       "range": "ep:1760965211274-1761182936340",
-      "interval": "auto",
+      "interval": "4h",
       "bar_width": "4h bars",
-      "window": {
-        "from": "2025-10-20T13:00:11Z",
-        "to": "2025-10-23T01:28:56Z"
-      },
+      "fills_source": "exchange",
+      "interval_constraint": "Pinned to 4h. Only 4h and 1d still reach this October 2025 window — 1h and finer aged past the exchange's ~4,900-bar retention. The 4h rung stops reaching it around 2028-01-15.",
+      "window": { "from": "2025-10-20T13:00:11Z", "to": "2025-10-23T01:28:56Z" },
       "pnl_usd": 6439486.85,
       "pnl_basis": "Net realized PnL over the pinned episode — the sum of the exchange's own closedPnl per fill (10,558 fills).",
       "coverage_note": "Exchange-retained fills begin 2025-10-20 mid-position: the short's reported opening (October 12–15) is not retained, so the replay covers the verified exit only and is labelled a partial picture.",
@@ -116,12 +108,11 @@
       "address": "0x0ddf9bae2af4b874b96d287a5ad42eb47138a902",
       "coin": "ETH",
       "range": "ep:1781969795895-1787172675479",
-      "interval": "auto",
+      "interval": "1d",
       "bar_width": "1d bars",
-      "window": {
-        "from": "2026-06-20T15:36:35Z",
-        "to": "2026-08-19T20:51:15Z"
-      },
+      "fills_source": "exchange",
+      "interval_constraint": "Pinned to 1d. The window spans 60 days, so 1h and 4h also reach it but hold far more bars than the document cap; 1d is the rung it was built and verified on. 15m and finer aged past the exchange's retention.",
+      "window": { "from": "2026-06-20T15:36:35Z", "to": "2026-08-19T20:51:15Z" },
       "pnl_usd": -24909572.82,
       "pnl_basis": "Net realized PnL over the pinned episode — the sum of the exchange's own closedPnl per fill (12,990 fills; a complete round trip from flat to flat).",
       "coverage_note": "Exchange-retained fills cover the full round trip, including the final liquidation cascade (fills timestamped 2026-08-19 20:50:47–20:51:15 UTC). Press reported the loss as $26.66M for the liquidation day; the pinned round trip nets −$24.9M because the wallet had realized gains earlier in the episode.",
@@ -141,12 +132,11 @@
       "address": "0x1f250df59a777d61cb8bd043c12970f3afe4f925",
       "coin": "BTC",
       "range": "ep:1753167480017-1753434844257",
-      "interval": "auto",
+      "interval": "4h",
       "bar_width": "4h bars",
-      "window": {
-        "from": "2025-07-22T06:58:00Z",
-        "to": "2025-07-25T09:14:04Z"
-      },
+      "fills_source": "exchange",
+      "interval_constraint": "Pinned to 4h. Only 4h and 1d still reach this July 2025 window — 1h and finer aged past the exchange's ~4,900-bar retention. The 4h rung stops reaching it around 2027-10-16.",
+      "window": { "from": "2025-07-22T06:58:00Z", "to": "2025-07-25T09:14:04Z" },
       "pnl_usd": -6283112.91,
       "pnl_basis": "Net realized PnL over the pinned episode — the sum of the exchange's own closedPnl per fill (7,749 fills; a complete round trip from flat to flat).",
       "coverage_note": "Exchange-retained fills cover the full round trip. His widely reported −$35M June 2025 stretch predates the retained fills and is quoted from press, never shown as our numbers. 1h bars are past exchange candle retention for July 2025, so the replay uses 4h bars.",
@@ -161,18 +151,18 @@
     },
     {
       "slug": "aguila-second-collapse",
+      "withheld": "Withheld 2026-08-26 pending re-verification. The gap-aware detector (lib/wallet-data/gaps.ts) finds TWO proven capture gaps inside this pinned episode in the fills the exchange serves today — 2025-07-29T07:46:26Z to 11:15:23Z (3.5h, 250.00 BTC of position change no served fill explains) and 2025-07-29T16:37:17Z to 07-30T12:10:42Z (19.6h, -64.64 BTC). An episode may not span a proven gap, so this one now splits into three, and the largest of them (ep:1753877442427-1754009508698) realized -$2,391,633.03 rather than the -$3,174,003.79 this entry states for the whole window. The stated figure was true of the fills verified on 2025-08-01; it is not a figure the player can reproduce today. Re-verify from a complete source (the Hyperliquid S3 archive) before republishing.",
       "title": "Aguila does it again",
       "story": "One week after the giveback week, the same wallet rebuilt to $150M of BTC and rode the next round trip to −$3.2M — the pattern, on tape, twice in ten days.",
       "source": "public",
       "address": "0x1f250df59a777d61cb8bd043c12970f3afe4f925",
       "coin": "BTC",
       "range": "ep:1753775111946-1754009508698",
-      "interval": "auto",
+      "interval": "4h",
       "bar_width": "4h bars",
-      "window": {
-        "from": "2025-07-29T07:45:11Z",
-        "to": "2025-08-01T00:51:48Z"
-      },
+      "fills_source": "exchange",
+      "interval_constraint": "Pinned to 4h. Only 4h and 1d still reach this July-August 2025 window — 1h and finer aged past the exchange's ~4,900-bar retention. The 4h rung stops reaching it around 2027-10-23.",
+      "window": { "from": "2025-07-29T07:45:11Z", "to": "2025-08-01T00:51:48Z" },
       "pnl_usd": -3174003.79,
       "pnl_basis": "Net realized PnL over the pinned episode — the sum of the exchange's own closedPnl per fill (8,039 fills; a complete round trip from flat to flat).",
       "coverage_note": "Exchange-retained fills cover the full round trip. 1h bars are past exchange candle retention for July 2025, so the replay uses 4h bars.",
@@ -182,23 +172,22 @@
       },
       "sources": [
         "https://blockchainreporter.net/aguilatrades-returns-with-high-leverage-bets-on-btc-and-eth-despite-a-massive-40m-in-past-losses/"
-      ],
-      "withheld": "Withheld 2026-08-26 pending re-verification. The gap-aware detector (lib/wallet-data/gaps.ts) finds TWO proven capture gaps inside this pinned episode in the fills the exchange serves today — 2025-07-29T07:46:26Z to 11:15:23Z (3.5h, 250.00 BTC of position change no served fill explains) and 2025-07-29T16:37:17Z to 07-30T12:10:42Z (19.6h, -64.64 BTC). An episode may not span a proven gap, so this one now splits into three, and the largest of them (ep:1753877442427-1754009508698) realized -$2,391,633.03 rather than the -$3,174,003.79 this entry states for the whole window. The stated figure was true of the fills verified on 2025-08-01; it is not a figure the player can reproduce today. Re-verify from a complete source (the Hyperliquid S3 archive) before republishing."
+      ]
     },
     {
       "slug": "qwatio-40x-short",
+      "withheld": "Withheld 2026-08-26 pending re-verification. Two proven capture gaps sit inside this pinned episode in the fills the exchange serves today — 2025-03-15T04:03:51Z to 10:12:37Z (6.1h, 65.19 BTC unexplained) and 2025-03-16T21:01:20Z to 03-17T09:23:25Z (12.4h, 593.85 BTC unexplained) — so the episode splits into three. Worse than a changed number: the doc route resolves a pinned range that no longer matches exactly by LARGEST TIME OVERLAP, and the longest of the three sub-episodes (ep:1742033557547-1742158880323, 34.8h) realized -$6,407.36. This page would have kept its +$5,030,904.75 headline over a replay of a $6.4k loss. Re-verify from a complete source (the Hyperliquid S3 archive) before republishing.",
       "title": "qwatio's $520M forty-x short",
       "story": "Two days after this wallet's 50x self-liquidation reportedly forced Hyperliquid to cap leverage, it was back with a BTC short that peaked at $521M — the retained tape shows +$5.0M realized across 36,926 fills before the records end with the position still open.",
       "source": "public",
       "address": "0xf3f496c9486be5924a93d67e98298733bb47057c",
       "coin": "BTC",
       "range": "ep:1741981833425-1742281927986",
-      "interval": "auto",
+      "interval": "4h",
       "bar_width": "4h bars",
-      "window": {
-        "from": "2025-03-14T19:50:33Z",
-        "to": "2025-03-18T07:12:07Z"
-      },
+      "fills_source": "exchange",
+      "interval_constraint": "Pinned to 4h. KNOWN CONSTRAINT: only 4h and 1d still reach this March 2025 window. 1h, 15m, 5m and 1m all aged past the exchange's ~4,900-bar retention, and we do not resample coarser data into finer bars, so this episode can never be replayed at a finer bar width again. The 4h rung itself stops reaching it around 2027-06-09.",
+      "window": { "from": "2025-03-14T19:50:33Z", "to": "2025-03-18T07:12:07Z" },
       "pnl_usd": 5030904.75,
       "pnl_basis": "Net realized PnL over the pinned episode — the sum of the exchange's own closedPnl per fill (36,926 fills; the position outlives the retained fills, so this is a partial picture and labelled so).",
       "coverage_note": "Exchange-retained fills for this wallet span only 2025-03-14 to 2025-03-18: the March 12 unwind that made it famous predates retention and is quoted from press, never shown as our numbers; the short is still open when the retained records end.",
@@ -209,8 +198,7 @@
       "sources": [
         "https://www.coindesk.com/markets/2025/03/12/hyperliquid-loses-usd4m-after-whale-s-over-usd200m-ether-trade-unwinds",
         "https://x.com/coinphoton/status/1901213175510642958"
-      ],
-      "withheld": "Withheld 2026-08-26 pending re-verification. Two proven capture gaps sit inside this pinned episode in the fills the exchange serves today — 2025-03-15T04:03:51Z to 10:12:37Z (6.1h, 65.19 BTC unexplained) and 2025-03-16T21:01:20Z to 03-17T09:23:25Z (12.4h, 593.85 BTC unexplained) — so the episode splits into three. Worse than a changed number: the doc route resolves a pinned range that no longer matches exactly by LARGEST TIME OVERLAP, and the longest of the three sub-episodes (ep:1742033557547-1742158880323, 34.8h) realized -$6,407.36. This page would have kept its +$5,030,904.75 headline over a replay of a $6.4k loss. Re-verify from a complete source (the Hyperliquid S3 archive) before republishing."
+      ]
     },
     {
       "slug": "the-comeback",
@@ -220,15 +208,13 @@
       "address": "0x020ca66c30bec2c4fe3861a94e4db4a498a35872",
       "coin": "HYPE",
       "range": "ep:1787172309970-1787373782062",
-      "interval": "auto",
+      "interval": "1h",
       "bar_width": "1h bars",
-      "window": {
-        "from": "2026-08-19T20:45:09Z",
-        "to": "2026-08-22T04:43:02Z"
-      },
+      "window": { "from": "2026-08-19T20:45:09Z", "to": "2026-08-22T04:43:02Z" },
       "pnl_usd": 2599616.99,
       "pnl_basis": "Net realized PnL over the pinned episode — the sum of the exchange's own closedPnl per fill (23,734 fills; a complete round trip from flat to flat, peak position $20.0M, fees $32,097.98 on top).",
       "fills_source": "exchange",
+      "interval_constraint": "Pinned to 1h. Servable rungs when pinned: 1m (from our own captured candles), 5m, 15m, 1h, 4h, 1d. The 1h rung stops reaching this window around 2027-03-11.",
       "coverage_note": "Replayed from exchange-retained fills, NOT our capture store, and pinned to that source so the entry stays reproducible: at build time the store held ZERO fills in this episode's window, and its coverage of this wallet is actively changing (see below). THE FIGURE ABOVE IS THE EPISODE'S, NOT THE WINDOW'S — the replay plays the pinned 56-hour HYPE round trip and shows its own +$2,599,616.99 over 23,734 fills. The window totals below are context for the story only, and the two series MUST NEVER BE SUMMED. (1) EXCHANGE WINDOW, from 2026-07-07: measured to 2026-08-26T20:09:14Z, 191,707 fills, closed PnL +$8,588,386.64, fees $502,087.94, net +$8,086,298.70 (the reference measurement, also recorded in migration 018_capture_scope_machi.sql); an independent re-walk 28 minutes later, to 2026-08-26T20:37:20Z, returned 194,737 fills and +$8,622,358.65 — the 3,030-fill difference is live trading between the two cuts, not a disagreement. ETH-dominated either way (about +$7.9M of it). (2) OUR CAPTURE STORE, 2026-04-19 to 2026-06-29: 63,903 fills, realized -$1,019,426.43 as measured 2026-08-26. That store figure is a sum over the rows we hold, NOT a measurement of a continuous window: a 41.6-day hole sits inside it (2026-05-14 15:27 to 2026-06-25 05:12, when the wallet was out of capture scope). It is also growing — migration 018 brought this wallet into capture scope on 2026-08-26 and the daemon began backfilling what the API still retains, so a read later the same day returned 79,579 fills through 2026-07-23 at -$1,172,919.12. (3) Between the two series lies an 8-day hole, 2026-06-29 14:14 to 2026-07-07 04:44, held by neither source and unhealable — the API no longer retains it, so neither source can even say whether the wallet traded then.",
       "pending_verification": "The October 10–11 2025 crash — when this wallet was reported to lose ~$14M and begin a run of 145 liquidations — is NOT verified here and contributes to no figure on this page. It predates both exchange retention for this wallet and our capture store; verifying it requires the Hyperliquid S3 archive (s3_backfill.py), which has not been run for this address. Until it is, the October episode is a reported claim, not a measurement.",
       "verified": {

@@ -288,8 +288,11 @@ export async function GET(req: NextRequest, { params }: { params: { address: str
             doc_bytes: docJson.length,
             build_ms: built.buildMs,
             built_at: new Date().toISOString(),
+            // A pinned curated doc has no TTL: the read path above already
+            // serves it regardless, and a row carrying an expiry it does not
+            // honour is a row that lies to the next cleanup job that reads it.
             expires_at:
-              built.source === 'exchange'
+              !pinned && built.source === 'exchange'
                 ? new Date(Date.now() + PASTED_TTL_MS).toISOString()
                 : null,
           }

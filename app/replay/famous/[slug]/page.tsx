@@ -74,6 +74,17 @@ export default function FamousReplayPage({ params }: { params: { slug: string } 
             {entry.pnl_basis} · verified against real fills {entry.verified.at.slice(0, 10)} ·{' '}
             {entry.coverage_note}
           </p>
+          {/* Which bar widths can still reach this window. A replay that can
+              only ever be shown at 4h from here on is a fact about the record,
+              not a detail to leave off the page. */}
+          <p className="text-[10px] text-white/30 leading-relaxed">
+            Bars: {entry.interval_constraint} Replayed from{' '}
+            {entry.fills_source === 'store'
+              ? 'our capture store'
+              : "the exchange's own fill history"}
+            , pinned — a rebuild that cannot reach that source refuses rather than serving the
+            other one.
+          </p>
 
           {entry.pending_verification && (
             <div className="border border-[#F5A623]/25 bg-[#F5A623]/[0.04] rounded-lg p-3">

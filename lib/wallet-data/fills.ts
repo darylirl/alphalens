@@ -133,6 +133,37 @@ function storeRowToFill(r: StoreFillRow): Fill {
   }
 }
 
+/** A pinned source could not answer, and substituting the other tape would
+ *  change what the numbers mean. Raised only for `forceSource` reads — a
+ *  curated famous episode whose figures were verified against ONE tape.
+ *
+ *  The alternative is what this codebase already did once and got caught by:
+ *  on the deploy that shipped migration 022, the scalper entry's store read
+ *  errored (PostgREST had not reloaded its schema cache yet), the loader fell
+ *  through to the exchange, and the exchange's sliding window no longer
+ *  reached that episode — so the build refused with "that episode is no
+ *  longer in the covered fills". That refusal was luck. Had the exchange
+ *  still held the window, the entry would have rebuilt and re-cached from a
+ *  DIFFERENT tape, under the same URL, carrying a verified PnL that no longer
+ *  described the fills on screen. A curated entry's figures are only valid
+ *  against the source they were verified on. */
+export class FillsSourceRefusal extends Error {}
+
+/** Why a read failed, in words. Supabase rejects with a PostgrestError — a
+ *  plain object, not an Error — so `String(err)` on it yields "[object
+ *  Object]" and the refusal below would name no cause at all. That is the
+ *  same failure as an alert that says a chat was not found without saying
+ *  which: a diagnostic that cannot be acted on. */
+function errText(err: unknown): string {
+  if (err instanceof Error) return err.message
+  if (err && typeof err === 'object') {
+    const e = err as { message?: unknown; code?: unknown; details?: unknown; hint?: unknown }
+    const parts = [e.message, e.details, e.hint].filter(p => typeof p === 'string' && p)
+    if (parts.length) return `${e.code ? `${e.code}: ` : ''}${parts.join(' — ')}`
+  }
+  return String(err)
+}
+
 /** A time window to load instead of the whole retained/captured history —
  *  used by curated famous-episode builds, whose episode is a known, closed
  *  span. Milliseconds since epoch, inclusive. */
@@ -338,22 +369,45 @@ export async function loadWalletFills(
     /** Load only this window (curated famous-episode builds). The coverage
      *  note names the scope so a windowed doc never reads as full history. */
     window?: FillsWindow
-    /** Override the source rule. Only curated famous episodes set this, and
-     *  only to 'exchange': a capture_enabled wallet whose curated episode
-     *  predates its captured range would otherwise read the store and find
-     *  nothing there — an absence of capture rendered as an absence of
-     *  trading. The entry's coverage note states why. `isCohort` below still
-     *  reports what the wallet IS, not which tape answered. */
+    /** PIN the source. Only curated famous episodes set this, and every one of
+     *  them does: the entry declares the tape its published figures were
+     *  verified against, and this read is then STRICT — if that tape cannot
+     *  answer, the load raises FillsSourceRefusal instead of quietly serving
+     *  the other one. There is no fallback for a pinned read, in either
+     *  direction, because the fallback is precisely the failure: a rebuilt
+     *  document from a different tape under a URL still showing the figure
+     *  verified against the first.
+     *
+     *  'exchange' is also the only way to serve a capture_enabled wallet
+     *  whose curated episode predates its captured range — the default rule
+     *  would read the store and find nothing there, an absence of capture
+     *  rendered as an absence of trading.
+     *
+     *  `isCohort` below still reports what the wallet IS, not which tape
+     *  answered. */
     forceSource?: 'store' | 'exchange'
   } = {}
 ): Promise<WalletFills> {
   const wallet = opts.wallet !== undefined ? opts.wallet : await loadWalletRow(address)
   const isCohort = Boolean(wallet?.capture_enabled)
+  const pinnedSource = opts.forceSource ?? null
   /** A cohort wallet that had to fall back to the exchange — its captured
-   *  history exists but could not be read. Declared, never quietly served. */
+   *  history exists but could not be read. Declared, never quietly served.
+   *  Unreachable for a pinned read: that refuses instead. */
   let degraded = false
 
-  if (isCohort && opts.forceSource !== 'exchange') {
+  // A store pin on a wallet the store does not cover is not a read that might
+  // work — the store branch below is gated on capture_enabled, so this would
+  // silently become an exchange read. Say so before doing any work.
+  if (pinnedSource === 'store' && !isCohort) {
+    throw new FillsSourceRefusal(
+      `This build is pinned to our capture store, but ${address} is not a capture-enabled ` +
+        `wallet — the store holds no fills for it. Refusing to build from the exchange tape ` +
+        `instead: the pinned figures were verified against the store.`
+    )
+  }
+
+  if (isCohort && pinnedSource !== 'exchange') {
     try {
       const [{ fills, capped }, gapCoins] = await Promise.all([
         loadStoreFills(address, opts.coin, opts.onPage, opts.window),
@@ -375,15 +429,24 @@ export async function loadWalletFills(
         ),
       }
     } catch (err) {
-      // Store unreachable: fall through to the exchange window rather than
-      // failing the page — but say so. This wallet HAS captured history
-      // deeper than the exchange's window, and serving that shallow window
-      // unremarked would present a degraded read as a complete one.
+      const msg = errText(err)
+      // Pinned to the store: refuse. The other tape is a different set of
+      // fills over the same window, and the figures on the page were verified
+      // against this one.
+      if (pinnedSource === 'store') {
+        throw new FillsSourceRefusal(
+          `This build is pinned to our capture store and the store did not answer ` +
+            `(${msg}). Refusing to build it from the exchange tape instead — the pinned ` +
+            `figures are only valid against the source they were verified on. Try again once ` +
+            `the store is reachable.`
+        )
+      }
+      // Unpinned: fall through to the exchange window rather than failing the
+      // page — but say so. This wallet HAS captured history deeper than the
+      // exchange's window, and serving that shallow window unremarked would
+      // present a degraded read as a complete one.
       degraded = true
-      console.error(
-        'store fills read failed, falling back to exchange window:',
-        err instanceof Error ? err.message : err
-      )
+      console.error('store fills read failed, falling back to exchange window:', msg)
     }
   }
 

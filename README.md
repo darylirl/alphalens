@@ -59,7 +59,9 @@ a deterministic replay of it.
 app/                  Next.js 14 frontend + API routes (Vercel)
 │                     /pulse, wallet explorer, sandbox backtester, AI agent;
 │                     POST /api/verify enqueues a hypothesis (admin-gated),
-│                     GET  /api/verify/[id] serves results publicly
+│                     GET  /api/verify/[id] serves results publicly;
+│                     GET  /api/monitor/heartbeats is the external
+│                     dead-man's monitor (Vercel cron, every 15 min)
 │
 capture-service/      Always-on capture daemon (Node 22, zero deps; Railway)
 │                     WS fills + 1m candles, rotating REST sweep over the
@@ -191,9 +193,11 @@ SUPABASE_ANON_KEY=your-anon-key
 # Optional
 UPSTASH_REDIS_REST_URL=...        # API response caching
 UPSTASH_REDIS_REST_TOKEN=...
-TELEGRAM_BOT_TOKEN=...            # capture-daemon stall alerts (operational)
+TELEGRAM_BOT_TOKEN=...            # stall alerts (daemon + external monitor)
+TELEGRAM_CHAT_ID=...              # the chat those alerts go to (operational)
 LEDGER_TELEGRAM_BOT_TOKEN=...     # Ledger → @alphalens_ledger (content); may be
 LEDGER_TELEGRAM_CHANNEL_ID=@...   # the same bot, never the same chat as the alerts
+CRON_SECRET=...                   # protects the Vercel cron routes
 ANTHROPIC_API_KEY=sk-ant-your-key # AI agent
 ADMIN_API_TOKEN=...               # gates wallet management + POST /api/verify;
                                   # also unlocks the /admin console
@@ -234,6 +238,74 @@ the sitemap and both nav bars — unlisted, not secret; the token is the gate.
 
 Nothing here writes to the Ledger: publishing stays with the runner and the
 scorer, through the one tested path in `verify-service/lib/publish.mjs`.
+
+---
+
+## The external dead-man's monitor
+
+The capture daemon has always had a Telegram watchdog. It runs *inside the
+capture daemon*, which means a daemon that has died, hung, or been evicted
+sends nothing at all — which is exactly how the Aug 17-25 capture gap ran for
+eight days unnoticed. A watchdog that shares a process with the thing it
+watches is not a watchdog.
+
+`GET /api/monitor/heartbeats` is the replacement, and it lives outside every
+service it judges: a Vercel cron route, on a 15-minute schedule, in a
+different failure domain from Railway and from the database writers. It
+checks six streams independently and each opens its own incident:
+
+| Stream | Evidence | Threshold | Why |
+| --- | --- | --- | --- |
+| `capture` | `capture_health` where `service='capture'` | 3 min | beats every 60s; three missed beats |
+| `verify` | `capture_health` where `service='verify'` | 3 min | beats every 60s; three missed beats |
+| `scorer` | `capture_health` where `service='scorer'` | 12 min | 5-minute tick cadence; two missed ticks plus slack |
+| `fills` | newest `fills.timestamp` | 60 min | a daemon can heartbeat while writing nothing |
+| `pulse` | newest `pulse_24h.computed_at` | 90 min | pg_cron refreshes every 30 min; three missed refreshes |
+| `database` | whether the reads above worked at all | — | a total read failure is one outage, not six |
+
+All six thresholds live in one block in `lib/monitor/thresholds.ts`, each with
+the observed cadence it was derived from. Every read is a single bounded row.
+
+**Zero fills is not gated on market hours.** Hyperliquid perps never close,
+and the tape agrees: across the 721 consecutive hours ending 2026-08-27T17:00Z
+every hour had fills, the quietest carried 677, and the quietest hour-of-day
+averaged ~13k. There is no hour in which zero is innocent, so gating this
+would buy a nightly blind spot and nothing else.
+
+**Absence of measurement is never reported as health.** A read that fails, or
+succeeds and returns no rows, is `unknown` — not `ok`, and not a silence
+duration computed against a timestamp that does not exist. The alert says
+"cannot be measured" and names the read that failed.
+
+**One message per incident.** Incident state lives in Upstash Redis when
+configured, otherwise in `capture_health` rows tagged `service='monitor'` (no
+schema change; every existing reader already filters on `service`). A stream
+that stays down re-alerts once every 6 hours, not once every 15 minutes, and
+sends a single message when beats resume. The response reports which backend
+actually ran rather than assuming, and the `capture_health` fallback declares
+its one blind spot — it cannot dedup an alert about the database being
+unreachable, because writing the dedup record needs the same database. Redis
+is preferred for exactly that reason.
+
+**The route fails closed.** It refuses to run at all unless `CRON_SECRET` or
+`ADMIN_API_TOKEN` is set, and then requires one of them; there is no open mode.
+Vercel attaches `Authorization: Bearer $CRON_SECRET` to cron invocations
+automatically.
+
+Required Vercel environment variables:
+
+| Variable | Purpose |
+| --- | --- |
+| `TELEGRAM_BOT_TOKEN` | the existing operational watchdog bot |
+| `TELEGRAM_CHAT_ID` | the chat it alerts into |
+| `CRON_SECRET` | protects the route; Vercel sends it on cron runs |
+| `SUPABASE_SERVICE_ROLE_KEY` | needed to write incident state without Upstash (`anon` has SELECT only on `capture_health`) |
+| `UPSTASH_REDIS_REST_URL` / `_TOKEN` | optional, preferred incident store |
+
+Alerts carry an `[alphalens-monitor]` prefix, distinct from the daemon's
+`[alphalens-capture]`, so you can tell which of the two is still able to speak.
+
+---
 
 ## What this is not
 

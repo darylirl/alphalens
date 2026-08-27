@@ -31,6 +31,16 @@ export interface FamousReplay {
   /** Pinned replay-doc request — must match the doc cache key exactly. */
   coin: string
   range: string
+  /** A ladder rung, never 'auto'. Curated entries pin the exact rung their doc
+   *  was built and verified on, because 'auto' is a decision taken at BUILD
+   *  time from data that ages: the exchange retains ~4,900 bars per interval,
+   *  so the same window resolves finer today than it will in a month. An
+   *  'auto' entry would therefore re-cache at a coarser bar width one day,
+   *  silently, under a bar_width label written when it was finer. Pinned, a
+   *  rung that no longer reaches the window makes the rebuild REFUSE
+   *  (doc-build resolves a non-auto interval to exactly that candidate and
+   *  throws DocRefusal when it is unservable) — which is the honest outcome:
+   *  the entry needs re-curating, not quietly re-rendering. */
   interval: string
   /** The resolved bar width the pinned doc plays at, for display ("1h bars"). */
   bar_width: string
@@ -43,21 +53,30 @@ export interface FamousReplay {
   pnl_basis: string
   /** Honest coverage: which data window we can actually serve, and its source. */
   coverage_note: string
-  /** Which tape the pinned episode comes from. Normally omitted — the loader's
-   *  own rule decides (cohort wallets read our capture store, everyone else
-   *  the exchange window). Set to 'exchange' when a curated episode lies
-   *  OUTSIDE a cohort wallet's captured range: the wallet is capture_enabled,
-   *  so the default rule would read the store and find nothing there.
+  /** Which tape the pinned episode's figures were verified against. REQUIRED,
+   *  and enforced strictly by the loader: a pinned read that cannot get its
+   *  source raises FillsSourceRefusal rather than answering from the other
+   *  tape (see lib/wallet-data/fills.ts).
    *
-   *  This also makes the entry REPRODUCIBLE, which is not a hypothetical:
-   *  the comeback entry's wallet entered capture scope the same day it was
-   *  curated, and the daemon began backfilling it — our store for that wallet
-   *  went from 63,903 fills ending 2026-06-29 to 79,579 ending 2026-07-23
-   *  within six hours, and is still advancing toward the pinned episode.
-   *  Without a pinned source, the tape answering a rebuild would depend on
-   *  WHEN it ran. The coverage note must say which source and why.
+   *  Required rather than optional because the default rule is a decision
+   *  taken at READ time from state that moves. The comeback entry's wallet
+   *  entered capture scope the same day it was curated, and the daemon began
+   *  backfilling it — our store for that wallet went from 63,903 fills ending
+   *  2026-06-29 to 79,579 ending 2026-07-23 within six hours, and is still
+   *  advancing toward the pinned episode. Leaving it to the rule means the
+   *  tape answering a rebuild depends on WHEN the rebuild ran.
+   *
+   *  'exchange' is also the only way to serve a capture_enabled wallet whose
+   *  curated episode lies OUTSIDE its captured range: the default rule would
+   *  read the store and find nothing there. The coverage note says which
+   *  source and why.
    */
-  fills_source?: 'store' | 'exchange'
+  fills_source: 'store' | 'exchange'
+  /** Which ladder rungs could serve this window when the entry was pinned,
+   *  and when the pinned rung stops reaching it. Rendered on the entry's page:
+   *  a replay that can only ever be shown at 4h from here on is a fact about
+   *  the record, not a detail to hide. */
+  interval_constraint: string
   /**
    * Why this entry is not being served. An entry is withheld when its pinned
    * episode can no longer be reproduced from the fills its source serves
@@ -101,8 +120,19 @@ function validate(entries: FamousReplay[]): FamousReplay[] {
     if (!/^0x[0-9a-f]{40}$/.test(e.address))
       throw new Error(`famous ${e.slug}: address must be lowercase 0x + 40 hex`)
     if (!parseRangeKey(e.range)) throw new Error(`famous ${e.slug}: bad range ${e.range}`)
-    if (e.interval !== 'auto' && !INTERVAL_MS[e.interval])
-      throw new Error(`famous ${e.slug}: bad interval ${e.interval}`)
+    // 'auto' is rejected outright: see the `interval` field's note. A curated
+    // entry that lets the builder re-pace it will, once the window ages past
+    // a rung, re-cache at a coarser bar width under a label written when it
+    // was finer — a quiet substitution where a refusal belongs.
+    if (!INTERVAL_MS[e.interval])
+      throw new Error(
+        `famous ${e.slug}: interval must be a pinned ladder rung (${Object.keys(INTERVAL_MS).join(', ')}), not ${e.interval}`
+      )
+    if (!e.interval_constraint)
+      throw new Error(
+        `famous ${e.slug}: state interval_constraint — which rungs could serve this window ` +
+          `when it was pinned, and when the pinned rung stops reaching it`
+      )
     if (e.coin && !/^[A-Za-z0-9@:_.-]{1,32}$/.test(e.coin))
       throw new Error(`famous ${e.slug}: bad coin ${e.coin}`)
     if (!Number.isFinite(e.pnl_usd)) throw new Error(`famous ${e.slug}: pnl_usd not a number`)
@@ -120,8 +150,13 @@ function validate(entries: FamousReplay[]): FamousReplay[] {
         `famous ${e.slug}: autopsy entries must state research_context — how this replay ` +
           `relates to the research run, so the title cannot borrow the run's findings`
       )
-    if (e.fills_source && e.fills_source !== 'store' && e.fills_source !== 'exchange')
-      throw new Error(`famous ${e.slug}: fills_source must be 'store' or 'exchange'`)
+    // Required, not optional. An entry that does not name its tape has its
+    // source chosen at read time by state that moves under it.
+    if (e.fills_source !== 'store' && e.fills_source !== 'exchange')
+      throw new Error(
+        `famous ${e.slug}: fills_source must be 'store' or 'exchange' — name the tape the ` +
+          `published figures were verified against, so a build that cannot reach it refuses`
+      )
   }
   return entries
 }
