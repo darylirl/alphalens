@@ -2,13 +2,12 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { getSupabase } from '@/lib/db/supabase'
 import { getAdminToken, isAuthorized, safeEqual } from '@/lib/auth/admin'
 import { HEARTBEAT_STREAMS } from '@/lib/monitor/thresholds'
-import { getIncidentStore, type IncidentMap } from '@/lib/monitor/incidents'
+import { getIncidentStore, writeMonitorRun, type IncidentMap } from '@/lib/monitor/incidents'
 import {
   dataLivenessObservations,
   evaluate,
   foldReadFailures,
   heartbeatObservations,
-  incidentsChanged,
   type Observation,
 } from '@/lib/monitor/checks'
 import { formatMessage, sendTelegram, telegramConfigured } from '@/lib/monitor/alerts'
@@ -174,8 +173,10 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  const healthy = verdicts.every(v => v.status === 'ok')
+
   let saveError: string | null = null
-  if (!stateError && incidentsChanged(previous, nextIncidents)) {
+  if (!stateError) {
     try {
       await store.save(nextIncidents)
     } catch (e) {
@@ -183,9 +184,28 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // Always, even on a clean run and even when the state write failed: this row
+  // is the only evidence that the monitor ran. A cron that stopped firing is
+  // otherwise indistinguishable from an unbroken run of good news, which is
+  // the exact shape of the outage this monitor exists to catch.
+  let runRecordError: string | null = null
+  try {
+    await writeMonitorRun(getSupabase(), {
+      ran: checkedAt,
+      healthy,
+      store: store.backend,
+      open: nextIncidents,
+      sent: sent.length
+        ? sent.map(n => ({ stream: n.stream, kind: n.kind, delivered: n.delivered, messageId: n.messageId }))
+        : undefined,
+    })
+  } catch (e) {
+    runRecordError = e instanceof Error ? e.message : String(e)
+  }
+
   return NextResponse.json({
     checkedAt,
-    healthy: verdicts.every(v => v.status === 'ok'),
+    healthy,
     streams: verdicts.map(v => ({
       stream: v.key,
       label: v.label,
@@ -207,6 +227,10 @@ export async function GET(req: NextRequest) {
       openIncidents: Object.keys(nextIncidents),
       readError: stateError,
       writeError: saveError,
+      // Named separately from the state write: losing the run record costs
+      // the ability to prove the monitor ran, which is a different failure
+      // from losing dedup.
+      runRecordError,
     },
     telegram: telegramConfigured() ? 'configured' : 'unconfigured',
   })

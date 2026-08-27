@@ -40,7 +40,25 @@ export interface IncidentStore {
   /** True when this backend cannot dedup a database-unreachable alert. */
   degraded: boolean
   load(): Promise<IncidentMap>
+  /**
+   * Persist incident state. A no-op for the `capture_health` backend: the run
+   * record written every run already carries `open`, and a second row would
+   * only be a second chance to disagree with itself.
+   */
   save(map: IncidentMap): Promise<void>
+}
+
+/** What one monitor run leaves behind, as `capture_health.note` JSON. */
+export interface MonitorRun {
+  /** When the check ran. */
+  ran: string
+  healthy: boolean
+  /** Which incident store was in use. */
+  store: string
+  /** Open incidents after this run — also the state the fallback reads back. */
+  open: IncidentMap
+  /** Messages this run sent, omitted when it sent none. */
+  sent?: Array<{ stream: string; kind: string; delivered: boolean; messageId?: number }>
 }
 
 const REDIS_KEY = 'alphalens:monitor:incidents'
@@ -103,14 +121,23 @@ function captureHealthStore(supabase: SupabaseClient): IncidentStore {
         return {}
       }
     },
-    async save(map) {
-      const { error } = await supabase.from('capture_health').insert({
-        service: MONITOR_SERVICE,
-        note: JSON.stringify({ open: map }),
-      })
-      if (error) throw new Error(`incident state write: ${error.message}`)
-    },
+    // The run record is the state row for this backend — see `save` above.
+    async save() {},
   }
+}
+
+/**
+ * Write the run record: one `capture_health` row per run, tagged
+ * `service='monitor'`, so "did the monitor actually run" is a question the
+ * database can answer. Existing readers pin `service='capture'`, so this label
+ * is invisible to them, and no schema changed to hold it.
+ */
+export async function writeMonitorRun(supabase: SupabaseClient, run: MonitorRun): Promise<void> {
+  const { error } = await supabase.from('capture_health').insert({
+    service: MONITOR_SERVICE,
+    note: JSON.stringify(run),
+  })
+  if (error) throw new Error(`monitor run record: ${error.message}`)
 }
 
 /** Redis when configured, `capture_health` otherwise. */

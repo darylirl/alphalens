@@ -286,6 +286,24 @@ succeeds and returns no rows, is `unknown` — not `ok`, and not a silence
 duration computed against a timestamp that does not exist. The alert says
 "cannot be measured" and names the read that failed.
 
+**Every run leaves a trace.** A healthy check sends nothing and, until now,
+wrote nothing — so a cron that silently stopped being invoked looked exactly
+like an unbroken run of clean bills of health. That is this project's own
+Aug 17-25 failure one level up, and the fix is the same: leave evidence. Each
+run writes one `capture_health` row tagged `service='monitor'` whose `note`
+records when it ran, whether it was healthy, which store it used, the open
+incidents, and any messages sent. No schema changed to hold it, and existing
+readers pin `service='capture'`, so the new label is invisible to them.
+
+```sql
+-- did the monitor actually run, and how recently?
+select ts, note from capture_health
+where service = 'monitor' order by ts desc limit 10;
+```
+
+This makes monitor liveness *observable*, not self-alerting — nothing can
+watch itself die. Pair it with Vercel's own cron-failure notifications.
+
 **One message per incident.** Incident state lives in Upstash Redis when
 configured, otherwise in `capture_health` rows tagged `service='monitor'` (no
 schema change; every existing reader already filters on `service`). A stream
