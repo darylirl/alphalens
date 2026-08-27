@@ -317,7 +317,14 @@ export default function ApiDocsPage() {
           range, bar width) — coarsened candles, trade events, running
           position and realized-PnL series, and the coin&rsquo;s episode index
           — cached in <code className="font-mono">replay_docs</code> and
-          served as a single row. A first, uncached request builds the
+          served as a single row. Fills travel columnar and losslessly packed
+          (<code className="font-mono">replay-doc.v2</code>): times as deltas,
+          prices, sizes and realized PnL as fixed-point integers scaled by the
+          document&rsquo;s own exponents, side folded into the direction index.
+          Every value decodes back to the exact original — the encoder
+          verifies it and ships the column unscaled if it cannot. Documents
+          cached in the older <code className="font-mono">replay-doc.v1</code>
+          row-per-fill shape are still served and still decode. A first, uncached request builds the
           document and streams NDJSON: real progress lines, then a partial
           head document (the opening window, marked{' '}
           <code className="font-mono">partial</code>, so playback can start),

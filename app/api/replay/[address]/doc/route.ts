@@ -149,8 +149,27 @@ export async function GET(req: NextRequest, { params }: { params: { address: str
     if (cached) {
       let fresh = false
       let behind = 0
+      // A document cached in an older wire format is not stale by DATA — its
+      // fills are as real as the day they were built — but it is four times
+      // the bytes, and bytes are what the warm path costs. Rebuilding it once
+      // is how the v2 packing reaches documents already in the cache; a row
+      // that is never re-viewed is never rebuilt. The DECODER still reads v1,
+      // for rows served in the deploy window and for documents already in a
+      // viewer's sessionStorage.
+      const staleFormat = (cached.doc as { v?: number } | null)?.v !== 2
+
+      // Pinned wins over the format upgrade, deliberately. A curated episode
+      // may no longer be rebuildable at all — that is the whole reason it is
+      // pinned — so rebuilding one to save bytes could destroy a record the
+      // exchange will not serve again. Curated documents therefore keep
+      // whatever format they were built in; the set is small and fixed, and
+      // moving them to v2 is a deliberate act (drop the row and re-run
+      // scripts/prebuild-famous-local.mts while the window is still live),
+      // never an automatic rebuild in a viewer's request path.
       if (pinned) {
         fresh = true
+      } else if (staleFormat) {
+        fresh = false
       } else if (isCohort && cached.source === 'store') {
         const newest = await newestStoreFill(addr, coin)
         if (!newest) {
