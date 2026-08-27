@@ -19,7 +19,9 @@
 -- rebuild that saturated the instance (CLAUDE.md, "Operational notes"): that one
 -- grew with every fill ever captured; this one does not.
 --
--- The refresh schedule is NOT touched. Whatever cadence 'refresh-pulse-24h'
+-- Measured before applying: the per-wallet rollup runs in ~964 ms over 786,696
+-- fills (193 coins, 432 coin+wallet groups), against a 30-minute refresh. The
+-- refresh schedule is NOT touched. Whatever cadence 'refresh-pulse-24h'
 -- currently runs at is the cadence it keeps — this migration replaces the view
 -- definition only. (The live view reports computed_at on :00/:30, i.e. the
 -- 30-minute floor, not the */5 written in 009_pulse.sql.)
@@ -113,6 +115,12 @@ join concentration on concentration.asset = base.asset;
 
 -- Required by `refresh materialized view concurrently`.
 create unique index if not exists idx_pulse_24h_coin on pulse_24h (coin);
+
+-- Dropping a matview drops its ACL with it. The live view carried
+-- arwdDxtm for anon, authenticated and service_role; without this the public
+-- /api/pulse read starts failing the moment this migration lands, which is a
+-- silent outage of the page rather than a visible migration error.
+grant all on pulse_24h to anon, authenticated, service_role;
 
 -- The API reads this view through PostgREST.
 notify pgrst, 'reload schema';
