@@ -219,8 +219,3 @@ export function evaluate(
 
   return { verdicts, notifications, nextIncidents }
 }
-
-/** Did the incident map change in a way worth persisting? */
-export function incidentsChanged(before: IncidentMap, after: IncidentMap): boolean {
-  return JSON.stringify(before) !== JSON.stringify(after)
-}
