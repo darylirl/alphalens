@@ -39,8 +39,15 @@ import { famousPin } from '@/lib/replay/famous'
 // ~10K-fill window slides regardless of our capture stream.
 
 export const dynamic = 'force-dynamic'
-// Cold builds page a cohort wallet's full captured history; give them room.
-export const maxDuration = 60
+// Cold builds page a wallet's history; a CURATED famous episode pads its
+// window by 48h on each side, and on the heaviest wallets that is a very
+// large walk — the comeback entry's window covers ~22K fills/day and was
+// killed at 60s having walked 77,045 fills across 40 pages. The pad is not
+// the thing to shrink: it is what makes a pinned episode's boundaries detect
+// identically to a full-history load, so trimming it would change the build
+// inputs behind already-verified figures. Give the cold path room instead.
+// Warm reads are unaffected — those are a single indexed row.
+export const maxDuration = 300
 
 interface CacheRow {
   content_hash: string
