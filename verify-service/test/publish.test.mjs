@@ -111,6 +111,17 @@ test('filtering keeps eligible rows and drops the rest without mutating them', (
 
 // ── cohort_signal: the forward-looking path ─────────────────────────────────
 
+// The base fixture is HYPE's real skew reading with a CONSTRUCTED concentration
+// block: twelve wallets on the short side, the largest holding 28% of it. The
+// real HYPE book was not spread like this — seven wallets, one holding about
+// two thirds — and that reading is pinned as a refusal further down. The
+// counterfactual exists so the rest of the happy path stays exercisable; it is
+// never presented as a measurement.
+const CONCENTRATION_OK = {
+  long: { notionalUsd: 729_902, wallets: 11, topWalletNotionalUsd: 160_578 },
+  short: { notionalUsd: 3_344_730, wallets: 12, topWalletNotionalUsd: 936_524 }, // 28.0%
+}
+
 const snapshot = {
   coin: 'HYPE',
   notionalUsd: 4_074_632,
@@ -120,6 +131,7 @@ const snapshot = {
   activeWallets: 7,
   computedAt: '2026-08-27T17:00:00.000Z',
   coverage: { live: true, computedAt: '2026-08-27T17:00:00.000Z' },
+  concentration: CONCENTRATION_OK,
 }
 
 const signalInput = {
@@ -236,4 +248,103 @@ test('one snapshot, one call: republishing the same reading is a no-op', async (
   assert.equal(second.published, false)
   assert.equal(calls.length, 1)
   assert.match(second.reasons[0], /already published as call 1/)
+})
+
+// ── concentration floors (pre-registered 2026-08-27) ────────────────────────
+
+test('the real HYPE reading is refused: seven wallets, one holding two thirds', () => {
+  // The measurement that motivated the floor. Skew -64.2%, notional $4.07M and
+  // 7 active wallets all cleared; concentration is the only thing that catches
+  // it, and it must.
+  const real = {
+    ...snapshot,
+    concentration: {
+      long: { notionalUsd: 729_902, wallets: 4, topWalletNotionalUsd: 210_000 },
+      short: { notionalUsd: 3_344_730, wallets: 7, topWalletNotionalUsd: 2_223_000 }, // 66.5%
+    },
+  }
+  assert.throws(
+    () => cohortSignalCall({ ...signalInput, snapshot: real }),
+    (e) => /66\.5% of the .* directed short/.test(e.message)
+      && /over the 40% ceiling/.test(e.message)
+      && /7 wallet\(s\) traded HYPE short/.test(e.message)
+      && /under the 10 floor/.test(e.message),
+  )
+})
+
+test('an unmeasured concentration is refused, never read as uncontested', () => {
+  const { concentration, ...noBlock } = snapshot
+  assert.throws(
+    () => cohortSignalCall({ ...signalInput, snapshot: noBlock }),
+    /no concentration block .* predates migration 024[\s\S]*unmeasured, which is not the same as/,
+  )
+})
+
+test('a direction with no notional behind it is unmeasured, not 0% concentrated', () => {
+  const empty = {
+    ...snapshot,
+    concentration: { ...CONCENTRATION_OK, short: { notionalUsd: 0, wallets: 0, topWalletNotionalUsd: 0 } },
+  }
+  assert.throws(
+    () => cohortSignalCall({ ...signalInput, snapshot: empty }),
+    /no notional was directed short in the window/,
+  )
+})
+
+test('the floor reads the CALLED direction, not the busy other side of the book', () => {
+  // A crowded long side does not make a concentrated short call honest.
+  const lopsided = {
+    ...snapshot,
+    concentration: {
+      long: { notionalUsd: 5_000_000, wallets: 50, topWalletNotionalUsd: 100_000 },  // spotless
+      short: { notionalUsd: 3_344_730, wallets: 12, topWalletNotionalUsd: 2_000_000 }, // 59.8%
+    },
+  }
+  assert.throws(
+    () => cohortSignalCall({ ...signalInput, snapshot: lopsided }),
+    /59\.8% of the .* directed short/,
+  )
+})
+
+test('the floors are boundaries, not preferences: exactly 10 wallets and exactly 40% pass', () => {
+  const onTheLine = {
+    ...snapshot,
+    concentration: {
+      ...CONCENTRATION_OK,
+      short: { notionalUsd: 3_000_000, wallets: 10, topWalletNotionalUsd: 1_200_000 }, // exactly 40.0%
+    },
+  }
+  const row = cohortSignalCall({ ...signalInput, snapshot: onTheLine })
+  assert.equal(row.provenance.snapshot.top_wallet_share_pct, 40)
+  assert.equal(row.provenance.snapshot.participating_wallets, 10)
+
+  const justOver = {
+    ...snapshot,
+    concentration: {
+      ...CONCENTRATION_OK,
+      short: { notionalUsd: 3_000_000, wallets: 10, topWalletNotionalUsd: 1_200_001 },
+    },
+  }
+  assert.throws(() => cohortSignalCall({ ...signalInput, snapshot: justOver }), /over the 40% ceiling/)
+
+  const oneShort = {
+    ...snapshot,
+    concentration: { ...CONCENTRATION_OK, short: { notionalUsd: 3_000_000, wallets: 9, topWalletNotionalUsd: 900_000 } },
+  }
+  assert.throws(() => cohortSignalCall({ ...signalInput, snapshot: oneShort }), /9 wallet\(s\).*under the 10 floor/)
+})
+
+test('provenance records the concentration reading and the floors it was cleared against', () => {
+  const { provenance } = cohortSignalCall(signalInput)
+  assert.equal(provenance.snapshot.participating_wallets, 12)
+  assert.equal(provenance.snapshot.directional_notional_usd, 3_344_730)
+  assert.equal(provenance.snapshot.top_wallet_notional_usd, 936_524)
+  assert.equal(provenance.snapshot.top_wallet_share_pct, 28)
+  assert.equal(provenance.floors.max_wallet_concentration_pct, 40)
+  assert.equal(provenance.floors.min_participating_wallets, 10)
+})
+
+test('the claim states the concentration, so a reader can check the floor themselves', () => {
+  const { claim } = cohortSignalCall(signalInput)
+  assert.match(claim, /spread across 12 wallets trading that side with the largest holding 28\.0% of it\./)
 })

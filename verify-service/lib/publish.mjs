@@ -20,6 +20,10 @@ import { announceCall } from './telegram.mjs'
 // The scorer's own rules, imported rather than restated: a call is publishable
 // only if the code that will have to resolve it can read it.
 import { scoreableSubject, PRICE_SEARCH_MIN } from './scorer.mjs'
+import {
+  SIGNAL_MIN_WALLETS, SIGNAL_MIN_SKEW_PCT, SIGNAL_MIN_NOTIONAL_USD,
+  SIGNAL_MIN_PARTICIPATING_WALLETS, SIGNAL_MAX_WALLET_CONCENTRATION_PCT, concentrationFor, usd,
+} from './signal-floors.mjs'
 
 export const CANONICAL_ENGINE_PREFIX = 'verify-engine@'
 
@@ -237,26 +241,10 @@ export async function sweepUnpublished({ limit = 50, log = () => {}, db = sb } =
  * disagree — the scorer trusts resolves_at and the reader trusts the horizon.
  */
 
-/** Floors below which a skew is not a signal. Guardrails, not preferences. */
-export const SIGNAL_MIN_WALLETS = 3
-export const SIGNAL_MIN_SKEW_PCT = 5
-export const SIGNAL_MIN_NOTIONAL_USD = 250_000
+// Floors and the concentration reader live in signal-floors.mjs — no platform
+// imports there, so the /admin form evaluates the SAME rules in the browser.
+export * from './signal-floors.mjs'
 
-const usd = (n) => `$${Math.round(Math.abs(n)).toLocaleString('en-US')}`
-
-/**
- * Build the cohort_signal row. Pure — throws rather than returning a call
- * that the scorer, the database, or the honesty contract would reject.
- *
- * @param {object} input
- * @param {string} input.coin            coin symbol, as the tape names it
- * @param {'up'|'down'} input.direction  the called direction of price
- * @param {number} input.confidence      P(claim true), strictly in (0, 1)
- * @param {string} input.publishedAt     ISO instant of publication (= entry)
- * @param {number} input.horizonHours    hours to resolution
- * @param {object} input.snapshot        the /api/pulse row + coverage it came from
- * @param {object} [input.analysis]      supporting figures recorded in provenance
- */
 export function cohortSignalCall({
   coin, direction, confidence, publishedAt, horizonHours, snapshot, analysis = null,
 }) {
@@ -314,6 +302,36 @@ export function cohortSignalCall({
     errors.push(`snapshot notional ${usd(notional)} is under the ${usd(SIGNAL_MIN_NOTIONAL_USD)} floor`)
   }
 
+  // 3. Concentration — is this the cohort, or one wallet?
+  //
+  // Read for the called direction only: a short call is not made honest by a
+  // crowd of longs on the other side of the book. Fails CLOSED — a snapshot
+  // that carries no concentration block is unmeasured, not unconcentrated,
+  // and an unmeasured floor may never read as a passed one.
+  const conc = concentrationFor(snapshot, direction)
+  if (!conc.measured) {
+    errors.push(
+      'snapshot carries no concentration reading for the called direction '
+      + `(${conc.why}) — concentration is unmeasured, which is not the same as `
+      + 'uncontested, so the call is refused rather than published on an unchecked floor',
+    )
+  } else {
+    if (conc.wallets < SIGNAL_MIN_PARTICIPATING_WALLETS) {
+      errors.push(
+        `${conc.wallets} wallet(s) traded ${coin} ${direction === 'up' ? 'long' : 'short'} in the window, `
+        + `under the ${SIGNAL_MIN_PARTICIPATING_WALLETS} floor — too few hands to call it a cohort`,
+      )
+    }
+    if (conc.topWalletSharePct > SIGNAL_MAX_WALLET_CONCENTRATION_PCT) {
+      errors.push(
+        `the largest single wallet is ${conc.topWalletSharePct.toFixed(1)}% of the `
+        + `${usd(conc.directionalNotionalUsd)} directed ${direction === 'up' ? 'long' : 'short'}, `
+        + `over the ${SIGNAL_MAX_WALLET_CONCENTRATION_PCT}% ceiling — that is one trader's position, `
+        + 'not cohort conviction',
+      )
+    }
+  }
+
   if (errors.length) throw new Error(`cohort_signal is not publishable: ${errors.join('; ')}`)
 
   const resolvesAt = new Date(publishedMs + Number(horizonHours) * HOUR_MS).toISOString()
@@ -331,7 +349,8 @@ export function cohortSignalCall({
     + `Basis: the /api/pulse snapshot computed ${computedAt}, in which the tracked cohort's rolling-24h `
     + `${coin} flow was net ${netFlow >= 0 ? 'long' : 'short'} ${usd(netFlow)} on ${usd(notional)} of `
     + `notional across ${wallets} active wallets (${skewPct.toFixed(1)}% of notional directed `
-    + `${netFlow >= 0 ? 'long' : 'short'}).`
+    + `${netFlow >= 0 ? 'long' : 'short'}), spread across ${conc.wallets} wallets trading that side with the `
+    + `largest holding ${conc.topWalletSharePct.toFixed(1)}% of it.`
 
   return {
     published_at: publishedIso,
@@ -350,6 +369,19 @@ export function cohortSignalCall({
         skew_pct: Number(skewPct.toFixed(2)),
         long_pct: snapshot?.longPct ?? null,
         long_pct_change: snapshot?.longPctChange ?? null,
+        // The concentration the call was cleared against, in the called
+        // direction, so the floor can be re-checked against the same numbers.
+        directional_notional_usd: Math.round(conc.directionalNotionalUsd),
+        participating_wallets: conc.wallets,
+        top_wallet_notional_usd: Math.round(conc.topWalletNotionalUsd),
+        top_wallet_share_pct: Number(conc.topWalletSharePct.toFixed(2)),
+      },
+      floors: {
+        min_skew_pct: SIGNAL_MIN_SKEW_PCT,
+        min_notional_usd: SIGNAL_MIN_NOTIONAL_USD,
+        min_active_wallets: SIGNAL_MIN_WALLETS,
+        min_participating_wallets: SIGNAL_MIN_PARTICIPATING_WALLETS,
+        max_wallet_concentration_pct: SIGNAL_MAX_WALLET_CONCENTRATION_PCT,
       },
       coverage: snapshot?.coverage ?? null,
       ...(analysis ? { selection_analysis: analysis } : {}),

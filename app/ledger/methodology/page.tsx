@@ -62,6 +62,44 @@ export default function LedgerMethodologyPage() {
           outright, in validation and again by a database constraint.
         </P>
 
+        <H2>What a forward call must clear before it is published</H2>
+        <P>
+          A cohort signal claims the tracked cohort is positioned a certain
+          way. Five criteria, pre-registered on 27 August 2026 — before any
+          cohort signal had been published, so no call has ever been made
+          under a looser rule — decide whether a reading is allowed to become
+          one. A coin must clear all five, in the direction being called:
+        </P>
+        <ul className="text-xs text-white/70 leading-relaxed mb-3 list-disc pl-5 space-y-1">
+          <li><strong className="text-white/85">Skew at least 5%</strong> of notional directed one way. A balanced book is not a directional call.</li>
+          <li><strong className="text-white/85">Notional at least $250,000</strong> over the rolling 24 hours.</li>
+          <li><strong className="text-white/85">At least 3 active wallets</strong> trading the coin at all.</li>
+          <li><strong className="text-white/85">At least 10 wallets</strong> trading the called side specifically.</li>
+          <li><strong className="text-white/85">No single wallet above 40%</strong> of the notional directed that way.</li>
+        </ul>
+        <P>
+          The last two exist because the first three were not enough. The first
+          reading ever to clear skew, notional and wallet count was HYPE on 27
+          August 2026: 62% of its notional directed short, across seven active
+          wallets — of which one held roughly two thirds of the short side.
+          Every floor passed and the reading was still one trader&apos;s position
+          wearing a cohort&apos;s clothes. Skew measures how lopsided the book is.
+          These two measure how many hands made it that way.
+        </P>
+        <P>
+          Concentration is read for the called direction only: a crowded long
+          side does not make a concentrated short call honest. Where the
+          concentration of a coin has not been measured, the call is refused
+          rather than published — an unmeasured floor is not a passed one, and
+          treating &ldquo;we did not measure&rdquo; as &ldquo;not concentrated&rdquo; would be the
+          most permissive possible reading of the least evidence.
+        </P>
+        <P>
+          The consequence is that some days no coin qualifies and nothing is
+          published. That is the intended behaviour, not a gap in the record:
+          the Ledger waits rather than lowering a bar to fill a slot.
+        </P>
+
         <H2>How forward calls are scored</H2>
         <P>
           A forward call (a cohort signal) states its claim, its confidence,

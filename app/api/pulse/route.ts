@@ -10,6 +10,38 @@ export const dynamic = 'force-dynamic'
  * pg_cron every 30 minutes) — no live Hyperliquid calls, no per-wallet data,
  * and none of the deprecated wallet confidence scores.
  */
+/**
+ * Per-direction concentration, or null when the view cannot answer.
+ *
+ * Migration 024 added these columns; a deployment whose matview predates it
+ * returns rows without them. That is "not measured", and it is reported as
+ * null rather than as zeros — a 0% top-wallet share is the most permissive
+ * answer there is, and inventing it for an unmeasured coin would hand the
+ * cohort_signal floor a pass it never earned. cohortSignalCall() refuses on
+ * null, so the whole path fails closed until the migration is applied.
+ *
+ * Aggregates only: a share of a total and a count of participants. No wallet
+ * is named here, and the view does not carry one to name.
+ */
+function concentrationBlock(r: Record<string, unknown>) {
+  const side = (notional: unknown, wallets: unknown, top: unknown) => {
+    const n = Number(notional)
+    const w = Number(wallets)
+    const t = Number(top)
+    if (!Number.isFinite(n) || !Number.isFinite(w) || !Number.isFinite(t)) return null
+    return {
+      notionalUsd: Math.round(n),
+      wallets: w,
+      topWalletNotionalUsd: Math.round(t),
+      topWalletSharePct: n > 0 ? Number(((t / n) * 100).toFixed(2)) : null,
+    }
+  }
+  const long = side(r.long_notional_24h, r.long_wallets_24h, r.top_long_wallet_notional_24h)
+  const short = side(r.short_notional_24h, r.short_wallets_24h, r.top_short_wallet_notional_24h)
+  if (!long || !short) return null
+  return { long, short }
+}
+
 export async function GET() {
   try {
     const supabase = getSupabase()
@@ -54,6 +86,7 @@ export async function GET() {
           newNotionalUsd: Math.round(Number(r.new_notional_24h)),
           addNotionalUsd: Math.round(Number(r.add_notional_24h)),
           activeWallets: Number(r.wallets_24h),
+          concentration: concentrationBlock(r),
         }
       })
 
