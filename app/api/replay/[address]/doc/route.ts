@@ -140,7 +140,17 @@ export async function GET(req: NextRequest, { params }: { params: { address: str
     if (cached) {
       let fresh = false
       let behind = 0
-      if (isCohort && cached.source === 'store') {
+      // A document cached in an older wire format is not stale by DATA — its
+      // fills are as real as the day they were built — but it is four times
+      // the bytes, and bytes are what the warm path costs. Rebuilding it once
+      // is how the v2 packing reaches documents already in the cache; a row
+      // that is never re-viewed is never rebuilt. The DECODER still reads v1,
+      // for rows served in the deploy window and for documents already in a
+      // viewer's sessionStorage.
+      const staleFormat = (cached.doc as { v?: number } | null)?.v !== 2
+      if (staleFormat) {
+        fresh = false
+      } else if (isCohort && cached.source === 'store') {
         const newest = await newestStoreFill(addr, coin)
         if (!newest) {
           fresh = true // nothing captured at all — the empty doc stands

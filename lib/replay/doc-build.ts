@@ -1,5 +1,5 @@
 /**
- * Server-side replay-doc builder (replay-doc.v1): the build-once half of
+ * Server-side replay-doc builder (replay-doc.v2): the build-once half of
  * build-once-serve-forever. One call loads the wallet's real fills (paged),
  * detects episodes with the same detector the player used to run in the
  * browser, resolves the requested range to a concrete window, fetches honest
@@ -274,7 +274,7 @@ export async function buildReplayDoc(
   const lastFillId = newest && Number.isFinite(newest.tid) ? newest.tid : null
 
   const base = {
-    v: 1 as const,
+    v: 2 as const,
     schema: REPLAY_DOC_SCHEMA,
     address: address.toLowerCase(),
     requested: { coin: req.coin, range: rangeKey(req.range), interval: req.interval },

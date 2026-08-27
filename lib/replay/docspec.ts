@@ -1,5 +1,5 @@
 /**
- * The replay document (replay-doc.v1): a compact, serialized, build-once
+ * The replay document (replay-doc.v2): a compact, serialized, build-once
  * playback unit for one (wallet, coin, range, bar width). Everything the
  * player needs to roll — coarsened candles, trade events, running position
  * and realized-PnL series, the coin's episode index — in arrays-of-arrays,
@@ -11,10 +11,14 @@
  * the coverage block travels inside the doc.
  */
 
-import type { RCandle, RFill } from './engine'
+import type { PlayFill, RCandle } from './engine'
 import type { Episode } from './episodes'
 
-export const REPLAY_DOC_SCHEMA = 'replay-doc.v1' as const
+export const REPLAY_DOC_SCHEMA = 'replay-doc.v2' as const
+
+/** The shape v1 documents carry. Cached v1 rows are honest and keep being
+ *  served, so the decoder reads both; only the builder is v2-only. */
+export const REPLAY_DOC_SCHEMA_V1 = 'replay-doc.v1' as const
 
 /** Hard cap on bars per doc — coarsened server-side before serialization,
  *  never shipped finer than needed. (Auto-pacing targets 75–150 bars, and
@@ -63,8 +67,9 @@ export function parseRangeKey(s: string): DocRange | null {
 /** [t, o, h, l, c, v] */
 export type WireCandle = [number, number, number, number, number, number]
 
-/** [t, px, sz, sideB(1=B/0=A), usd, pnl, fee, start|null, dirIdx] — one real
- *  fill; usd is |px*sz| notional; dirIdx indexes the doc's `dirs` table. */
+/** replay-doc.v1 fills: [t, px, sz, sideB(1=B/0=A), usd, pnl, fee, start|null,
+ *  dirIdx], one array per fill. Superseded by WireFills (v2) but still
+ *  DECODED, because cached v1 documents are honest and stay servable. */
 export type WireFill = [
   number,
   number,
@@ -76,6 +81,47 @@ export type WireFill = [
   number | null,
   number,
 ]
+
+/**
+ * replay-doc.v2 fills: the same real fills, columnar and losslessly packed.
+ *
+ * Measured on a production document: 11,170 fills were 752 KB of a 762 KB
+ * document — 98.7% of it, and the whole of the warm-serve cost, which tracks
+ * document size. This format is 199 KB raw / 71 KB on the wire for the same
+ * fills, and every value decodes back BIT-EXACT. Nothing is rounded, and
+ * nothing that cannot be reconstructed exactly is dropped:
+ *
+ * - `usd` is gone: it was |px·sz|, a derivation of two fields also shipped,
+ *   and the decoder never read it.
+ * - `fee` and `start` are gone: server-side inputs whose RESULTS the document
+ *   already carries (`episodes[].fees`, `series.pos`). The playback type has
+ *   no field for them, so their absence can never be read as a zero.
+ * - `dt` is the fill times, first absolute and the rest as deltas.
+ * - `px`, `sz`, `pnl` are fixed-point integers scaled by 10^e[i]; `px` is
+ *   additionally delta-encoded. The encoder VERIFIES that every value
+ *   divides back to the exact original double and falls back to e=0 (the
+ *   raw values) for any column where it does not.
+ * - `code` packs the direction-table index and the side: dirIdx * 2 + isBuy.
+ *
+ * Columns rather than rows because a column of like values compresses:
+ * the same fills are 242 KB on the wire as v1 rows, 71 KB as v2 columns.
+ */
+export interface WireFills {
+  /** Fill count — the length every column shares. */
+  n: number
+  /** Fill times: [0] absolute ms, the rest deltas from the previous fill. */
+  dt: number[]
+  /** Exchange prices, fixed-point by 10^e[0], delta-encoded. */
+  px: number[]
+  /** Exchange sizes, fixed-point by 10^e[1]. */
+  sz: number[]
+  /** Exchange realized PnL, fixed-point by 10^e[2]. */
+  pnl: number[]
+  /** dirIdx * 2 + (side === 'B' ? 1 : 0). */
+  code: number[]
+  /** Decimal exponents for [px, sz, pnl]; 0 means the column is raw. */
+  e: [number, number, number]
+}
 
 /** [from, to, pnl, fees, entries, exits, fills, maxPosCoins, maxPosUsd,
  *  openBeforeCoverage(0/1), openAtEnd(0/1)] */
@@ -109,8 +155,8 @@ export interface DocIntervalOption {
 }
 
 export interface ReplayDoc {
-  v: 1
-  schema: typeof REPLAY_DOC_SCHEMA
+  v: 1 | 2
+  schema: typeof REPLAY_DOC_SCHEMA | typeof REPLAY_DOC_SCHEMA_V1
   address: string
   /** The request as made (coin '' = "pick for me"). */
   requested: { coin: string; range: string; interval: string }
@@ -168,7 +214,7 @@ export interface ReplayDoc {
   candles: WireCandle[]
   /** String table for fill directions ("Open Long", "Close Short", …). */
   dirs: string[]
-  fills: WireFill[]
+  fills: WireFills | WireFill[]
   /** Per-bar running series, same length as candles: realized PnL after each
    *  bar (exchange closedPnl sums), position in coins after each bar, and
    *  cumulative fill count. */
@@ -181,27 +227,92 @@ export function encodeCandles(candles: RCandle[]): WireCandle[] {
   return candles.map(c => [c.t, c.o, c.h, c.l, c.c, c.v])
 }
 
-export function encodeFills(fills: RFill[], dirs: string[]): WireFill[] {
+/** Decimal places in a number's shortest round-trip representation, or 99
+ *  when it is written in exponent form (never fixed-point encoded). */
+function decimalPlaces(x: number): number {
+  const s = String(x)
+  if (/[eE]/.test(s)) return 99
+  const dot = s.indexOf('.')
+  return dot < 0 ? 0 : s.length - dot - 1
+}
+
+/**
+ * A column as fixed-point integers, scaled by 10^exponent — but ONLY if every
+ * value divides back to the exact original double and stays a safe integer.
+ * Any column that fails goes out unscaled. The check is the point: this is a
+ * cheaper spelling of the same numbers, never a rounding of them.
+ */
+function fixedPoint(values: number[]): { e: number; v: number[] } {
+  let places = 0
+  for (const v of values) {
+    const p = decimalPlaces(v)
+    if (p > places) places = p
+    if (places > 9) return { e: 0, v: values }
+  }
+  const scale = 10 ** places
+  const out: number[] = new Array(values.length)
+  for (let i = 0; i < values.length; i++) {
+    const q = Math.round(values[i] * scale)
+    if (!Number.isSafeInteger(q) || q / scale !== values[i]) return { e: 0, v: values }
+    out[i] = q
+  }
+  return { e: places, v: out }
+}
+
+/** In-place first-difference. Exact for the integers it is given. */
+function deltas(values: number[]): number[] {
+  const out: number[] = new Array(values.length)
+  for (let i = values.length - 1; i > 0; i--) out[i] = values[i] - values[i - 1]
+  out[0] = values[0] ?? 0
+  return out
+}
+
+function undeltas(values: number[]): number[] {
+  const out: number[] = new Array(values.length)
+  let run = 0
+  for (let i = 0; i < values.length; i++) {
+    run += values[i]
+    out[i] = run
+  }
+  return out
+}
+
+export function encodeFills(fills: PlayFill[], dirs: string[]): WireFills {
   const dirIdx = new Map<string, number>(dirs.map((d, i) => [d, i]))
-  return fills.map(f => {
+  const n = fills.length
+  const t: number[] = new Array(n)
+  const px: number[] = new Array(n)
+  const sz: number[] = new Array(n)
+  const pnl: number[] = new Array(n)
+  const code: number[] = new Array(n)
+  for (let i = 0; i < n; i++) {
+    const f = fills[i]
     let di = dirIdx.get(f.dir)
     if (di === undefined) {
       di = dirs.length
       dirs.push(f.dir)
       dirIdx.set(f.dir, di)
     }
-    return [
-      f.t,
-      f.px,
-      f.sz,
-      f.side === 'B' ? 1 : 0,
-      Math.abs(f.px * f.sz),
-      f.pnl,
-      f.fee,
-      f.start,
-      di,
-    ] as WireFill
-  })
+    t[i] = f.t
+    px[i] = f.px
+    sz[i] = f.sz
+    pnl[i] = f.pnl
+    code[i] = di * 2 + (f.side === 'B' ? 1 : 0)
+  }
+  const PX = fixedPoint(px)
+  const SZ = fixedPoint(sz)
+  const PNL = fixedPoint(pnl)
+  return {
+    n,
+    dt: deltas(t),
+    // Prices walk; their differences are small and compress. Sizes and PnL
+    // do not walk — measured, differencing them made both columns BIGGER.
+    px: deltas(PX.v),
+    sz: SZ.v,
+    pnl: PNL.v,
+    code,
+    e: [PX.e, SZ.e, PNL.e],
+  }
 }
 
 export function encodeEpisodes(episodes: Episode[]): WireEpisode[] {
@@ -226,17 +337,38 @@ export function decodeCandles(wire: WireCandle[]): RCandle[] {
   return wire.map(([t, o, h, l, c, v]) => ({ t, o, h, l, c, v }))
 }
 
-export function decodeFills(wire: WireFill[], dirs: string[]): RFill[] {
-  return wire.map(([t, px, sz, sideB, , pnl, fee, start, dirIdx]) => ({
-    t,
-    px,
-    sz,
-    side: sideB === 1 ? ('B' as const) : ('A' as const),
-    dir: dirs[dirIdx] ?? '',
-    pnl,
-    fee,
-    start,
-  }))
+/** Decodes either wire shape — v2 columns or v1 rows — into the fills the
+ *  player rolls. Cached v1 documents predate the columnar format and stay
+ *  perfectly servable; the shape itself says which is which. */
+export function decodeFills(wire: WireFills | WireFill[], dirs: string[]): PlayFill[] {
+  if (Array.isArray(wire)) {
+    return wire.map(([t, px, sz, sideB, , pnl, , , dirIdx]) => ({
+      t,
+      px,
+      sz,
+      side: sideB === 1 ? ('B' as const) : ('A' as const),
+      dir: dirs[dirIdx] ?? '',
+      pnl,
+    }))
+  }
+  const t = undeltas(wire.dt)
+  const pxScale = 10 ** wire.e[0]
+  const szScale = 10 ** wire.e[1]
+  const pnlScale = 10 ** wire.e[2]
+  const px = undeltas(wire.px)
+  const out: PlayFill[] = new Array(wire.n)
+  for (let i = 0; i < wire.n; i++) {
+    const c = wire.code[i]
+    out[i] = {
+      t: t[i],
+      px: px[i] / pxScale,
+      sz: wire.sz[i] / szScale,
+      side: c % 2 === 1 ? 'B' : 'A',
+      dir: dirs[(c - (c % 2)) / 2] ?? '',
+      pnl: wire.pnl[i] / pnlScale,
+    }
+  }
+  return out
 }
 
 export function decodeEpisodes(wire: WireEpisode[]): DocEpisode[] {
