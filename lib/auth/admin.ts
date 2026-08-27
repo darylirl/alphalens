@@ -3,7 +3,8 @@ import { timingSafeEqual } from 'crypto'
 
 export const ADMIN_COOKIE = 'alphalens_admin'
 
-function safeEqual(a: string, b: string): boolean {
+/** Constant-time string compare. Shared with the monitor's cron-secret check. */
+export function safeEqual(a: string, b: string): boolean {
   const ab = Buffer.from(a)
   const bb = Buffer.from(b)
   return ab.length === bb.length && timingSafeEqual(ab, bb)
