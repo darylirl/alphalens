@@ -13,6 +13,10 @@ are captioned "Illustration".
 Done means merged to the default branch, deployed, and verified against
 production; completion may never be reported on preview evidence.
 
+Getting there is the agent's job, not the reviewer's. Work that is green and
+mergeable gets merged by whoever wrote it, then verified against production —
+a finished branch is never parked waiting on someone else's merge click.
+
 The ~1,000-row PostgREST cap applies to RPC responses too — a function asked
 for 30,000 rows returns 1,000 silently; return bulk data as a single jsonb row
 with an explicit total so truncation is declared, never inferred.
