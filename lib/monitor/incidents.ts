@@ -57,8 +57,14 @@ export interface MonitorRun {
   store: string
   /** Open incidents after this run — also the state the fallback reads back. */
   open: IncidentMap
-  /** Messages this run sent, omitted when it sent none. */
-  sent?: Array<{ stream: string; kind: string; delivered: boolean; messageId?: number }>
+  /** Whether the alert bot is configured at all on this deployment. */
+  telegram: string
+  /**
+   * Messages this run tried to send, omitted when it tried none. `error` is
+   * carried for undelivered ones: a failure recorded without its reason is
+   * half a record, and the half it keeps is the half you cannot act on.
+   */
+  sent?: Array<{ stream: string; kind: string; delivered: boolean; messageId?: number; error?: string }>
 }
 
 const REDIS_KEY = 'alphalens:monitor:incidents'

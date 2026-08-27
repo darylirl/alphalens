@@ -195,8 +195,15 @@ export async function GET(req: NextRequest) {
       healthy,
       store: store.backend,
       open: nextIncidents,
+      telegram: telegramConfigured() ? 'configured' : 'unconfigured',
       sent: sent.length
-        ? sent.map(n => ({ stream: n.stream, kind: n.kind, delivered: n.delivered, messageId: n.messageId }))
+        ? sent.map(n => ({
+            stream: n.stream,
+            kind: n.kind,
+            delivered: n.delivered,
+            messageId: n.messageId,
+            error: n.error,
+          }))
         : undefined,
     })
   } catch (e) {
