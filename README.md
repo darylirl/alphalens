@@ -236,8 +236,24 @@ capability, only a way to reach the ones already there without pasting a token
 into a terminal. It is `noindex`, `Disallow`ed in `robots.txt`, and absent from
 the sitemap and both nav bars — unlisted, not secret; the token is the gate.
 
-Nothing here writes to the Ledger: publishing stays with the runner and the
-scorer, through the one tested path in `verify-service/lib/publish.mjs`.
+The console's one Ledger write is the cohort-signal form, and it goes through
+`publishCohortSignal()` — the same tested path the CLI uses, never a direct
+insert. Preview renders the exact row and the exact Telegram post before
+anything is sent, `scoreableSubject()` runs as the imported parser, and every
+floor is re-enforced server-side whatever the browser believes. The snapshot a
+call cites is re-read from `pulse_24h` on both preview and publish and never
+accepted from the client, so a call's stated basis is always a reading that
+actually happened. Verdict calls still publish only from the runner and the
+scorer.
+
+**Cohort-signal floors** (pre-registered 2026-08-27, documented at
+`/ledger/methodology`): skew ≥ 5%, notional ≥ $250k, ≥ 3 active wallets, ≥ 10
+wallets on the called side, and no single wallet above 40% of the notional
+directed that way. The last two came from HYPE reading -62% skew across seven
+wallets with one holding two thirds of the short side — every earlier floor
+passed and it was still one trader's position. Concentration comes from
+`pulse_24h` (migration 024) as aggregates only; where it is unmeasured the call
+is refused, never assumed uncontested.
 
 The **Monitor** tab runs the external dead-man's monitor on demand. The monitor
 route is protected by `CRON_SECRET`, which is what makes it awkward to exercise

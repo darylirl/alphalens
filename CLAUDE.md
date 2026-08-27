@@ -10,12 +10,23 @@ are captioned "Illustration".
 
 ## Rules
 
-Done means merged to the default branch, deployed, and verified against
-production; completion may never be reported on preview evidence.
+Sessions merge their own PRs. Done means merged to the default branch by the
+session that wrote it, deployed, migrations applied, and verified against
+production — never handed back to the human for a merge click. Disarm your own
+check-ins when the work lands. Completion may never be reported on preview
+evidence.
 
-Getting there is the agent's job, not the reviewer's. Work that is green and
-mergeable gets merged by whoever wrote it, then verified against production —
-a finished branch is never parked waiting on someone else's merge click.
+Getting there is the agent's job, not the reviewer's: a finished branch is
+never parked waiting on someone else. That includes the database — a change
+whose migration is still unapplied is not deployed, it is half-shipped, and the
+code that depends on it must fail closed until the migration lands rather than
+behave as though it had.
+
+Before dropping and recreating a view or table, capture what the drop takes
+with it. A matview's ACL goes with it: `pulse_24h` carried grants for anon,
+authenticated and service_role, and recreating it without re-granting would
+have taken the public /pulse read down silently, at the next request rather
+than at migration time.
 
 The ~1,000-row PostgREST cap applies to RPC responses too — a function asked
 for 30,000 rows returns 1,000 silently; return bulk data as a single jsonb row
