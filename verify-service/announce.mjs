@@ -16,11 +16,17 @@
  *      LEDGER_TELEGRAM_MIN_INTERVAL_MS (optional, default 3500),
  *      LEDGER_PUBLIC_URL (optional, permalink base).
  *
- * Run: node announce.mjs [--limit N] [--dry-run]
+ * Run: node announce.mjs [--limit N] [--dry-run] [--reset-failed]
+ *
+ * `--reset-failed` clears the attempt counters on everything still unposted.
+ * Use it after fixing a configuration fault (wrong channel id, bot not an
+ * admin, channel not created yet): those fail every message equally and would
+ * otherwise burn the five-attempt cap on each one, leaving the Ledger
+ * permanently un-mirrored with an empty pending view.
  */
 
 import { assertConfigured, sb } from './lib/db.mjs'
-import { announceSweep, formatFor, ledgerTelegramConfigured } from './lib/telegram.mjs'
+import { announceSweep, formatFor, ledgerTelegramConfigured, resetFailed } from './lib/telegram.mjs'
 
 const log = (...a) => console.log(new Date().toISOString(), ...a)
 
@@ -30,6 +36,7 @@ const arg = (name, fallback) => {
 }
 const LIMIT = parseInt(arg('--limit', '100'), 10)
 const DRY = process.argv.includes('--dry-run')
+const RESET = process.argv.includes('--reset-failed')
 
 async function dryRun() {
   const pending = await sb(
@@ -46,6 +53,7 @@ async function dryRun() {
 async function main() {
   assertConfigured()
   if (DRY) return dryRun()
+  if (RESET) await resetFailed({ log })
 
   if (!ledgerTelegramConfigured()) {
     log('LEDGER_TELEGRAM_BOT_TOKEN / LEDGER_TELEGRAM_CHANNEL_ID are not set — nothing to post.')

@@ -171,6 +171,12 @@ trigger still validates.
     order they were made. It runs every scorer tick, and on demand:
     `node announce.mjs --dry-run` prints exactly what would be posted;
     `node announce.mjs` posts it.
+  - **After a configuration fault:** a wrong channel id, a bot that is not an
+    admin, or a channel that does not exist yet fails every message equally
+    and burns the five-attempt cap on each within the hour — leaving the
+    Ledger un-mirrored with an empty pending view. Fix the configuration, then
+    `node announce.mjs --reset-failed` re-arms the backlog. It clears attempt
+    counters on unposted rows only; a row that did post is never re-armed.
   - **Never a gate:** a Telegram failure is logged and returned, never thrown.
     The Ledger is the source of truth; the channel is a mirror, and a mirror
     that is down does not stop a publish or a resolution.
