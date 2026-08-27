@@ -12,7 +12,12 @@
  * reason — never padded, resampled or silently narrowed.
  */
 
-import { loadWalletFills, type FillsWindow, type WalletRow } from '@/lib/wallet-data/fills'
+import {
+  loadWalletFills,
+  FillsSourceRefusal,
+  type FillsWindow,
+  type WalletRow,
+} from '@/lib/wallet-data/fills'
 import {
   loadCandles,
   storeCandleStart,
@@ -236,7 +241,7 @@ export async function buildReplayDoc(
     req.coin ? storeCandleStart(req.coin).catch(() => null) : null
 
   progress('fills', { fills: 0 })
-  const { fills, coverage, isCohort, wallet, gapCoins } = await loadWalletFills(address, {
+  const loaded = await loadWalletFills(address, {
     coin: req.coin || undefined,
     onPage: n => progress('fills', { fills: n }),
     wallet: walletRow,
@@ -247,7 +252,24 @@ export async function buildReplayDoc(
         }
       : undefined,
     forceSource: opts.forceSource,
+  }).catch(err => {
+    // A pinned source that could not answer is a REFUSAL, not a transient
+    // build failure: the reason belongs on the page verbatim, and the route
+    // must not retry it into a document built from the other tape.
+    if (err instanceof FillsSourceRefusal) throw new DocRefusal(err.message)
+    throw err
   })
+  const { fills, coverage, isCohort, wallet, gapCoins } = loaded
+
+  // Belt and braces: the pin is a claim about the served document, so check
+  // the tape that actually answered rather than trusting the branch above.
+  if (opts.forceSource && coverage.source !== opts.forceSource) {
+    throw new DocRefusal(
+      `This replay is pinned to the ${opts.forceSource} tape but the fills came back from ` +
+        `the ${coverage.source} tape. Refusing to build: the entry's published figures were ` +
+        `verified against the pinned source.`
+    )
+  }
   progress('fills', { fills: fills.length })
 
   const byCoin = new Map<string, Fill[]>()
