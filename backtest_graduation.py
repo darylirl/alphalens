@@ -98,6 +98,7 @@ stdout.
 import argparse
 import bisect
 import csv
+import gzip
 import json
 import math
 import os
@@ -292,13 +293,39 @@ def fetch_universe(scope: str = "all") -> list[dict]:
 
 # ── Fills store (reused shape from backtest_copy.py, plus completeness flag) ─
 
+def _cache_read(base: Path):
+    """Read a local cache entry, gzipped or not.
+
+    The fills cache is verbose JSON and highly repetitive, so it is written
+    gzipped: uncompressed it projects to ~13.4 GiB for the 7,064-wallet
+    universe, against the headroom left after a 93 GiB archive spill. Plain
+    files written by earlier runs are still read, so nothing has to be
+    refetched from a rate-limited API to change format.
+    """
+    gz = base.with_suffix(base.suffix + ".gz")
+    if gz.exists():
+        with gzip.open(gz, "rt", encoding="utf-8") as fh:
+            return json.load(fh)
+    if base.exists():
+        return json.loads(base.read_text())
+    return None
+
+
+def _cache_write(base: Path, obj):
+    gz = base.with_suffix(base.suffix + ".gz")
+    tmp = gz.with_suffix(".tmp")
+    with gzip.open(tmp, "wt", encoding="utf-8") as fh:
+        json.dump(obj, fh)
+    tmp.replace(gz)
+
+
 def fetch_fills(address: str) -> tuple[list[dict], bool]:
     """Complete lifetime fills via forward pagination, cached locally.
     Returns (fills, complete). complete=False means the page cap was hit and
     the history cannot be trusted as complete — the wallet is excluded."""
     cache_file = CACHE / f"gfills_{address.lower()}.json"
-    if cache_file.exists():
-        blob = json.loads(cache_file.read_text())
+    blob = _cache_read(cache_file)
+    if blob is not None:
         return blob["fills"], blob["complete"]
 
     fills: list[dict] = []
@@ -338,7 +365,7 @@ def fetch_fills(address: str) -> tuple[list[dict], bool]:
              "startPosition": f.get("startPosition"), "dir": f.get("dir"),
              "liq": own_liquidation(f)}
             for f in fills]
-    cache_file.write_text(json.dumps({"complete": complete, "fills": slim}))
+    _cache_write(cache_file, {"complete": complete, "fills": slim})
     return slim, complete
 
 
@@ -349,8 +376,9 @@ def fetch_portfolio(address: str) -> dict:
     before perpAllTime's first sample is served by allTime (spliced by the
     SampledSeries constructors below, disclosed in the report)."""
     cache_file = CACHE / f"gportfolio2_{address.lower()}.json"
-    if cache_file.exists():
-        return json.loads(cache_file.read_text())
+    cached = _cache_read(cache_file)
+    if cached is not None:
+        return cached
     blob = {"fetched_at": int(time.time() * 1000)}
     try:
         data = hl({"type": "portfolio", "user": address})
@@ -370,7 +398,7 @@ def fetch_portfolio(address: str) -> dict:
             f"portfolio fetch failed for {address}: {type(exc).__name__}: "
             f"{str(exc)[:160]}. Not cached — re-run to retry this wallet."
         ) from exc
-    cache_file.write_text(json.dumps(blob))
+    _cache_write(cache_file, blob)
     return blob
 
 
