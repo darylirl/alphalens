@@ -52,7 +52,7 @@ import {
   coarsen,
   cueSchedule,
   type RCandle,
-  type RFill,
+  type PlayFill,
   type Timeline,
 } from '@/lib/replay/engine'
 import {
@@ -528,7 +528,7 @@ export function ReplayPlayer({
     () => (doc?.resolved ? decodeCandles(doc.candles) : null),
     [doc]
   )
-  const fills: RFill[] | null = useMemo(
+  const fills: PlayFill[] | null = useMemo(
     () => (doc?.resolved ? decodeFills(doc.fills, doc.dirs) : null),
     [doc]
   )

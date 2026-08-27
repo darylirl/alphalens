@@ -191,7 +191,9 @@ SUPABASE_ANON_KEY=your-anon-key
 # Optional
 UPSTASH_REDIS_REST_URL=...        # API response caching
 UPSTASH_REDIS_REST_TOKEN=...
-TELEGRAM_BOT_TOKEN=...            # capture-daemon stall alerts
+TELEGRAM_BOT_TOKEN=...            # capture-daemon stall alerts (operational)
+LEDGER_TELEGRAM_BOT_TOKEN=...     # Ledger → @alphalens_ledger (content); may be
+LEDGER_TELEGRAM_CHANNEL_ID=@...   # the same bot, never the same chat as the alerts
 ANTHROPIC_API_KEY=sk-ant-your-key # AI agent
 ADMIN_API_TOKEN=...               # gates wallet management + POST /api/verify;
                                   # also unlocks the /admin console

@@ -178,6 +178,8 @@ export async function scoreCall(call, { nowMs = Date.now(), log = () => {} } = {
 
   log(`call ${call.id} resolved: ${decision.outcome}`
     + (decision.scored_brier === null ? '' : ` (brier ${decision.scored_brier.toFixed(3)})`))
+  // Same posture as the publish path: the resolution is already written and
+  // immutable; the channel post is a mirror that may fail and be retried.
   await announceResolution(updated[0], { log }).catch((e) => log(`telegram announce failed: ${e.message}`))
   return 'resolved'
 }

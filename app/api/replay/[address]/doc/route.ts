@@ -39,8 +39,15 @@ import { famousPin } from '@/lib/replay/famous'
 // ~10K-fill window slides regardless of our capture stream.
 
 export const dynamic = 'force-dynamic'
-// Cold builds page a cohort wallet's full captured history; give them room.
-export const maxDuration = 60
+// Cold builds page a wallet's history; a CURATED famous episode pads its
+// window by 48h on each side, and on the heaviest wallets that is a very
+// large walk — the comeback entry's window covers ~22K fills/day and was
+// killed at 60s having walked 77,045 fills across 40 pages. The pad is not
+// the thing to shrink: it is what makes a pinned episode's boundaries detect
+// identically to a full-history load, so trimming it would change the build
+// inputs behind already-verified figures. Give the cold path room instead.
+// Warm reads are unaffected — those are a single indexed row.
+export const maxDuration = 300
 
 interface CacheRow {
   content_hash: string
@@ -149,8 +156,27 @@ export async function GET(req: NextRequest, { params }: { params: { address: str
     if (cached) {
       let fresh = false
       let behind = 0
+      // A document cached in an older wire format is not stale by DATA — its
+      // fills are as real as the day they were built — but it is four times
+      // the bytes, and bytes are what the warm path costs. Rebuilding it once
+      // is how the v2 packing reaches documents already in the cache; a row
+      // that is never re-viewed is never rebuilt. The DECODER still reads v1,
+      // for rows served in the deploy window and for documents already in a
+      // viewer's sessionStorage.
+      const staleFormat = (cached.doc as { v?: number } | null)?.v !== 2
+
+      // Pinned wins over the format upgrade, deliberately. A curated episode
+      // may no longer be rebuildable at all — that is the whole reason it is
+      // pinned — so rebuilding one to save bytes could destroy a record the
+      // exchange will not serve again. Curated documents therefore keep
+      // whatever format they were built in; the set is small and fixed, and
+      // moving them to v2 is a deliberate act (drop the row and re-run
+      // scripts/prebuild-famous-local.mts while the window is still live),
+      // never an automatic rebuild in a viewer's request path.
       if (pinned) {
         fresh = true
+      } else if (staleFormat) {
+        fresh = false
       } else if (isCohort && cached.source === 'store') {
         const newest = await newestStoreFill(addr, coin)
         if (!newest) {

@@ -2,7 +2,6 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { hypothesisVerdictCall } from '../lib/publish.mjs'
 import { adjudicate, scoreableSubject, GRACE_H } from '../lib/scorer.mjs'
-import { formatCall, formatResolution } from '../lib/telegram.mjs'
 
 const HOUR_MS = 3_600_000
 
@@ -158,21 +157,5 @@ test('scoreableSubject names every missing field', () => {
   assert.equal(errors.length, 2)
 })
 
-// ── telegram formatting (pure) ──────────────────────────────────────────────
-
-test('call and resolution messages carry the permalink and the right badge', () => {
-  const published = formatCall({ ...signalCall, id: 9 })
-  assert.match(published, /70% confidence/)
-  assert.match(published, /\/ledger\/9$/)
-
-  const verdict = formatCall({ id: 3, kind: 'hypothesis_verdict', subject: { verdict: 'killed' }, claim: 'KILLED: x.' })
-  assert.match(verdict, /KILLED/)
-
-  const resolved = formatResolution({ ...signalCall, outcome: 'correct', scored_brier: 0.09 })
-  assert.match(resolved, /CORRECT/)
-  assert.match(resolved, /0\.090/)
-
-  const gap = formatResolution({ ...signalCall, outcome: 'unresolvable', scored_brier: null })
-  assert.match(gap, /UNRESOLVABLE \(data gap\)/)
-  assert.doesNotMatch(gap, /Brier/)
-})
+// Telegram message shape and the post-once bookkeeping live in
+// test/telegram.test.mjs.
