@@ -165,7 +165,10 @@ export async function publishResult(result, { log = () => {}, db = sb } = {}) {
   }
 
   log(`published Ledger call ${call.id} for result ${result.id} (${row.subject.verdict})`)
-  await announceCall(call, { log }).catch((e) => log(`telegram announce failed: ${e.message}`))
+  // The channel is a mirror, never a gate: announce() reports a status rather
+  // than throwing, and anything it could not post is retried by the sweep in
+  // scorer.mjs. A Telegram outage must not cost us a published call.
+  await announceCall(call, { log, db }).catch((e) => log(`telegram announce failed: ${e.message}`))
   return { published: true, call }
 }
 
