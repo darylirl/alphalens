@@ -12,7 +12,7 @@ import { writeFileSync, mkdirSync } from 'fs'
 import { join } from 'path'
 import { listFamousReplays } from '@/lib/replay/famous'
 import { buildReplayDoc } from '@/lib/replay/doc-build'
-import { parseRangeKey, PASTED_TTL_MS } from '@/lib/replay/docspec'
+import { parseRangeKey } from '@/lib/replay/docspec'
 
 const sha256 = (s: string) => createHash('sha256').update(s).digest('hex')
 
@@ -59,8 +59,10 @@ async function main() {
       doc_bytes: docJson.length,
       build_ms: built.buildMs,
       built_at: new Date().toISOString(),
-      expires_at:
-        built.source === 'exchange' ? new Date(Date.now() + PASTED_TTL_MS).toISOString() : null,
+      // Curated entries are pinned: no TTL, whatever the source. The doc
+      // route serves a pinned row regardless of expiry, so a stored expiry
+      // would only mislead the next thing that reads the table.
+      expires_at: null,
     }
     writeFileSync(join(outDir, `${e.slug}.row.json`), JSON.stringify(row, null, 2))
     writeFileSync(join(outDir, `${e.slug}.doc.json`), docJson)
