@@ -12,8 +12,14 @@
  * reason — never padded, resampled or silently narrowed.
  */
 
-import { loadWalletFills } from '@/lib/wallet-data/fills'
-import { loadCandles, INTERVAL_MS } from '@/lib/wallet-data/candles'
+import { loadWalletFills, type WalletRow } from '@/lib/wallet-data/fills'
+import {
+  loadCandles,
+  storeCandleStart,
+  INTERVAL_MS,
+  MAX_BARS,
+  type CandlesResult,
+} from '@/lib/wallet-data/candles'
 import { detectEpisodes, defaultEpisode, summarize, type Episode } from './episodes'
 import { coarsen, buildTimeline, type RFill } from './engine'
 import { paceCandidates } from './ladder'
@@ -57,6 +63,78 @@ export interface BuiltDoc {
 /** A request the data cannot serve (unknown coin, vanished episode, refused
  *  interval). The route reports the reason as a 4xx, never a fake doc. */
 export class DocRefusal extends Error {}
+
+/** Bars in the streamed opening window: covers the title card plus ~20s of
+ *  1x playback — plenty of runway while the tail loads. */
+const HEAD_BARS = 40
+/** Below this many remaining bars a split buys nothing; serve in one piece. */
+const MIN_TAIL_BARS = 20
+
+/** The doc's candle window, fetched in two slices when a head consumer is
+ *  waiting: the opening HEAD_BARS stream first (via onHeadSlice) so playback
+ *  can start, then the tail, merged into one series. The tail is pinned to
+ *  the head's source — a series must never switch source mid-window — and
+ *  the merged coverage is recomputed over the whole series, so the final doc
+ *  is identical to a single-fetch build. */
+async function loadCandlesSliced(
+  coin: string,
+  interval: string,
+  fromMs: number,
+  toMs: number,
+  onHeadSlice: ((head: CandlesResult) => void) | null,
+  storeStart: Promise<number | null> | null
+): Promise<CandlesResult> {
+  const ms = INTERVAL_MS[interval]
+  if (!ms) throw new Error(`unknown interval '${interval}'`)
+  const windowBars = Math.ceil((toMs - fromMs) / ms)
+  // The whole window must clear the cap BEFORE any slice is fetched — a
+  // per-slice check would let an over-cap explicit interval emit a head and
+  // then die on the tail. Same wording as loadCandles' own refusal.
+  if (windowBars > MAX_BARS) {
+    throw new Error(
+      `window holds ${windowBars.toLocaleString()} ${interval} bars, over the ${MAX_BARS.toLocaleString()} cap — pick a coarser interval or a narrower range`
+    )
+  }
+  if (!onHeadSlice || windowBars <= HEAD_BARS + MIN_TAIL_BARS) {
+    return loadCandles(coin, interval, fromMs, toMs, { storeStart })
+  }
+
+  const headTo = fromMs + HEAD_BARS * ms
+  const head = await loadCandles(coin, interval, fromMs, headTo, { storeStart })
+  if (head.candles.length >= 2) onHeadSlice(head)
+  const tail = await loadCandles(coin, interval, headTo, toMs, {
+    forceSource: head.source,
+    storeStart,
+  })
+
+  const lastHeadT = head.candles.length ? head.candles[head.candles.length - 1].t : -Infinity
+  const candles = [...head.candles, ...tail.candles.filter(c => c.t > lastHeadT)]
+  let internalGaps = 0
+  let largestGap = 0
+  for (let i = 1; i < candles.length; i++) {
+    const gap = candles[i].t - candles[i - 1].t
+    if (gap > ms * 1.5) {
+      internalGaps++
+      if (gap > largestGap) largestGap = gap
+    }
+  }
+  const first = candles[0]?.t ?? null
+  const last = candles.length ? candles[candles.length - 1].t + ms : null
+  return {
+    ...head,
+    to: toMs,
+    candles,
+    coverage: {
+      bars: candles.length,
+      window_bars: windowBars,
+      missing_leading_ms: first === null ? toMs - fromMs : Math.max(first - fromMs, 0),
+      missing_trailing_ms: last === null ? 0 : Math.max(toMs - last, 0),
+      internal_gaps: internalGaps,
+      largest_internal_gap_ms: largestGap,
+      note: head.coverage.note,
+    },
+  }
+}
 
 function toRFill(f: Fill): RFill {
   const start = parseFloat(f.startPosition)
@@ -122,16 +200,32 @@ function positionSeries(
 export async function buildReplayDoc(
   address: string,
   req: DocRequest,
-  onProgress?: (p: BuildProgress) => void
+  onProgress?: (p: BuildProgress) => void,
+  /** Progressive playback (Replay v2.2): called at most once with a PARTIAL
+   *  doc holding the opening window of candles and fills, so the player can
+   *  roll while the tail loads. Head docs declare partial: true and must
+   *  never be cached — the full doc always follows on success. */
+  onHead?: (head: ReplayDoc) => void,
+  /** The wallets row when the caller already read it — the doc route does,
+   *  to decide cohort freshness. Omit when unknown. */
+  walletRow?: WalletRow | null
 ): Promise<BuiltDoc> {
   const t0 = Date.now()
   const progress = (phase: BuildProgress['phase'], detail: BuildProgress['detail']) =>
     onProgress?.({ phase, detail })
 
+  // A coin-scoped request knows its coin before it knows anything else, so
+  // the candle ladder's "how far back does our captured tape reach" probe
+  // does not have to queue behind the fills load — it only needs the coin.
+  // (Started here, awaited inside loadCandles; a rejection is caught there.)
+  const storeStartAhead =
+    req.coin ? storeCandleStart(req.coin).catch(() => null) : null
+
   progress('fills', { fills: 0 })
   const { fills, coverage, isCohort, wallet, gapCoins } = await loadWalletFills(address, {
     coin: req.coin || undefined,
     onPage: n => progress('fills', { fills: n }),
+    wallet: walletRow,
   })
   progress('fills', { fills: fills.length })
 
@@ -262,20 +356,93 @@ export async function buildReplayDoc(
   const padFrom = Math.max(raw.from - Math.max(span * 0.06, 120_000), 0)
   const padTo = Math.min(raw.to + Math.max(span * 0.04, 120_000), Date.now())
 
+  // The fills the doc plays: exactly the episode's own, or the padded window
+  // for "entire history" — same rule the player enforced, so padding cannot
+  // smuggle a neighbouring episode's fills into this story. (Known before the
+  // candles load, so the streamed head can carry its own fills.)
+  const playFrom = episode ? episode.from : padFrom
+  const playTo = episode ? episode.to : padTo
+
+  /** The streamed head: the opening candle slice with its own fills, series
+   *  and full-window bar count, declared partial. Everything in it is real
+   *  and final — the tail only appends. */
+  const emitHeadDoc = (head: CandlesResult) => {
+    if (!onHead) return
+    const headEnd = head.candles[head.candles.length - 1].t + head.interval_ms
+    const headFills = coinFills.filter(f => f.t >= playFrom && f.t <= playTo && f.t < headEnd)
+    const tlHead = buildTimeline(head.candles, head.interval_ms, headFills)
+    const dirsHead: string[] = []
+    onHead({
+      ...base,
+      partial: true,
+      resolved: {
+        coin,
+        range: resolvedRange === 'all' ? 'all' : rangeKey(resolvedRange),
+        from: raw.from,
+        to: raw.to,
+        padFrom,
+        padTo,
+        interval: head.interval,
+        interval_ms: head.interval_ms,
+        coarsen: 1,
+      },
+      starts_mid_position: gapCoins.includes(coin),
+      coverage: {
+        fills: coverage,
+        candles: {
+          source: head.source,
+          bars: head.candles.length,
+          window_bars: Math.ceil((padTo - padFrom) / head.interval_ms),
+          internal_gaps: head.coverage.internal_gaps,
+          largest_internal_gap_ms: head.coverage.largest_internal_gap_ms,
+          note: `${head.coverage.note} — opening window; the remainder is still streaming`,
+        },
+      },
+      episodes: encodeEpisodes(episodes),
+      intervals: head.intervals,
+      candles: encodeCandles(head.candles),
+      dirs: dirsHead,
+      fills: encodeFills(headFills, dirsHead),
+      series: {
+        realized: tlHead.realizedAfter,
+        pos: positionSeries(head.candles, head.interval_ms, headFills),
+        fills_after: tlHead.fillsAfter,
+      },
+    })
+  }
+
   // Candles: auto-pacing tries the ladder's best-paced intervals in order;
-  // an explicit interval gets exactly one honest attempt.
+  // an explicit interval gets exactly one honest attempt. Once a head has
+  // been streamed the interval is committed — a later failure aborts the
+  // build rather than switching intervals under a playing head.
   const candidates =
     req.interval !== 'auto' ? [req.interval] : paceCandidates(padTo - padFrom)
   if (candidates.length === 0 || (req.interval !== 'auto' && !INTERVAL_MS[req.interval])) {
     throw new DocRefusal(`No candle interval can serve this window`)
   }
-  let candlesRes: Awaited<ReturnType<typeof loadCandles>> | null = null
+  let candlesRes: CandlesResult | null = null
   let lastErr = 'no interval can serve this window'
+  let headEmitted = false
   for (const iv of candidates) {
     try {
-      candlesRes = await loadCandles(coin, iv, Math.floor(padFrom), Math.ceil(padTo))
+      candlesRes = await loadCandlesSliced(
+        coin,
+        iv,
+        Math.floor(padFrom),
+        Math.ceil(padTo),
+        onHead
+          ? head => {
+              headEmitted = true
+              emitHeadDoc(head)
+            }
+          : null,
+        // Only reusable when the request named the coin the doc resolved to;
+        // a server-picked coin was unknown when the probe started.
+        req.coin === coin ? storeStartAhead : null
+      )
       break
     } catch (err) {
+      if (headEmitted) throw err
       lastErr = err instanceof Error ? err.message : String(err)
       // A refusal moves to the next candidate; a source outage aborts.
       if (!/cap|honestly|resample|window|unknown interval/i.test(lastErr)) throw err
@@ -293,11 +460,6 @@ export async function buildReplayDoc(
     served = coarsen(candlesRes.candles, candlesRes.interval_ms, coarsenFactor)
   }
 
-  // The fills the doc plays: exactly the episode's own, or the padded window
-  // for "entire history" — same rule the player enforced, so padding cannot
-  // smuggle a neighbouring episode's fills into this story.
-  const playFrom = episode ? episode.from : padFrom
-  const playTo = episode ? episode.to : padTo
   const playFills = coinFills.filter(f => f.t >= playFrom && f.t <= playTo)
 
   progress('assemble', { bars: served.candles.length, fills: playFills.length })

@@ -220,7 +220,19 @@ export async function loadCandles(
   coin: string,
   interval: string,
   fromMs: number,
-  toMs: number
+  toMs: number,
+  opts: {
+    /** Pin the source. Used when a window is fetched in slices (the replay's
+     *  progressive head/tail split): a later slice starting inside exchange
+     *  retention must not silently switch source mid-series. The pin is still
+     *  honesty-checked — a source that cannot reach the slice is refused. */
+    forceSource?: 'exchange' | 'store'
+    /** The coin's earliest stored 1m bar, when the caller already started
+     *  that probe (it depends only on the coin, so the replay builder runs
+     *  it alongside the fills load). Same value, fetched earlier — pass the
+     *  promise, not a guess. */
+    storeStart?: Promise<number | null> | null
+  } = {}
 ): Promise<CandlesResult> {
   const ms = INTERVAL_MS[interval]
   if (!ms) throw new Error(`unknown interval '${interval}'`)
@@ -231,15 +243,23 @@ export async function loadCandles(
     )
   }
 
-  const storeStart = await storeCandleStart(coin)
+  const storeStart = await (opts.storeStart ?? storeCandleStart(coin))
   const intervals = intervalOptions(fromMs, storeStart)
   const chosen = intervals.find(i => i.interval === interval)
   if (!chosen?.available || !chosen.source) {
     throw new Error(chosen?.reason ?? `${interval} cannot honestly serve this window`)
   }
+  let source = chosen.source
+  if (opts.forceSource === 'store') {
+    if (interval === '1m' && storeStart !== null && fromMs >= storeStart) source = 'store'
+    else throw new Error(`the captured 1m tape cannot honestly serve this window`)
+  } else if (opts.forceSource === 'exchange') {
+    if (fromMs >= retentionStart(interval)) source = 'exchange'
+    else throw new Error(`${interval} exchange bars cannot honestly serve this window`)
+  }
 
   const candles =
-    chosen.source === 'exchange'
+    source === 'exchange'
       ? await exchangeCandles(coin, interval, fromMs, toMs)
       : await storeCandles(coin, fromMs, toMs)
 
@@ -259,7 +279,7 @@ export async function loadCandles(
     coin,
     interval,
     interval_ms: ms,
-    source: chosen.source,
+    source,
     from: fromMs,
     to: toMs,
     candles,
@@ -271,7 +291,7 @@ export async function loadCandles(
       internal_gaps: internalGaps,
       largest_internal_gap_ms: largestGap,
       note:
-        chosen.source === 'exchange'
+        source === 'exchange'
           ? `exchange ${interval} bars, served as returned — absent bars stay absent`
           : `AlphaLens captured 1m tape — missing minutes are shown as gaps, never filled`,
     },

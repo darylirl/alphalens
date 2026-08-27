@@ -13,6 +13,10 @@ are captioned "Illustration".
 Done means merged to the default branch, deployed, and verified against
 production; completion may never be reported on preview evidence.
 
+The ~1,000-row PostgREST cap applies to RPC responses too — a function asked
+for 30,000 rows returns 1,000 silently; return bulk data as a single jsonb row
+with an explicit total so truncation is declared, never inferred.
+
 ## Invariant: missing data is never zero
 
 A gap in captured data must never be read, stored, or displayed as `0`.
