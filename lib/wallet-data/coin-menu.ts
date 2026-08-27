@@ -6,13 +6,14 @@ import {
   type FillsCoverage,
   type WalletRow,
 } from './fills'
+import { gapsByCoin, drawable, gapNote, type SeriesGap } from './gaps'
 import type { Fill } from '@/lib/hyperliquid/types'
 
 // The replay coin menu: per-coin trade counts, spans and realized PnL for a
 // wallet, fast enough to be the page's first paint (Replay v2.2). Two paths,
 // same rule as the fills reader:
 //
-// - Cohort wallets: ONE SQL aggregate (`replay_coin_menu`, migration 018)
+// - Cohort wallets: ONE SQL aggregate (`replay_coin_menu`, migration 023)
 //   over the wallet's captured rows — the aggregate is pushed into the
 //   database instead of paging 20K fills through PostgREST, so the menu does
 //   not pay the cold path it exists to remove. The RPC returns at most 200
@@ -23,6 +24,12 @@ import type { Fill } from '@/lib/hyperliquid/types'
 // Sparklines ride along only where they are free: the exchange path already
 // holds every fill, so a cumulative realized-PnL line costs nothing; the
 // cohort aggregate does not return fills, and we do not page them to fake one.
+//
+// Both a coin's date range and its realized total read as claims about a
+// continuous window, so both travel with that coin's PROVEN gaps
+// (`replay_coin_gaps`, migration 024 — a second aggregate, for the same
+// reason the first one exists). A quiet coin is not a gapped one and never
+// carries a marker.
 
 /** RPC caps its result at this many coins; the loader declares when hit. */
 const MENU_COIN_CAP = 200
@@ -33,11 +40,18 @@ const SPARK_POINTS = 24
 export interface CoinMenuEntry {
   coin: string
   fills: number
-  /** First/last fill in the covered window, ms. */
+  /** First and last fill held for this coin, ms. These are the ENDS of the
+   *  series, not a statement that everything between them was measured —
+   *  `gaps` says what sits inside. */
   from: number
   to: number
-  /** Sum of exchange-reported realized PnL over the covered fills, USD. */
+  /** Sum of exchange-reported realized PnL over the fills held for this coin.
+   *  With a non-empty `gaps` this is a sum over what we hold, not a total for
+   *  the span. */
   realized_pnl: number
+  /** Proven discontinuities in this coin's series. Empty for a continuous
+   *  one; quiet stretches never appear here. */
+  gaps: SeriesGap[]
   /** Cumulative realized PnL samples over the window, oldest first — only
    *  where the fills were already in hand (exchange path); never fabricated. */
   spark: number[] | null
@@ -61,6 +75,13 @@ interface MenuRpcRow {
   realized_pnl: number
 }
 
+interface GapRpcRow {
+  coin: string
+  gap_from: string
+  gap_to: string
+  unexplained_coins: number
+}
+
 const fmtDay = (ms: number) => new Date(ms).toISOString().slice(0, 10)
 
 /** Cumulative realized PnL over one coin's fills, sampled evenly (last point
@@ -82,6 +103,7 @@ function sparkOf(fills: Fill[]): number[] {
 
 /** Group already-loaded fills (ascending by time) into menu entries. */
 function entriesFromFills(fills: Fill[]): CoinMenuEntry[] {
+  const gaps = gapsByCoin(fills)
   const byCoin = new Map<string, Fill[]>()
   for (const f of fills) {
     const held = byCoin.get(f.coin)
@@ -95,6 +117,7 @@ function entriesFromFills(fills: Fill[]): CoinMenuEntry[] {
       from: coinFills[0].time,
       to: coinFills[coinFills.length - 1].time,
       realized_pnl: coinFills.reduce((s, f) => s + (Number(f.closedPnl) || 0), 0),
+      gaps: drawable(gaps.get(coin) ?? []),
       spark: sparkOf(coinFills),
     }))
     .sort((a, b) => b.fills - a.fills)
@@ -107,10 +130,13 @@ export async function loadCoinMenu(address: string): Promise<CoinMenu> {
   // turns out not to be cohort simply discards a cheap indexed lookup that
   // found nothing.
   const supabase = getSupabase()
-  const [wallet, menuRes, gapCoins] = await Promise.all([
+  const [wallet, menuRes, coinGapsRes, gapCoins] = await Promise.all([
     loadWalletRow(address),
     supabase
       .rpc('replay_coin_menu', { p_wallet: address.toLowerCase() })
+      .then(r => r, (e: unknown) => ({ data: null, error: e as { message: string } })),
+    supabase
+      .rpc('replay_coin_gaps', { p_wallet: address.toLowerCase() })
       .then(r => r, (e: unknown) => ({ data: null, error: e as { message: string } })),
     loadGapCoins(address),
   ])
@@ -121,14 +147,36 @@ export async function loadCoinMenu(address: string): Promise<CoinMenu> {
       const { data, error } = menuRes
       if (error) throw error
       const rows = (data ?? []) as MenuRpcRow[]
+      // A failed gap read is NOT an empty gap list: serving "no gaps" because
+      // the query broke would assert continuity we did not check. It throws
+      // into the same fallback the menu aggregate uses.
+      if (coinGapsRes.error) throw coinGapsRes.error
+      const gapRows = (coinGapsRes.data ?? []) as GapRpcRow[]
+      const gapsFor = new Map<string, SeriesGap[]>()
+      for (const g of gapRows) {
+        const from = Date.parse(g.gap_from)
+        const to = Date.parse(g.gap_to)
+        const held = gapsFor.get(g.coin) ?? []
+        held.push({
+          from,
+          to,
+          duration_ms: to - from,
+          coin: g.coin,
+          unexplained_coins: Number(g.unexplained_coins),
+          kind: 'position_break',
+        })
+        gapsFor.set(g.coin, held)
+      }
       const coins: CoinMenuEntry[] = rows.map(r => ({
         coin: r.coin,
         fills: Number(r.fill_count),
         from: Date.parse(r.first_fill),
         to: Date.parse(r.last_fill),
         realized_pnl: Number(r.realized_pnl),
+        gaps: (gapsFor.get(r.coin) ?? []).sort((a, b) => a.from - b.from),
         spark: null,
       }))
+      const allGaps = coins.flatMap(c => c.gaps)
       const fillCount = coins.reduce((s, c) => s + c.fills, 0)
       const from = coins.length ? Math.min(...coins.map(c => c.from)) : null
       const to = coins.length ? Math.max(...coins.map(c => c.to)) : null
@@ -145,9 +193,16 @@ export async function loadCoinMenu(address: string): Promise<CoinMenu> {
           to: to === null ? null : new Date(to).toISOString(),
           fill_count: fillCount,
           capped: false,
+          gaps: allGaps,
+          contiguous: allGaps.length === 0,
+          // The menu never holds the fills, so wallet-level measured time is
+          // not computable here. Null says "unknown"; it must not be read as
+          // the whole span.
+          covered_ms: null,
           note: coins.length
             ? `AlphaLens capture store: ${fillCount.toLocaleString()} fills across ${coins.length} coin${coins.length === 1 ? '' : 's'}, ${fmtDay(from!)} to ${fmtDay(to!)}` +
-              (coinsCapped ? ` (most-traded ${MENU_COIN_CAP} coins listed; more exist)` : '')
+              (coinsCapped ? ` (most-traded ${MENU_COIN_CAP} coins listed; more exist)` : '') +
+              (gapNote(allGaps) ? ` — ${gapNote(allGaps)}` : '')
             : 'AlphaLens capture store: no captured fills yet for this cohort wallet',
         },
       }

@@ -58,6 +58,19 @@ export interface FamousReplay {
    *  WHEN it ran. The coverage note must say which source and why.
    */
   fills_source?: 'store' | 'exchange'
+  /**
+   * Why this entry is not being served. An entry is withheld when its pinned
+   * episode can no longer be reproduced from the fills its source serves
+   * today — for instance when the served series turns out to contain a proven
+   * capture gap, which splits the episode and leaves the entry's stated figure
+   * describing a window the player no longer plays as one story.
+   *
+   * The entry STAYS in the file: it is an honest record of what was verified
+   * and when, and deleting it to tidy the gallery would be its own dishonesty.
+   * It is unpublished, not erased — the same rule the Ledger applies to
+   * ineligible results (CLAUDE.md): filter on publish, never edit history.
+   */
+  withheld?: string
   /** A claim about this wallet we can NAME but have not verified from fills,
    *  with the reason and the path that would verify it. Rendered as an
    *  explicit not-verified note — never merged into any figure above. */
@@ -115,12 +128,20 @@ function validate(entries: FamousReplay[]): FamousReplay[] {
 
 const MANIFEST: FamousReplay[] = validate((raw as ManifestFile).entries)
 
-export function listFamousReplays(): FamousReplay[] {
+/** Everything in the file, withheld entries included. For tooling and audits
+ *  — never for anything a visitor sees. */
+export function allFamousReplays(): FamousReplay[] {
   return MANIFEST
 }
 
+const PUBLISHED = MANIFEST.filter(e => !e.withheld)
+
+export function listFamousReplays(): FamousReplay[] {
+  return PUBLISHED
+}
+
 export function famousBySlug(slug: string): FamousReplay | null {
-  return MANIFEST.find(e => e.slug === slug) ?? null
+  return PUBLISHED.find(e => e.slug === slug) ?? null
 }
 
 /** Does a doc request match a curated entry? Used by the doc route to pin the
@@ -135,7 +156,7 @@ export function famousPin(
 ): FamousReplay | null {
   const addr = address.toLowerCase()
   return (
-    MANIFEST.find(
+    PUBLISHED.find(
       e => e.address === addr && e.coin === coin && e.range === range && e.interval === interval
     ) ?? null
   )

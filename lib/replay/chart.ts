@@ -10,9 +10,19 @@
  * exchange-served candles only; where the series has a hole the chart draws a
  * marked gap seam rather than bridging it; the wallet's fills are marked on
  * the exact bars their exchange timestamps fall in.
+ *
+ * Two different holes get drawn, and conflating them was a real bug. A hole in
+ * the CANDLES is a stretch with no price bars — the series jumps and the seam
+ * falls between two neighbouring bars. A hole in the FILLS is a stretch where
+ * the price tape is complete but the wallet's own trades were never captured:
+ * the bars roll on, no markers land on them, and without a band drawn over
+ * them the replay says "held quietly through 41 days" about time nobody
+ * measured. Only PROVEN fill gaps are banded (see lib/wallet-data/gaps): a
+ * wallet that simply stopped trading gets no band, because it has nothing to
+ * hide.
  */
 
-import type { RCandle, BarEvents } from './engine'
+import { barAt, type RCandle, type BarEvents } from './engine'
 import { priceLabel, stamp } from './format'
 
 export const COLORS = {
@@ -42,6 +52,9 @@ export interface ChartState {
   p: number
   /** Pixels per bar, in the same units as the rect. */
   barSpacing: number
+  /** Proven fill gaps overlapping this series, banded so unmeasured time
+   *  cannot read as a quiet hold. Never quiet stretches. */
+  gaps?: { from: number; to: number }[]
   /** Type-scale factor for axis text (1 = 10px labels). */
   k: number
 }
@@ -69,7 +82,7 @@ function forming(c: RCandle, p: number): RCandle {
 }
 
 export function drawChart(ctx: CanvasRenderingContext2D, rect: ChartRect, s: ChartState): void {
-  const { candles, events, intervalMs, bar, p, barSpacing, k } = s
+  const { candles, events, intervalMs, bar, p, barSpacing, k, gaps } = s
   const axisW = AXIS_W * k
   const timeH = TIME_H * k
   const plotW = rect.w - axisW
@@ -141,6 +154,38 @@ export function drawChart(ctx: CanvasRenderingContext2D, rect: ChartRect, s: Cha
     const x = xOf(i)
     if (x > rect.x + plotW - 40 * k) continue // half a label from the axis
     ctx.fillText(stamp(candles[i].t), x, rect.y + plotH + timeH / 2)
+  }
+
+  // Fill-gap bands: the price tape continues, our measurement of the wallet
+  // does not. Drawn under the candles so the bars stay readable, with both
+  // edges seamed and the stretch named.
+  for (const g of gaps ?? []) {
+    const gi = barAt(candles, g.from)
+    const gj = barAt(candles, g.to)
+    if (gi < 0 && gj < 0) continue
+    const fromBar = Math.max(gi, start)
+    const toBar = Math.min(gj < 0 ? candles.length - 1 : gj, last)
+    if (toBar < start || fromBar > last || toBar < fromBar) continue
+    const x0 = xOf(fromBar) + barSpacing / 2
+    const x1 = xOf(toBar) - barSpacing / 2
+    if (x1 <= x0) continue
+    ctx.fillStyle = 'rgba(245,166,35,0.10)'
+    ctx.fillRect(x0, rect.y, x1 - x0, plotH)
+    ctx.strokeStyle = COLORS.gap
+    ctx.lineWidth = Math.max(k, 1)
+    ctx.setLineDash([3 * k, 3 * k])
+    for (const gx of [x0, x1]) {
+      ctx.beginPath()
+      ctx.moveTo(gx, rect.y + 2 * k)
+      ctx.lineTo(gx, rect.y + plotH - 2 * k)
+      ctx.stroke()
+    }
+    ctx.setLineDash([])
+    if (x1 - x0 > 60 * k) {
+      ctx.fillStyle = COLORS.gap
+      ctx.textAlign = 'center'
+      ctx.fillText('no fills captured', (x0 + x1) / 2, rect.y + 8 * k)
+    }
   }
 
   // Candles

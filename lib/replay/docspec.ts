@@ -13,8 +13,14 @@
 
 import type { RCandle, RFill } from './engine'
 import type { Episode } from './episodes'
+import type { SeriesGap } from '@/lib/wallet-data/gaps'
 
-export const REPLAY_DOC_SCHEMA = 'replay-doc.v1' as const
+/** v2 adds the fills-gap block (`coin_gaps`) and the two gap flags on every
+ *  wire episode. A v1 doc cannot carry those, and a v1 doc served for a
+ *  wallet with a gap would draw a continuous story across unmeasured time —
+ *  so the doc route treats any cached doc of an older schema as a miss and
+ *  rebuilds it rather than serving it. */
+export const REPLAY_DOC_SCHEMA = 'replay-doc.v2' as const
 
 /** Hard cap on bars per doc — coarsened server-side before serialization,
  *  never shipped finer than needed. (Auto-pacing targets 75–150 bars, and
@@ -91,6 +97,10 @@ export type WireEpisode = [
   number,
   0 | 1,
   0 | 1,
+  /** endsAtGap */
+  0 | 1,
+  /** startsAfterGap */
+  0 | 1,
 ]
 
 /** [coin, fillCount, from, to, episodeCount, topPnl|null, topPartial(0/1)] */
@@ -140,6 +150,15 @@ export interface ReplayDoc {
   fill_count_total: number
   starts_mid_position: boolean
   gap_coins: string[]
+  /**
+   * PROVEN discontinuities in the resolved coin's own fill series: stretches
+   * where the exchange's start positions show fills we never captured. The
+   * chart seams these and the ticker refuses to read across them.
+   *
+   * Proven only — a quiet stretch never reaches the wire, because "the wallet
+   * did not trade" and "we did not measure" must not be drawn the same way.
+   */
+  coin_gaps: SeriesGap[]
   coverage: {
     fills: {
       source: 'store' | 'exchange'
@@ -147,6 +166,10 @@ export interface ReplayDoc {
       to: string | null
       fill_count: number
       capped: boolean
+      /** Wallet-level gaps behind the numbers in `note`. Proven only. */
+      gaps?: SeriesGap[]
+      contiguous?: boolean
+      covered_ms?: number | null
       note: string
     }
     candles: {
@@ -217,6 +240,8 @@ export function encodeEpisodes(episodes: Episode[]): WireEpisode[] {
     e.maxPosUsd,
     e.openBeforeCoverage ? 1 : 0,
     e.openAtEnd ? 1 : 0,
+    e.endsAtGap ? 1 : 0,
+    e.startsAfterGap ? 1 : 0,
   ])
 }
 
@@ -241,7 +266,21 @@ export function decodeFills(wire: WireFill[], dirs: string[]): RFill[] {
 
 export function decodeEpisodes(wire: WireEpisode[]): DocEpisode[] {
   return wire.map(
-    ([from, to, pnl, fees, entries, exits, fills, maxPosCoins, maxPosUsd, before, atEnd]) => ({
+    ([
+      from,
+      to,
+      pnl,
+      fees,
+      entries,
+      exits,
+      fills,
+      maxPosCoins,
+      maxPosUsd,
+      before,
+      atEnd,
+      atGap,
+      afterGap,
+    ]) => ({
       from,
       to,
       pnl,
@@ -253,6 +292,8 @@ export function decodeEpisodes(wire: WireEpisode[]): DocEpisode[] {
       maxPosUsd,
       openBeforeCoverage: before === 1,
       openAtEnd: atEnd === 1,
+      endsAtGap: atGap === 1,
+      startsAfterGap: afterGap === 1,
     })
   )
 }

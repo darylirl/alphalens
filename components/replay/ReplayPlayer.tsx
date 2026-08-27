@@ -160,6 +160,16 @@ function memoSet(key: string, doc: ReplayDoc) {
 // The page's first paint: per-coin counts, spans and realized PnL from one
 // cheap read. No episode detection, no document building — those are
 // per-coin work and start only when a coin is picked.
+//
+// A coin's date range is the ends of its series, not proof that the middle
+// was measured, so a coin carrying proven capture gaps says so on its tile.
+
+interface MenuGap {
+  from: number
+  to: number
+  duration_ms: number
+  unexplained_coins: number | null
+}
 
 interface MenuCoin {
   coin: string
@@ -167,6 +177,10 @@ interface MenuCoin {
   from: number
   to: number
   realized_pnl: number
+  /** Proven capture gaps inside this coin's span. The dates either side are
+   *  the ends of what we hold; these say what is missing between them. Empty
+   *  for a continuous series — a coin that was merely quiet has none. */
+  gaps?: MenuGap[]
   /** Cumulative realized-PnL samples, present only where the fills were
    *  already in hand server-side (exchange path). */
   spark: number[] | null
@@ -562,6 +576,16 @@ export function ReplayPlayer({
     return buildTimeline(display.candles, display.intervalMs, fills)
   }, [display, fills])
 
+  // Proven fill gaps for the resolved coin: stretches the exchange's own
+  // start positions show we never captured. The chart bands them, the ticker
+  // refuses to read a running total across them, and a quiet coin has none of
+  // them by construction — only proven gaps ever reach the doc.
+  const provenGaps = useMemo(() => doc?.coin_gaps ?? [], [doc])
+  const gapAt = useCallback(
+    (ms: number) => provenGaps.find(g => ms > g.from && ms < g.to) ?? null,
+    [provenGaps]
+  )
+
   const flashGroups = useMemo(
     () => (timeline ? collectFlashGroups(timeline) : []),
     [timeline]
@@ -658,6 +682,7 @@ export function ReplayPlayer({
         p,
         barSpacing: 8 * dpr,
         k: dpr,
+        gaps: provenGaps,
       })
       // Fill announcements — the same painter the exporter uses, driven by
       // the same replay clock, so no fill passes invisibly at any speed.
@@ -718,7 +743,7 @@ export function ReplayPlayer({
     }
     raf = requestAnimationFrame(frame)
     return () => cancelAnimationFrame(raf)
-  }, [timeline, total, playing, stepMs, loop, soundOn, clipping, flashGroups, phase])
+  }, [timeline, total, playing, stepMs, loop, soundOn, clipping, flashGroups, phase, provenGaps])
 
   // Repaint on resize while paused.
   useEffect(() => {
@@ -808,6 +833,7 @@ export function ReplayPlayer({
               p,
               barSpacing: 16,
               k: 2,
+              gaps: provenGaps,
             },
             coin: doc.resolved?.coin ?? '',
             address,
@@ -852,6 +878,12 @@ export function ReplayPlayer({
   // --- Derived UI state ------------------------------------------------------
   const realizedNow = timeline?.realizedAfter[Math.min(atDisplay, total - 1)] ?? 0
   const fillsNow = timeline?.fillsAfter[Math.min(atDisplay, total - 1)] ?? 0
+  // Inside a proven gap the running total is frozen because nothing was
+  // measured, not because nothing happened. Freezing a number and captioning
+  // it "realized PnL" is the same claim as zero-filling a missing bucket, so
+  // the ticker says what it actually knows instead.
+  const barTime = timeline?.candles[Math.min(atDisplay, total - 1)]?.t ?? null
+  const inGap = barTime === null ? null : gapAt(barTime)
   const locked = clipping !== null
   const rankedEpisodes = useMemo(
     () => [...episodes].sort((a, b) => Math.abs(b.pnl) - Math.abs(a.pnl)),
@@ -952,12 +984,18 @@ export function ReplayPlayer({
         </div>
         <div className="text-right shrink-0">
           <p
-            className={`font-mono text-2xl md:text-3xl font-bold ${realizedNow >= 0 ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}
+            className={`font-mono text-2xl md:text-3xl font-bold ${
+              inGap ? 'text-[#F5A623]' : realizedNow >= 0 ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'
+            }`}
           >
-            {timeline ? signedUsd(realizedNow) : '—'}
+            {!timeline ? '—' : inGap ? 'unmeasured' : signedUsd(realizedNow)}
           </p>
-          <p className="text-[9px] text-white/40 uppercase tracking-wider">
-            realized PnL · {fillsNow} fills · exchange figures
+          <p
+            className={`text-[9px] uppercase tracking-wider ${inGap ? 'text-[#F5A623]/80' : 'text-white/40'}`}
+          >
+            {inGap
+              ? `capture gap · ${durationLabel(inGap.duration_ms)} of this wallet's fills were never captured`
+              : `realized PnL · ${fillsNow} fills · exchange figures`}
           </p>
         </div>
       </div>
@@ -1590,7 +1628,15 @@ function CoinMenuView({
             type="button"
             onClick={() => onPick(c.coin)}
             className="card p-3 text-left space-y-1.5 border border-transparent hover:border-[#34EAB9]/40 transition-colors"
-            title={`${c.fills.toLocaleString()} fills · ${dayStamp(c.from)} – ${dayStamp(c.to)}${gapCoins.has(c.coin) ? ' · capture starts mid-position (partial picture)' : ''}`}
+            title={[
+              `${c.fills.toLocaleString()} fills · ${dayStamp(c.from)} – ${dayStamp(c.to)}`,
+              gapCoins.has(c.coin) ? 'capture starts mid-position (partial picture)' : '',
+              gapTotal(c) > 0
+                ? `${c.gaps!.length} capture gap${c.gaps!.length === 1 ? '' : 's'} inside that span (${durationLabel(gapTotal(c))} unmeasured) — the PnL is a sum over the fills we hold, not a total for the span`
+                : '',
+            ]
+              .filter(Boolean)
+              .join(' · ')}
           >
             <div className="flex items-baseline justify-between gap-2">
               <span className="font-mono text-sm font-bold text-[#F5A623] truncate">
@@ -1607,6 +1653,12 @@ function CoinMenuView({
             <p className="text-[9px] text-white/40 font-mono">
               {c.fills.toLocaleString()} fills · {dayStamp(c.from)} – {dayStamp(c.to)}
             </p>
+            {gapTotal(c) > 0 && (
+              <p className="text-[9px] font-mono text-[#F5A623]/90">
+                ◔ {c.gaps!.length} capture gap{c.gaps!.length === 1 ? '' : 's'} ·{' '}
+                {durationLabel(gapTotal(c))} unmeasured
+              </p>
+            )}
           </button>
         ))}
       </div>
@@ -1616,6 +1668,12 @@ function CoinMenuView({
       </p>
     </div>
   )
+}
+
+/** Unmeasured time inside a coin's span, ms. Proven gaps only — the server
+ *  never sends any other kind. */
+function gapTotal(c: MenuCoin): number {
+  return (c.gaps ?? []).reduce((a, g) => a + g.duration_ms, 0)
 }
 
 /** The coverage/granularity strip, one place — shown on the page and painted
@@ -1634,9 +1692,18 @@ function stripLines(doc: ReplayDoc, tl: Timeline, zoom: number): string[] {
     tl.fillsOutsideWindow > 0
       ? ` · ${tl.fillsOutsideWindow} fill${tl.fillsOutsideWindow === 1 ? '' : 's'} outside candle coverage`
       : ''
+  // Candle gaps and fill gaps are different holes: the line above counts bars
+  // the price tape never printed, this one counts stretches where the tape is
+  // complete but this wallet's fills were never captured.
+  const fillGaps = doc.coin_gaps ?? []
+  const unmeasured = fillGaps.reduce((a, g) => a + g.duration_ms, 0)
+  const fillGapLine =
+    fillGaps.length > 0
+      ? ` · ${fillGaps.length} capture gap${fillGaps.length === 1 ? '' : 's'} in this coin's fills (${durationLabel(unmeasured)} unmeasured) — banded, never bridged`
+      : ''
   const mid = doc.starts_mid_position ? ' · history starts mid-position (partial picture)' : ''
   return [
     `${r.coin} · ${r.interval} bars · ${c.source === 'store' ? 'AlphaLens captured tape' : 'exchange candles'} · ${c.bars.toLocaleString()} of ${c.window_bars.toLocaleString()} possible bars · ${gaps}${merge}`,
-    `${dayStamp(r.padFrom)} – ${dayStamp(r.padTo)} · ${tl.totalFills.toLocaleString()} fills at exchange-exact prices${outside}${mid}`,
+    `${dayStamp(r.padFrom)} – ${dayStamp(r.padTo)} · ${tl.totalFills.toLocaleString()} fills at exchange-exact prices${outside}${mid}${fillGapLine}`,
   ]
 }

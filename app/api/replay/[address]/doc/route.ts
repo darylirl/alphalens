@@ -14,6 +14,7 @@ import {
 import {
   parseRangeKey,
   rangeKey,
+  REPLAY_DOC_SCHEMA,
   REFRESH_FILL_THRESHOLD,
   SERVE_STALE_MAX_FILLS,
   PASTED_TTL_MS,
@@ -146,7 +147,13 @@ export async function GET(req: NextRequest, { params }: { params: { address: str
     const pin = famousPin(addr, coin, rangeStr, interval)
     const pinned = Boolean(pin)
 
-    if (cached) {
+    // A doc built under an older schema cannot carry the gap block, and a
+    // gapless doc for a wallet WITH gaps draws a continuous story across
+    // unmeasured time. Older schemas are a cache miss, not a served answer.
+    const usable =
+      cached && (cached.doc as { schema?: string } | null)?.schema === REPLAY_DOC_SCHEMA
+
+    if (cached && usable) {
       let fresh = false
       let behind = 0
       if (pinned) {

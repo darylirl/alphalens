@@ -1,5 +1,13 @@
 -- Replay v2.2: the per-coin menu aggregate.
 --
+-- RENUMBERED from 018 (was `018_replay_coin_menu.sql`). Two branches took the
+-- number 018 in parallel: this one and `018_capture_scope_machi.sql`. Both are
+-- already applied to production under distinct names
+-- (`replay_coin_menu` and `capture_scope_machi_big_brother`), so this rename
+-- changes NOTHING in any deployed database — it fixes the apply ORDER for a
+-- fresh clone only. Do not re-run it against production expecting an effect;
+-- it is `create or replace` and would simply rewrite the identical function.
+--
 -- The replay page's first paint is a pair-selection grid: which coins the
 -- wallet traded, how much, when, and what it realized. Building that grid by
 -- paging a cohort wallet's full captured history through PostgREST is exactly

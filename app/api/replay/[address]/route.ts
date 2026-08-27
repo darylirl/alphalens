@@ -3,6 +3,7 @@ import { validateAddress } from '@/lib/validation'
 import { loadWalletFills } from '@/lib/wallet-data/fills'
 import { schemaJson, CORS_HEADERS } from '@/lib/ledger/api'
 import { detectEpisodes, summarize, type EpisodeSummary } from '@/lib/replay/episodes'
+import { gapsByCoin, drawable } from '@/lib/wallet-data/gaps'
 import type { RFill } from '@/lib/replay/engine'
 import type { Fill } from '@/lib/hyperliquid/types'
 
@@ -48,9 +49,12 @@ export async function GET(req: NextRequest, { params }: { params: { address: str
       if (held) held.push(f)
       else byCoin.set(f.coin, [f])
     }
+    const gapsPerCoin = gapsByCoin(fills)
     const coins = [...byCoin.entries()]
       .map(([coin, coinFills]) => {
-        const episodes: EpisodeSummary = summarize(detectEpisodes(coinFills.map(toRFill)))
+        const episodes: EpisodeSummary = summarize(
+          detectEpisodes(coinFills.map(toRFill), drawable(gapsPerCoin.get(coin) ?? []))
+        )
         return {
           coin,
           fills: coinFills.length,
