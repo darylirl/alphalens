@@ -19,6 +19,7 @@ import {
   PASTED_TTL_MS,
   type ReplayDoc,
 } from '@/lib/replay/docspec'
+import { famousPin } from '@/lib/replay/famous'
 
 // The precomputed replay document: build-once-serve-forever.
 //
@@ -137,10 +138,20 @@ export async function GET(req: NextRequest, { params }: { params: { address: str
     if (cacheRes.error) throw cacheRes.error
     const cached = (cacheRes.data as CacheRow | null) ?? null
 
+    // A curated famous replay is closed history: its fills are immutable
+    // facts, so the cached doc is pinned — no TTL, no fill-lag staleness.
+    // Rebuilding could only LOSE data once the exchange's sliding ~10K-fill
+    // window moves past the episode; the doc that was honestly built from the
+    // fills while they were still served is the record.
+    const pin = famousPin(addr, coin, rangeStr, interval)
+    const pinned = Boolean(pin)
+
     if (cached) {
       let fresh = false
       let behind = 0
-      if (isCohort && cached.source === 'store') {
+      if (pinned) {
+        fresh = true
+      } else if (isCohort && cached.source === 'store') {
         const newest = await newestStoreFill(addr, coin)
         if (!newest) {
           fresh = true // nothing captured at all — the empty doc stands
@@ -194,6 +205,17 @@ export async function GET(req: NextRequest, { params }: { params: { address: str
             phase: 'building',
             note: 'building this replay — first view does the work; later views serve the cached document',
           })
+          // Curated famous episodes load fills around their known window
+          // instead of walking the wallet's whole retained history — some
+          // famous wallets hold 50K+ retained fills, and the episode is a
+          // closed span whose boundaries the padded load detects identically.
+          const buildOpts =
+            pin && typeof range === 'object'
+              ? {
+                  window: { fromMs: range.from, toMs: range.to },
+                  forceSource: pin.fills_source,
+                }
+              : {}
           const built = await buildReplayDoc(
             addr,
             docReq,
@@ -201,8 +223,12 @@ export async function GET(req: NextRequest, { params }: { params: { address: str
             // Progressive playback: the opening window streams as a partial
             // head doc so the player can roll while the tail loads. The
             // pre-builder only warms the cache — it has no playhead to feed.
+            // A PINNED curated episode streams a head too (it is only a
+            // playback aid); what gets cached below is always built.doc, the
+            // full document — a head is never stored.
             prebuild ? undefined : head => line({ phase: 'head', doc: head }),
-            wallet
+            wallet,
+            buildOpts
           )
           const contentHash = sha256(
             `${addr}|${coin}|${rangeStr}|${interval}|${built.lastFillId ?? 'none'}`

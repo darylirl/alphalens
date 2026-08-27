@@ -12,7 +12,7 @@
  * reason — never padded, resampled or silently narrowed.
  */
 
-import { loadWalletFills, type WalletRow } from '@/lib/wallet-data/fills'
+import { loadWalletFills, type FillsWindow, type WalletRow } from '@/lib/wallet-data/fills'
 import {
   loadCandles,
   storeCandleStart,
@@ -197,6 +197,12 @@ function positionSeries(
   return out
 }
 
+/** How far around a curated episode window fills are loaded. Far wider than
+ *  the 10-minute episode-merge gap, so the pinned episode's boundaries detect
+ *  identically to a full-history load; far narrower than "everything", so a
+ *  famous build on a hyperactive wallet stays bounded. */
+export const CURATED_WINDOW_PAD_MS = 48 * 3_600_000
+
 export async function buildReplayDoc(
   address: string,
   req: DocRequest,
@@ -208,7 +214,15 @@ export async function buildReplayDoc(
   onHead?: (head: ReplayDoc) => void,
   /** The wallets row when the caller already read it — the doc route does,
    *  to decide cohort freshness. Omit when unknown. */
-  walletRow?: WalletRow | null
+  walletRow?: WalletRow | null,
+  /** Curated famous episodes only. `window` loads fills around a known,
+   *  closed span (padded by CURATED_WINDOW_PAD_MS) instead of the wallet's
+   *  whole history; `forceSource` pins which tape answers. Both exist so a
+   *  pinned entry stays reproducible — see lib/replay/famous.ts. */
+  opts: {
+    window?: FillsWindow
+    forceSource?: 'store' | 'exchange'
+  } = {}
 ): Promise<BuiltDoc> {
   const t0 = Date.now()
   const progress = (phase: BuildProgress['phase'], detail: BuildProgress['detail']) =>
@@ -226,6 +240,13 @@ export async function buildReplayDoc(
     coin: req.coin || undefined,
     onPage: n => progress('fills', { fills: n }),
     wallet: walletRow,
+    window: opts.window
+      ? {
+          fromMs: Math.max(opts.window.fromMs - CURATED_WINDOW_PAD_MS, 1),
+          toMs: opts.window.toMs + CURATED_WINDOW_PAD_MS,
+        }
+      : undefined,
+    forceSource: opts.forceSource,
   })
   progress('fills', { fills: fills.length })
 
