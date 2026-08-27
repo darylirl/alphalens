@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminToken, isAuthorized, verifyToken, ADMIN_COOKIE } from '@/lib/auth/admin'
 
-const COOKIE_MAX_AGE = 30 * 24 * 60 * 60 // 30 days
+// Short on purpose. The cookie IS the admin token — anything that can read it
+// can do everything the token can — so an admin session expires in a working
+// day rather than a month, and re-unlocking costs one paste into the browser.
+const COOKIE_MAX_AGE = 8 * 60 * 60 // 8 hours
 
 /**
  * GET /api/auth/unlock
@@ -34,12 +37,30 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid admin token' }, { status: 401 })
   }
 
-  const res = NextResponse.json({ success: true })
+  const res = NextResponse.json({ success: true, expires_in_s: COOKIE_MAX_AGE })
   res.cookies.set(ADMIN_COOKIE, configured, {
     httpOnly: true,
     sameSite: 'lax',
     secure: process.env.NODE_ENV === 'production' && process.env.ALLOW_INSECURE_COOKIE !== '1',
     maxAge: COOKIE_MAX_AGE,
+    path: '/',
+  })
+  return res
+}
+
+/**
+ * DELETE /api/auth/unlock
+ * Drop the admin session cookie. Signing out is a privileged action that had
+ * no button: without this the only way to end a session early was to clear
+ * site data by hand.
+ */
+export async function DELETE() {
+  const res = NextResponse.json({ success: true })
+  res.cookies.set(ADMIN_COOKIE, '', {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production' && process.env.ALLOW_INSECURE_COOKIE !== '1',
+    maxAge: 0,
     path: '/',
   })
   return res

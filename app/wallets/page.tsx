@@ -1,10 +1,10 @@
 'use client'
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { CopyableAddress } from '@/components/ui/CopyableAddress'
 import { SkeletonCard } from '@/components/ui/SkeletonCard'
-import { Search, Plus, RefreshCw, Trash2, Tag, Check, X, AlertTriangle, Lock } from 'lucide-react'
-import { updateWalletLabelCache, updateWalletTagsCache } from '@/components/signals/SmartMoneyFeed'
+import { Search, Plus, Trash2, Check, X, AlertTriangle, Lock } from 'lucide-react'
+import { updateWalletLabelCache } from '@/components/signals/SmartMoneyFeed'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -87,17 +87,9 @@ export default function WalletsPage() {
   const [adding, setAdding] = useState(false)
   const [addResult, setAddResult] = useState<{ success: boolean; message: string; tags?: string[] } | null>(null)
 
-  // Bulk classify state
-  const [classifying, setClassifying] = useState(false)
-  const [classifySummary, setClassifySummary] = useState<Record<string, number> | null>(null)
-
   // Inline edit state
   const [editingLabel, setEditingLabel] = useState<string | null>(null)
   const [editLabelValue, setEditLabelValue] = useState('')
-
-  // Tag edit state
-  const [editingTags, setEditingTags] = useState<string | null>(null)
-  const [tagDraft, setTagDraft] = useState<string[]>([])
 
   // Remove confirmation state
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null)
@@ -270,50 +262,6 @@ export default function WalletsPage() {
     }
   }
 
-  // ─── Tag editing ────────────────────────────────────────────────────
-
-  const startEditTags = (address: string, currentTags: string[]) => {
-    setEditingTags(address)
-    setTagDraft([...currentTags.filter(t => ALL_ARCHETYPES.includes(t as typeof ALL_ARCHETYPES[number]))])
-  }
-
-  const toggleTagDraft = (tag: string) => {
-    setTagDraft(prev =>
-      prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
-    )
-  }
-
-  const saveTags = async (address: string) => {
-    const tags = tagDraft.length > 0 ? tagDraft : ['unclassified']
-    setEditingTags(null)
-
-    const previous = wallets.find(w => w.address === address)
-    if (!previous) return
-
-    // Optimistic update
-    setWallets(prev => prev.map(w =>
-      w.address === address ? { ...w, tags, manually_tagged: true } : w
-    ))
-    updateWalletTagsCache(address, tags)
-
-    try {
-      const res = await fetch(`/api/wallets/${address}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tags }),
-      })
-      if (!res.ok) throw new Error(await extractError(res))
-    } catch (err) {
-      setWallets(prev => prev.map(w =>
-        w.address === address
-          ? { ...w, tags: previous.tags, manually_tagged: previous.manually_tagged }
-          : w
-      ))
-      updateWalletTagsCache(address, previous.tags)
-      setMutationError(`Tag update failed: ${errMessage(err)}`)
-    }
-  }
-
   // ─── Remove wallet ──────────────────────────────────────────────────
 
   const removeWallet = async (address: string) => {
@@ -339,37 +287,6 @@ export default function WalletsPage() {
     }
   }
 
-  // ─── Reclassify all ─────────────────────────────────────────────────
-
-  const reclassifyAll = async () => {
-    setClassifying(true)
-    setClassifySummary(null)
-    try {
-      const res = await fetch('/api/wallets/classify', { method: 'POST' })
-      if (res.ok) {
-        const data = await res.json()
-        setClassifySummary(data.data?.tagSummary || null)
-        fetchWallets()
-      }
-    } catch { /* ignore */ }
-    finally { setClassifying(false) }
-  }
-
-  // ─── Reclassify single ──────────────────────────────────────────────
-
-  const reclassifySingle = async (address: string) => {
-    try {
-      const res = await fetch(`/api/wallets/classify?address=${address}`, { method: 'POST' })
-      if (res.ok) {
-        const data = await res.json()
-        const tags = data.data?.results?.[0]?.tags || ['unclassified']
-        setWallets(prev => prev.map(w =>
-          w.address === address ? { ...w, tags, manually_tagged: false } : w
-        ))
-      }
-    } catch { /* ignore */ }
-  }
-
   // ─── Render ─────────────────────────────────────────────────────────
 
   return (
@@ -384,44 +301,13 @@ export default function WalletsPage() {
                 ? `Managing ${wallets.length} wallet${wallets.length !== 1 ? 's' : ''}`
                 : 'Add wallets to start tracking smart money activity'}
             </p>
+            {/* Archetype classification and capture scope moved to the admin
+                console, which is unlisted on purpose — no link from here. */}
+            <p className="text-white/30 text-[10px] mt-1">
+              Archetype classification and capture scope are managed in the admin console.
+            </p>
           </div>
-          <button
-            onClick={reclassifyAll}
-            disabled={classifying || wallets.length === 0}
-            className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-[#34EAB9]/10 text-[#34EAB9] hover:bg-[#34EAB9]/20 transition-colors disabled:opacity-40"
-          >
-            <RefreshCw size={12} className={classifying ? 'animate-spin' : ''} />
-            {classifying ? 'Classifying...' : 'Reclassify All'}
-          </button>
         </div>
-
-        {/* Classification summary */}
-        <AnimatePresence>
-          {classifySummary && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              className="overflow-hidden"
-            >
-              <div className="card p-3 border-l-2 border-l-[#34EAB9]">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs font-semibold">Classification Complete</p>
-                  <button onClick={() => setClassifySummary(null)} className="text-white/30 hover:text-white/60">
-                    <X size={12} />
-                  </button>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {Object.entries(classifySummary).map(([tag, count]) => (
-                    <span key={tag} className={`text-[10px] font-semibold px-2 py-1 rounded border ${ARCHETYPE_STYLES[tag] || ARCHETYPE_STYLES.unclassified}`}>
-                      {ARCHETYPE_LABELS[tag] || tag}: {count}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
 
         {/* Admin unlock banner — shown when mutations require a token and this session lacks one */}
         {authLocked && !authorized && (
@@ -622,16 +508,9 @@ export default function WalletsPage() {
                         setEditLabelValue={setEditLabelValue}
                         startEditLabel={startEditLabel}
                         saveLabel={saveLabel}
-                        editingTags={editingTags}
-                        tagDraft={tagDraft}
-                        startEditTags={startEditTags}
-                        toggleTagDraft={toggleTagDraft}
-                        saveTags={saveTags}
-                        setEditingTags={setEditingTags}
                         confirmRemove={confirmRemove}
                         setConfirmRemove={setConfirmRemove}
                         removeWallet={removeWallet}
-                        reclassifySingle={reclassifySingle}
                       />
                     ))}
                   </tbody>
@@ -650,16 +529,9 @@ export default function WalletsPage() {
                   setEditLabelValue={setEditLabelValue}
                   startEditLabel={startEditLabel}
                   saveLabel={saveLabel}
-                  editingTags={editingTags}
-                  tagDraft={tagDraft}
-                  startEditTags={startEditTags}
-                  toggleTagDraft={toggleTagDraft}
-                  saveTags={saveTags}
-                  setEditingTags={setEditingTags}
                   confirmRemove={confirmRemove}
                   setConfirmRemove={setConfirmRemove}
                   removeWallet={removeWallet}
-                  reclassifySingle={reclassifySingle}
                 />
               ))}
             </div>
@@ -679,87 +551,16 @@ interface WalletItemProps {
   setEditLabelValue: (v: string) => void
   startEditLabel: (address: string, label: string | null) => void
   saveLabel: (address: string) => void
-  editingTags: string | null
-  tagDraft: string[]
-  startEditTags: (address: string, tags: string[]) => void
-  toggleTagDraft: (tag: string) => void
-  saveTags: (address: string) => void
-  setEditingTags: (address: string | null) => void
   confirmRemove: string | null
   setConfirmRemove: (address: string | null) => void
   removeWallet: (address: string) => void
-  reclassifySingle: (address: string) => void
-}
-
-// ─── Tag Edit Popover ─────────────────────────────────────────────────────
-
-function TagEditor({ address, tagDraft, toggleTagDraft, saveTags, setEditingTags }: {
-  address: string
-  tagDraft: string[]
-  toggleTagDraft: (tag: string) => void
-  saveTags: (address: string) => void
-  setEditingTags: (address: string | null) => void
-}) {
-  const ref = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setEditingTags(null)
-      }
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [setEditingTags])
-
-  return (
-    <motion.div
-      ref={ref}
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.95 }}
-      className="absolute z-50 top-full left-0 mt-1 card p-3 min-w-[200px] shadow-xl"
-    >
-      <p className="text-[10px] text-white/40 mb-2 uppercase tracking-wider">Select archetypes</p>
-      <div className="space-y-1.5">
-        {ALL_ARCHETYPES.map(tag => (
-          <label key={tag} className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={tagDraft.includes(tag)}
-              onChange={() => toggleTagDraft(tag)}
-              className="w-3 h-3 rounded border-white/20 bg-white/5 accent-[#34EAB9]"
-            />
-            <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${ARCHETYPE_STYLES[tag]}`}>
-              {ARCHETYPE_LABELS[tag]}
-            </span>
-          </label>
-        ))}
-      </div>
-      <div className="flex gap-2 mt-3">
-        <button
-          onClick={() => saveTags(address)}
-          className="flex-1 text-[10px] font-semibold py-1.5 rounded bg-[#34EAB9] text-[#0F1A1E] hover:bg-[#2DD4A8] transition-colors"
-        >
-          Save
-        </button>
-        <button
-          onClick={() => setEditingTags(null)}
-          className="flex-1 text-[10px] font-semibold py-1.5 rounded bg-white/5 text-white/55 hover:text-white/80 transition-colors"
-        >
-          Cancel
-        </button>
-      </div>
-    </motion.div>
-  )
 }
 
 // ─── Desktop Table Row ────────────────────────────────────────────────────
 
 function WalletTableRow(props: WalletItemProps) {
   const { wallet: w, editingLabel, editLabelValue, setEditLabelValue, startEditLabel, saveLabel,
-    editingTags, tagDraft, startEditTags, toggleTagDraft, saveTags, setEditingTags,
-    confirmRemove, setConfirmRemove, removeWallet, reclassifySingle } = props
+    confirmRemove, setConfirmRemove, removeWallet } = props
 
   const pnl = w.total_pnl_usd
   const dateAdded = w.created_at ? new Date(w.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: '2-digit' }) : '—'
@@ -805,24 +606,7 @@ function WalletTableRow(props: WalletItemProps) {
             {w.manually_tagged && (
               <span className="text-[7px] text-amber-400/60" title="Manually tagged">M</span>
             )}
-            <button
-              onClick={() => startEditTags(w.address, w.tags)}
-              className="text-white/20 hover:text-white/50 transition-colors ml-0.5"
-            >
-              <Tag size={10} />
-            </button>
           </div>
-          <AnimatePresence>
-            {editingTags === w.address && (
-              <TagEditor
-                address={w.address}
-                tagDraft={tagDraft}
-                toggleTagDraft={toggleTagDraft}
-                saveTags={saveTags}
-                setEditingTags={setEditingTags}
-              />
-            )}
-          </AnimatePresence>
         </div>
       </td>
       <td className={`py-3 px-2 text-right font-mono ${pnl >= 0 ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}>
@@ -847,9 +631,6 @@ function WalletTableRow(props: WalletItemProps) {
           </div>
         ) : (
           <div className="flex items-center gap-2 justify-end">
-            <button onClick={() => reclassifySingle(w.address)} className="text-white/25 hover:text-[#34EAB9] transition-colors" title="Reclassify">
-              <RefreshCw size={11} />
-            </button>
             <button onClick={() => setConfirmRemove(w.address)} className="text-white/25 hover:text-[#FF3B5C] transition-colors" title="Remove">
               <Trash2 size={11} />
             </button>
@@ -864,8 +645,7 @@ function WalletTableRow(props: WalletItemProps) {
 
 function WalletCard(props: WalletItemProps) {
   const { wallet: w, editingLabel, editLabelValue, setEditLabelValue, startEditLabel, saveLabel,
-    editingTags, tagDraft, startEditTags, toggleTagDraft, saveTags, setEditingTags,
-    confirmRemove, setConfirmRemove, removeWallet, reclassifySingle } = props
+    confirmRemove, setConfirmRemove, removeWallet } = props
 
   const pnl = w.total_pnl_usd
 
@@ -877,14 +657,9 @@ function WalletCard(props: WalletItemProps) {
     >
       <div className="flex items-start justify-between mb-2">
         <CopyableAddress address={w.address} linked />
-        <div className="flex items-center gap-2">
-          <button onClick={() => reclassifySingle(w.address)} className="text-white/25 hover:text-[#34EAB9] transition-colors">
-            <RefreshCw size={12} />
-          </button>
-          <button onClick={() => setConfirmRemove(w.address)} className="text-white/25 hover:text-[#FF3B5C] transition-colors">
-            <Trash2 size={12} />
-          </button>
-        </div>
+        <button onClick={() => setConfirmRemove(w.address)} className="text-white/25 hover:text-[#FF3B5C] transition-colors">
+          <Trash2 size={12} />
+        </button>
       </div>
 
       {/* Label */}
@@ -925,24 +700,7 @@ function WalletCard(props: WalletItemProps) {
           {w.manually_tagged && (
             <span className="text-[7px] text-amber-400/60">Manual</span>
           )}
-          <button
-            onClick={() => startEditTags(w.address, w.tags)}
-            className="text-white/20 hover:text-white/50 transition-colors"
-          >
-            <Tag size={11} />
-          </button>
         </div>
-        <AnimatePresence>
-          {editingTags === w.address && (
-            <TagEditor
-              address={w.address}
-              tagDraft={tagDraft}
-              toggleTagDraft={toggleTagDraft}
-              saveTags={saveTags}
-              setEditingTags={setEditingTags}
-            />
-          )}
-        </AnimatePresence>
       </div>
 
       {/* Metrics row */}
