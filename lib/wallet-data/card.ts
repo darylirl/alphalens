@@ -2,6 +2,7 @@ import { getSupabase } from '@/lib/db/supabase'
 import { computeTradeGroups, type TradeGroup } from '@/lib/wallets/classify'
 import type { Fill, PortfolioEntry } from '@/lib/hyperliquid/types'
 import { loadWalletFills, type FillsCoverage, type WalletRow } from './fills'
+import { drawable } from './gaps'
 
 // The Wallet Report Card, built server-side and shared by the /card page, the
 // public JSON endpoint, and the OG share image — one builder so the three can
@@ -16,6 +17,12 @@ import { loadWalletFills, type FillsCoverage, type WalletRow } from './fills'
 //   population mean; the raw rate, the sample size, the population mean and
 //   the prior strength are all in the payload so the adjustment is auditable.
 // - Every number carries its sample size and the fills coverage block.
+// - Rates divide by MEASURED time, not by the window's span: a window with a
+//   proven capture gap in it covers less time than its endpoints suggest, and
+//   dividing by the span would understate the wallet's activity while looking
+//   like a measurement. Round trips whose entry and exit sit on opposite sides
+//   of such a gap are not measured durations either, so they leave the
+//   hold-time sample and are counted separately.
 
 export const CARD_SCHEMA = 'card.v0'
 
@@ -60,7 +67,16 @@ export interface ReportCard {
     median_hold_seconds: number | null
     hold_sample: number
     round_trips_per_day: number | null
+    /** Days actually MEASURED inside the window — the span minus proven
+     *  capture gaps. The rate divides by this. */
     covered_days: number | null
+    /** End-to-end span of the served window, gaps included. Equal to
+     *  covered_days only when the window is continuous. */
+    span_days: number | null
+    /** Round trips whose entry and exit straddle a proven gap: real trades
+     *  with unmeasured time inside them, so their durations are excluded
+     *  from the hold-time statistics above. */
+    gap_spanning_round_trips: number
     sizing_cv: number | null
     sizing_sample: number
     median_trip_notional_usd: number | null
@@ -237,7 +253,15 @@ export async function buildReportCard(address: string): Promise<ReportCard> {
   }
 
   // Behavior ---------------------------------------------------------------
-  const measured = closed.filter(g => !g.truncated)
+  // A trip that brackets a proven gap has unmeasured time inside it: the
+  // clock ran through hours or days of trading we never saw, so its duration
+  // is not a hold time we measured. Same treatment as a trip whose entry
+  // predates the window — kept for PnL, dropped from the duration stats.
+  const provenGaps = drawable(coverage.gaps)
+  const spansGap = (g: TradeGroup) =>
+    provenGaps.some(gap => g.entryTime <= gap.from && (g.exitTime ?? Infinity) >= gap.to)
+  const gapSpanning = closed.filter(spansGap).length
+  const measured = closed.filter(g => !g.truncated && !spansGap(g))
   const holds = measured.map(g => ((g.exitTime as number) - g.entryTime) / 1000)
   const medianHold = median(holds)
   const notionals = closed.map(g => g.notional).filter(v => v > 0)
@@ -248,10 +272,16 @@ export async function buildReportCard(address: string): Promise<ReportCard> {
     sizingCv = m > 0 ? sd / m : null
   }
   let coveredDays: number | null = null
+  let spanDays: number | null = null
   let tripsPerDay: number | null = null
   if (fills.length >= 2) {
-    coveredDays = Math.max((fills[fills.length - 1].time - fills[0].time) / 86_400_000, 1 / 24)
-    tripsPerDay = n / coveredDays
+    spanDays = Math.max((fills[fills.length - 1].time - fills[0].time) / 86_400_000, 1 / 24)
+    // covered_ms is null only for readers that never held the fills; this one
+    // holds them, so a null here means unknown coverage and the rate stays
+    // unknown with it rather than silently dividing by the span.
+    coveredDays =
+      coverage.covered_ms === null ? null : Math.max(coverage.covered_ms / 86_400_000, 1 / 24)
+    tripsPerDay = coveredDays === null ? null : n / coveredDays
   }
 
   // Risk -------------------------------------------------------------------
@@ -273,7 +303,10 @@ export async function buildReportCard(address: string): Promise<ReportCard> {
       maxExposureCoin = f.coin
     }
   }
-  const truncatedAny = groups.some(g => g.truncated) || gapCoins.length > 0
+  // A proven gap means the position moved without us: whatever peak we
+  // measured is a floor, not the wallet's real peak.
+  const truncatedAny =
+    groups.some(g => g.truncated) || gapCoins.length > 0 || drawable(coverage.gaps).length > 0
   const liquidationCount = fills.filter(isLiquidation).length
 
   // Grades -----------------------------------------------------------------
@@ -309,6 +342,8 @@ export async function buildReportCard(address: string): Promise<ReportCard> {
       hold_sample: measured.length,
       round_trips_per_day: tripsPerDay,
       covered_days: coveredDays,
+      span_days: spanDays,
+      gap_spanning_round_trips: gapSpanning,
       sizing_cv: sizingCv,
       sizing_sample: notionals.length,
       median_trip_notional_usd: median(notionals),

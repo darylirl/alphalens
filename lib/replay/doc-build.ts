@@ -18,6 +18,7 @@ import {
   type FillsWindow,
   type WalletRow,
 } from '@/lib/wallet-data/fills'
+import { gapsByCoin, drawable, type SeriesGap } from '@/lib/wallet-data/gaps'
 import {
   loadCandles,
   storeCandleStart,
@@ -278,9 +279,13 @@ export async function buildReplayDoc(
     if (held) held.push(f)
     else byCoin.set(f.coin, [f])
   }
+  // Proven discontinuities per coin, from the fills themselves. Episodes are
+  // detected AGAINST them: a position open on both sides of a gap is two
+  // observed positions with unmeasured time between, never one round trip.
+  const gapsPerCoin = gapsByCoin(fills)
   const episodesByCoin = new Map<string, Episode[]>()
   for (const [c, coinFills] of byCoin) {
-    episodesByCoin.set(c, detectEpisodes(coinFills.map(toRFill)))
+    episodesByCoin.set(c, detectEpisodes(coinFills.map(toRFill), drawable(gapsPerCoin.get(c) ?? [])))
   }
   progress('episodes', {
     coins: byCoin.size,
@@ -317,7 +322,7 @@ export async function buildReplayDoc(
   const lastFillId = newest && Number.isFinite(newest.tid) ? newest.tid : null
 
   const base = {
-    v: 2 as const,
+    v: 3 as const,
     schema: REPLAY_DOC_SCHEMA,
     address: address.toLowerCase(),
     requested: { coin: req.coin, range: rangeKey(req.range), interval: req.interval },
@@ -329,6 +334,9 @@ export async function buildReplayDoc(
     coins: coinsSummary,
   }
 
+  /** The resolved coin's proven gaps, for the chart and the ticker. */
+  const coinGapsOf = (c: string): SeriesGap[] => drawable(gapsPerCoin.get(c) ?? [])
+
   // No fills at all: an honest empty doc — the player renders the coverage
   // note ("no captured fills yet" / "no fills in the exchange window").
   if (fills.length === 0) {
@@ -337,6 +345,7 @@ export async function buildReplayDoc(
         ...base,
         resolved: null,
         starts_mid_position: false,
+        coin_gaps: [],
         coverage: { fills: coverage, candles: null },
         episodes: [],
         intervals: [],
@@ -430,6 +439,7 @@ export async function buildReplayDoc(
         coarsen: 1,
       },
       starts_mid_position: gapCoins.includes(coin),
+      coin_gaps: coinGapsOf(coin),
       coverage: {
         fills: coverage,
         candles: {
@@ -524,6 +534,7 @@ export async function buildReplayDoc(
       coarsen: coarsenFactor,
     },
     starts_mid_position: gapCoins.includes(coin),
+    coin_gaps: coinGapsOf(coin),
     coverage: {
       fills: coverage,
       candles: {

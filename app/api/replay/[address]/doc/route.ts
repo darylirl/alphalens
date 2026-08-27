@@ -163,16 +163,30 @@ export async function GET(req: NextRequest, { params }: { params: { address: str
       // that is never re-viewed is never rebuilt. The DECODER still reads v1,
       // for rows served in the deploy window and for documents already in a
       // viewer's sessionStorage.
-      const staleFormat = (cached.doc as { v?: number } | null)?.v !== 2
+      //
+      // v3 raises the stakes: a pre-v3 document carries no gap block, so for a
+      // wallet with a PROVEN capture gap it draws a continuous story across
+      // time nobody measured. That is not a byte-count preference, it is the
+      // dishonesty this format version exists to end — so an older document is
+      // rebuilt rather than served.
+      const staleFormat = (cached.doc as { v?: number } | null)?.v !== 3
 
       // Pinned wins over the format upgrade, deliberately. A curated episode
       // may no longer be rebuildable at all — that is the whole reason it is
       // pinned — so rebuilding one to save bytes could destroy a record the
       // exchange will not serve again. Curated documents therefore keep
       // whatever format they were built in; the set is small and fixed, and
-      // moving them to v2 is a deliberate act (drop the row and re-run
+      // moving them to v3 is a deliberate act (drop the row and re-run
       // scripts/prebuild-famous-local.mts while the window is still live),
       // never an automatic rebuild in a viewer's request path.
+      //
+      // This carve-out survives the gap block only because every pinned entry
+      // was CHECKED: each published entry's pinned window was re-walked
+      // against the gap detector, and the two whose episodes turned out to
+      // contain proven gaps (aguila-second-collapse, qwatio-40x-short) are
+      // withheld in the manifest — a withheld entry does not pin, so it
+      // cannot reach this branch. A pinned document is gapless by
+      // verification, not by assumption; re-verify when adding an entry.
       if (pinned) {
         fresh = true
       } else if (staleFormat) {

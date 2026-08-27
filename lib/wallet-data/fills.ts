@@ -1,5 +1,6 @@
 import { getSupabase } from '@/lib/db/supabase'
 import type { Fill } from '@/lib/hyperliquid/types'
+import { walletGaps, coveredMs, gapNote, drawable, type SeriesGap } from './gaps'
 
 // Server-only fills source shared by the report card (/card) and the replay
 // (/replay). One rule decides where fills come from:
@@ -46,6 +47,21 @@ export interface FillsCoverage {
   fill_count: number
   /** True when the read hit its cap — older history exists but was not served. */
   capped: boolean
+  /**
+   * Discontinuities inside [from, to]. `from`/`to` are the ends of the served
+   * series and say NOTHING about what lies between them; this says it.
+   * Entries of kind 'position_break' are proven missing measurement and are
+   * the only ones a surface may draw; 'quiet' entries are unconfirmed and
+   * exist so a reader knows they were considered and withheld.
+   */
+  gaps: SeriesGap[]
+  /** False when a proven gap sits inside the served window. */
+  contiguous: boolean
+  /** Time actually measured inside the window: span minus proven gaps, ms.
+   *  Any per-time rate (trips per day, fills per hour) must divide by this,
+   *  never by `to - from`. Null when the reader worked from an aggregate and
+   *  never held the fills — unknown, not "the whole span". */
+  covered_ms: number | null
   note: string
 }
 
@@ -308,6 +324,39 @@ export async function loadGapCoins(address: string): Promise<string[]> {
 
 const fmtDay = (ms: number) => new Date(ms).toISOString().slice(0, 10)
 
+/**
+ * The coverage block for a served series — window, cap, and the one thing the
+ * window alone cannot say: whether it is continuous.
+ *
+ * `from`/`to` describe the ends of what was served and were previously the
+ * whole story, which let a note like "222,236 fills, 2026-04-19 to
+ * 2026-08-24" assert a contiguous window across 49 days that were never
+ * measured. Gaps are detected from the fills themselves (see ./gaps) and the
+ * note declares them, so nothing downstream has to know to ask.
+ */
+function coverageOf(
+  source: 'store' | 'exchange',
+  fills: Fill[],
+  capped: boolean,
+  note: string
+): FillsCoverage {
+  const gaps = walletGaps(fills)
+  const fromMs = fills.length ? fills[0].time : null
+  const toMs = fills.length ? fills[fills.length - 1].time : null
+  const clause = gapNote(gaps)
+  return {
+    source,
+    from: fromMs === null ? null : new Date(fromMs).toISOString(),
+    to: toMs === null ? null : new Date(toMs).toISOString(),
+    fill_count: fills.length,
+    capped,
+    gaps,
+    contiguous: drawable(gaps).length === 0,
+    covered_ms: fromMs === null || toMs === null ? 0 : coveredMs(fromMs, toMs, gaps),
+    note: clause ? `${note} — ${clause}` : note,
+  }
+}
+
 export async function loadWalletFills(
   address: string,
   opts: {
@@ -364,24 +413,20 @@ export async function loadWalletFills(
         loadStoreFills(address, opts.coin, opts.onPage, opts.window),
         loadGapCoins(address),
       ])
-      const from = fills.length ? new Date(fills[0].time).toISOString() : null
-      const to = fills.length ? new Date(fills[fills.length - 1].time).toISOString() : null
       return {
         fills,
         isCohort,
         wallet,
         gapCoins,
-        coverage: {
-          source: 'store',
-          from,
-          to,
-          fill_count: fills.length,
+        coverage: coverageOf(
+          'store',
+          fills,
           capped,
-          note: fills.length
+          fills.length
             ? `AlphaLens capture store${opts.window ? ' (curated episode window)' : ''}: ${fills.length.toLocaleString()} fills, ${fmtDay(fills[0].time)} to ${fmtDay(fills[fills.length - 1].time)}` +
               (capped ? ` (most recent ${STORE_MAX_FILLS.toLocaleString()} served; older captured fills exist)` : '')
-            : 'AlphaLens capture store: no captured fills yet for this cohort wallet',
-        },
+            : 'AlphaLens capture store: no captured fills yet for this cohort wallet'
+        ),
       }
     } catch (err) {
       const msg = errText(err)
@@ -407,21 +452,16 @@ export async function loadWalletFills(
 
   const { fills: all, capped } = await loadExchangeFills(address, opts.onPage, opts.window)
   const fills = opts.coin ? all.filter(f => f.coin === opts.coin) : all
-  const from = fills.length ? new Date(fills[0].time).toISOString() : null
-  const to = fills.length ? new Date(fills[fills.length - 1].time).toISOString() : null
   return {
     fills,
     isCohort,
     wallet,
     gapCoins: [],
-    coverage: {
-      source: 'exchange',
-      from,
-      to,
-      fill_count: fills.length,
+    coverage: coverageOf(
+      'exchange',
+      fills,
       capped,
-      note:
-        (fills.length
+      (fills.length
           ? (opts.window
               ? `Exchange fills over the curated episode window: ${fills.length.toLocaleString()} fills, ${fmtDay(fills[0].time)} to ${fmtDay(fills[fills.length - 1].time)}`
               : `Recent window only (older fills age out of the API): ${fills.length.toLocaleString()} fills, ${fmtDay(fills[0].time)} to ${fmtDay(fills[fills.length - 1].time)}`)
@@ -429,7 +469,7 @@ export async function loadWalletFills(
         (capped ? ' (page budget reached; the window may hold more fills than served)' : '') +
         (degraded
           ? ' — our capture store did not answer for this cohort wallet, so its deeper captured history is NOT included here'
-          : ''),
-    },
+          : '')
+    ),
   }
 }

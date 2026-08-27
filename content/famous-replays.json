@@ -151,6 +151,7 @@
     },
     {
       "slug": "aguila-second-collapse",
+      "withheld": "Withheld 2026-08-26 pending re-verification. The gap-aware detector (lib/wallet-data/gaps.ts) finds TWO proven capture gaps inside this pinned episode in the fills the exchange serves today — 2025-07-29T07:46:26Z to 11:15:23Z (3.5h, 250.00 BTC of position change no served fill explains) and 2025-07-29T16:37:17Z to 07-30T12:10:42Z (19.6h, -64.64 BTC). An episode may not span a proven gap, so this one now splits into three, and the largest of them (ep:1753877442427-1754009508698) realized -$2,391,633.03 rather than the -$3,174,003.79 this entry states for the whole window. The stated figure was true of the fills verified on 2025-08-01; it is not a figure the player can reproduce today. Re-verify from a complete source (the Hyperliquid S3 archive) before republishing.",
       "title": "Aguila does it again",
       "story": "One week after the giveback week, the same wallet rebuilt to $150M of BTC and rode the next round trip to −$3.2M — the pattern, on tape, twice in ten days.",
       "source": "public",
@@ -175,6 +176,7 @@
     },
     {
       "slug": "qwatio-40x-short",
+      "withheld": "Withheld 2026-08-26 pending re-verification. Two proven capture gaps sit inside this pinned episode in the fills the exchange serves today — 2025-03-15T04:03:51Z to 10:12:37Z (6.1h, 65.19 BTC unexplained) and 2025-03-16T21:01:20Z to 03-17T09:23:25Z (12.4h, 593.85 BTC unexplained) — so the episode splits into three. Worse than a changed number: the doc route resolves a pinned range that no longer matches exactly by LARGEST TIME OVERLAP, and the longest of the three sub-episodes (ep:1742033557547-1742158880323, 34.8h) realized -$6,407.36. This page would have kept its +$5,030,904.75 headline over a replay of a $6.4k loss. Re-verify from a complete source (the Hyperliquid S3 archive) before republishing.",
       "title": "qwatio's $520M forty-x short",
       "story": "Two days after this wallet's 50x self-liquidation reportedly forced Hyperliquid to cap leverage, it was back with a BTC short that peaked at $521M — the retained tape shows +$5.0M realized across 36,926 fills before the records end with the position still open.",
       "source": "public",

@@ -1,5 +1,5 @@
 /**
- * The replay document (replay-doc.v2): a compact, serialized, build-once
+ * The replay document (replay-doc.v3): a compact, serialized, build-once
  * playback unit for one (wallet, coin, range, bar width). Everything the
  * player needs to roll — coarsened candles, trade events, running position
  * and realized-PnL series, the coin's episode index — in arrays-of-arrays,
@@ -13,8 +13,17 @@
 
 import type { PlayFill, RCandle } from './engine'
 import type { Episode } from './episodes'
+import type { SeriesGap } from '@/lib/wallet-data/gaps'
 
-export const REPLAY_DOC_SCHEMA = 'replay-doc.v2' as const
+/** v3 adds the fills-gap block (`coin_gaps`) and the two gap flags on every
+ *  wire episode. Neither older shape can carry them, and a doc without them,
+ *  served for a wallet WITH a proven gap, draws a continuous story across
+ *  time nobody measured — so the doc route rebuilds an older document rather
+ *  than serving it (with one carve-out, documented there). */
+export const REPLAY_DOC_SCHEMA = 'replay-doc.v3' as const
+
+/** The columnar shape v2 documents carry: real fills, no gap block. */
+export const REPLAY_DOC_SCHEMA_V2 = 'replay-doc.v2' as const
 
 /** The shape v1 documents carry. Cached v1 rows are honest and keep being
  *  served, so the decoder reads both; only the builder is v2-only. */
@@ -137,6 +146,10 @@ export type WireEpisode = [
   number,
   0 | 1,
   0 | 1,
+  /** endsAtGap */
+  0 | 1,
+  /** startsAfterGap */
+  0 | 1,
 ]
 
 /** [coin, fillCount, from, to, episodeCount, topPnl|null, topPartial(0/1)] */
@@ -155,8 +168,11 @@ export interface DocIntervalOption {
 }
 
 export interface ReplayDoc {
-  v: 1 | 2
-  schema: typeof REPLAY_DOC_SCHEMA | typeof REPLAY_DOC_SCHEMA_V1
+  v: 1 | 2 | 3
+  schema:
+    | typeof REPLAY_DOC_SCHEMA
+    | typeof REPLAY_DOC_SCHEMA_V2
+    | typeof REPLAY_DOC_SCHEMA_V1
   address: string
   /** The request as made (coin '' = "pick for me"). */
   requested: { coin: string; range: string; interval: string }
@@ -186,6 +202,15 @@ export interface ReplayDoc {
   fill_count_total: number
   starts_mid_position: boolean
   gap_coins: string[]
+  /**
+   * PROVEN discontinuities in the resolved coin's own fill series: stretches
+   * where the exchange's start positions show fills we never captured. The
+   * chart seams these and the ticker refuses to read across them.
+   *
+   * Proven only — a quiet stretch never reaches the wire, because "the wallet
+   * did not trade" and "we did not measure" must not be drawn the same way.
+   */
+  coin_gaps: SeriesGap[]
   coverage: {
     fills: {
       source: 'store' | 'exchange'
@@ -193,6 +218,10 @@ export interface ReplayDoc {
       to: string | null
       fill_count: number
       capped: boolean
+      /** Wallet-level gaps behind the numbers in `note`. Proven only. */
+      gaps?: SeriesGap[]
+      contiguous?: boolean
+      covered_ms?: number | null
       note: string
     }
     candles: {
@@ -328,6 +357,8 @@ export function encodeEpisodes(episodes: Episode[]): WireEpisode[] {
     e.maxPosUsd,
     e.openBeforeCoverage ? 1 : 0,
     e.openAtEnd ? 1 : 0,
+    e.endsAtGap ? 1 : 0,
+    e.startsAfterGap ? 1 : 0,
   ])
 }
 
@@ -373,7 +404,21 @@ export function decodeFills(wire: WireFills | WireFill[], dirs: string[]): PlayF
 
 export function decodeEpisodes(wire: WireEpisode[]): DocEpisode[] {
   return wire.map(
-    ([from, to, pnl, fees, entries, exits, fills, maxPosCoins, maxPosUsd, before, atEnd]) => ({
+    ([
+      from,
+      to,
+      pnl,
+      fees,
+      entries,
+      exits,
+      fills,
+      maxPosCoins,
+      maxPosUsd,
+      before,
+      atEnd,
+      atGap,
+      afterGap,
+    ]) => ({
       from,
       to,
       pnl,
@@ -385,6 +430,8 @@ export function decodeEpisodes(wire: WireEpisode[]): DocEpisode[] {
       maxPosUsd,
       openBeforeCoverage: before === 1,
       openAtEnd: atEnd === 1,
+      endsAtGap: atGap === 1,
+      startsAfterGap: afterGap === 1,
     })
   )
 }

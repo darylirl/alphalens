@@ -19,6 +19,13 @@ import type { RFill } from './engine'
 /** Flat gaps shorter than this merge two round trips into one episode. */
 export const MERGE_GAP_MS = 10 * 60_000
 
+/** A proven discontinuity in the fills, as ./gaps detects it. Only the two
+ *  instants matter here: the last fill before it and the first fill after. */
+export interface GapBoundary {
+  from: number
+  to: number
+}
+
 export interface Episode {
   /** First and last fill timestamps of the episode, ms. */
   from: number
@@ -41,6 +48,11 @@ export interface Episode {
   openBeforeCoverage: boolean
   /** The position outlives the covered fills — we never saw it close. */
   openAtEnd: boolean
+  /** The episode was cut short by a proven capture gap: the position was
+   *  still open at the last fill we hold before the gap. */
+  endsAtGap: boolean
+  /** The episode begins at the first fill after a proven capture gap. */
+  startsAfterGap: boolean
   /** Indices into the fills array this episode spans (inclusive). */
   firstFill: number
   lastFill: number
@@ -70,9 +82,36 @@ function walkPositions(fills: RFill[]): Walked[] {
   return out
 }
 
-export function detectEpisodes(fills: RFill[]): Episode[] {
+/**
+ * Episodes, split at proven capture gaps.
+ *
+ * `gaps` carries the discontinuities the fills themselves prove (see
+ * lib/wallet-data/gaps). Without them a position that was open before a gap
+ * and open after it reads as ONE unbroken round trip: the fixture wallet's
+ * ETH series never returns flat in three months, so the whole of
+ * 2026-04-19 → 2026-08-24 resolved to a single episode whose PnL summed
+ * across 49 days that were never measured. An episode is a claim about a
+ * continuously observed position, so it may not span a gap: the segment is
+ * closed at the last fill before it (openAtEnd — we never saw this position
+ * close) and a new one opens at the first fill after.
+ *
+ * Only PROVEN gaps belong here. A quiet stretch is not a gap and must never
+ * be passed in: splitting on silence would invent a discontinuity exactly
+ * where the data says nothing happened.
+ */
+export function detectEpisodes(fills: RFill[], gaps: GapBoundary[] = []): Episode[] {
   if (fills.length === 0) return []
   const walked = walkPositions(fills)
+
+  // Indices after which a proven gap sits, so the walk below can cut there.
+  const cutAfter = new Set<number>()
+  if (gaps.length > 0) {
+    for (let i = 0; i + 1 < fills.length; i++) {
+      const a = fills[i].t
+      const b = fills[i + 1].t
+      if (gaps.some(g => a <= g.from && g.to <= b)) cutAfter.add(i)
+    }
+  }
 
   let maxSz = 0
   for (const f of fills) maxSz = Math.max(maxSz, Math.abs(f.sz))
@@ -89,20 +128,47 @@ export function detectEpisodes(fills: RFill[]): Episode[] {
     last: number
     openBefore: boolean
     openAfter: boolean
+    endsAtGap: boolean
+    startsAfterGap: boolean
   }
   const segments: Segment[] = []
   let open: Segment | null = null
+  let afterGap = false
   for (let i = 0; i < fills.length; i++) {
     const w = walked[i]
     if (!open) {
       // A lone fill that starts flat and ends flat (a same-bar scratch the
       // exchange nets out) still forms a one-fill segment.
-      open = { first: i, last: i, openBefore: !flat(w.posBefore), openAfter: false }
+      open = {
+        first: i,
+        last: i,
+        openBefore: !flat(w.posBefore),
+        openAfter: false,
+        endsAtGap: false,
+        startsAfterGap: afterGap,
+      }
+      afterGap = false
     }
     open.last = i
+    const gapFollows = cutAfter.has(i)
     if (flat(w.posAfter)) {
       segments.push(open)
       open = null
+      // The position closed cleanly and THEN a gap followed. Nothing was cut
+      // short, but the next segment is still on the far side of unmeasured
+      // time: it starts after the gap and must not merge backwards across it.
+      if (gapFollows) afterGap = true
+      continue
+    }
+    if (gapFollows) {
+      // Still holding a position, and the next fill is on the far side of a
+      // proven gap. We never saw this position close; whatever the wallet did
+      // in between, we did not measure it.
+      open.openAfter = true
+      open.endsAtGap = true
+      segments.push(open)
+      open = null
+      afterGap = true
     }
   }
   if (open) {
@@ -114,7 +180,13 @@ export function detectEpisodes(fills: RFill[]): Episode[] {
   const merged: Segment[] = []
   for (const s of segments) {
     const prev = merged[merged.length - 1]
-    if (prev && !prev.openAfter && fills[s.first].t - fills[prev.last].t < MERGE_GAP_MS) {
+    if (
+      prev &&
+      !prev.openAfter &&
+      !prev.endsAtGap &&
+      !s.startsAfterGap &&
+      fills[s.first].t - fills[prev.last].t < MERGE_GAP_MS
+    ) {
       prev.last = s.last
       prev.openAfter = s.openAfter
     } else {
@@ -154,6 +226,8 @@ export function detectEpisodes(fills: RFill[]): Episode[] {
       maxPosUsd,
       openBeforeCoverage: s.openBefore,
       openAtEnd: s.openAfter,
+      endsAtGap: s.endsAtGap,
+      startsAfterGap: s.startsAfterGap,
       firstFill: s.first,
       lastFill: s.last,
     }
@@ -205,7 +279,16 @@ export interface EpisodeSummary {
   count: number
   top: Pick<
     Episode,
-    'from' | 'to' | 'pnl' | 'entries' | 'exits' | 'fills' | 'openBeforeCoverage' | 'openAtEnd'
+    | 'from'
+    | 'to'
+    | 'pnl'
+    | 'entries'
+    | 'exits'
+    | 'fills'
+    | 'openBeforeCoverage'
+    | 'openAtEnd'
+    | 'endsAtGap'
+    | 'startsAfterGap'
   > | null
 }
 
@@ -223,6 +306,8 @@ export function summarize(episodes: Episode[]): EpisodeSummary {
           fills: top.fills,
           openBeforeCoverage: top.openBeforeCoverage,
           openAtEnd: top.openAtEnd,
+          endsAtGap: top.endsAtGap,
+          startsAfterGap: top.startsAfterGap,
         }
       : null,
   }

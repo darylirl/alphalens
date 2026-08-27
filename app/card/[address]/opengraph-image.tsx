@@ -3,6 +3,7 @@ import { validateAddress } from '@/lib/validation'
 import { buildReportCard, type Grade } from '@/lib/wallet-data/card'
 import { loadWalletFills } from '@/lib/wallet-data/fills'
 import { detectEpisodes, bestAcrossCoins } from '@/lib/replay/episodes'
+import { gapsByCoin, drawable } from '@/lib/wallet-data/gaps'
 import { EpisodeEndCardBody, type OgEpisode } from '@/lib/replay/og-episode'
 import type { RFill } from '@/lib/replay/engine'
 import type { Fill } from '@/lib/hyperliquid/types'
@@ -58,10 +59,11 @@ export default async function Image({ params }: { params: { address: string } })
         if (held) held.push(f)
         else byCoin.set(f.coin, [f])
       }
+      const gapsPerCoin = gapsByCoin(data.fills)
       best = bestAcrossCoins(
         [...byCoin.entries()].map(([coin, fills]) => ({
           coin,
-          episodes: detectEpisodes(fills.map(toRFill)),
+          episodes: detectEpisodes(fills.map(toRFill), drawable(gapsPerCoin.get(coin) ?? [])),
         }))
       )
       note = data.coverage.note
