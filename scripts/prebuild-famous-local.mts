@@ -37,6 +37,8 @@ async function main() {
       e.address,
       { coin: e.coin, range, interval: e.interval },
       p => process.stdout.write(`  ${p.phase} ${JSON.stringify(p.detail)}\n`),
+      undefined, // no head doc: this warms the cache, there is no playhead
+      undefined, // wallet row unknown here; the builder reads it
       { window: { fromMs: range.from, toMs: range.to }, forceSource: e.fills_source }
     )
     const paramsHash = sha256(`${e.coin}|${e.range}|${e.interval}`)

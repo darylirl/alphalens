@@ -26,8 +26,6 @@ const HL_MAX_PAGES = 6
  *  80K fills. Hitting it is declared as capped coverage, never silent. */
 const HL_MAX_PAGES_WINDOWED = 40
 
-/** Rows per PostgREST page (under the ~1000 silent cap). */
-const STORE_PAGE = 1000
 /** Hard cap on store fills served per request — an indexed per-wallet read,
  *  bounded. When hit, the truncation is declared in coverage, never silent. */
 const STORE_MAX_FILLS = 20_000
@@ -84,34 +82,38 @@ export async function loadWalletRow(address: string): Promise<WalletRow | null> 
   }
 }
 
-interface StoreFillRow {
-  asset: string
-  side: string
-  size: number
-  price: number
-  fee_usd: number | null
-  realized_pnl: number | null
-  trade_type: string | null
-  timestamp: string
-  tid: number
-  start_position: number | null
-}
+/** One captured fill as `replay_wallet_fills_json` packs it, positionally:
+ *  [asset, side, size, price, fee_usd, realized_pnl, trade_type,
+ *   timestamp_ms, tid, start_position]. */
+type StoreFillRow = [
+  string,
+  string,
+  number,
+  number,
+  number | null,
+  number | null,
+  string | null,
+  number,
+  number,
+  number | null,
+]
 
 function storeRowToFill(r: StoreFillRow): Fill {
+  const [asset, side, size, price, fee, pnl, dir, timeMs, tid, start] = r
   return {
-    coin: r.asset,
-    px: String(r.price),
-    sz: String(r.size),
-    side: r.side === 'B' ? 'B' : 'A',
-    time: Date.parse(r.timestamp),
-    startPosition: r.start_position === null ? 'NaN' : String(r.start_position),
-    dir: r.trade_type ?? '',
-    closedPnl: r.realized_pnl === null ? '0' : String(r.realized_pnl),
+    coin: asset,
+    px: String(price),
+    sz: String(size),
+    side: side === 'B' ? 'B' : 'A',
+    time: Number(timeMs),
+    startPosition: start === null ? 'NaN' : String(start),
+    dir: dir ?? '',
+    closedPnl: pnl === null ? '0' : String(pnl),
     hash: '',
     oid: 0,
     crossed: false,
-    fee: r.fee_usd === null ? '0' : String(r.fee_usd),
-    tid: r.tid,
+    fee: fee === null ? '0' : String(fee),
+    tid,
   }
 }
 
@@ -123,21 +125,32 @@ export interface FillsWindow {
   toMs: number
 }
 
-/** Captured fills from our store. Only rows the capture daemon wrote
- *  (`tid is not null`).
+/** Captured fills from our store, ascending by (timestamp, tid). Only rows
+ *  the capture daemon wrote (`tid is not null`).
  *
- *  Ordering is (timestamp, tid) — deterministic. Ordering by timestamp alone
- *  left same-millisecond fills in arbitrary per-query order, and a burst's
- *  internal order decides where the running position crosses zero: two reads
- *  of the SAME data detected different episode boundaries.
+ *  ONE round trip, through `replay_wallet_fills_json` (migration 020). Three
+ *  things were measured on the way here, and all three are load-bearing:
  *
- *  Unwindowed reads page newest-first (the most recent STORE_MAX_FILLS) and
- *  reverse. Windowed (curated-episode) reads page OLDEST-first instead:
- *  the capture daemon inserts live rows inside a window whose pad reaches
- *  "now", and with descending offset pagination each insert shifts every
- *  later offset — rows drop out between pages and the false gaps read as
- *  episode breaks. Ascending pages are prefixes of an append-only sequence,
- *  so concurrent inserts cannot displace them. */
+ *  - PostgREST truncates at ~1,000 rows for RPCs exactly as it does for
+ *    table reads (asked a set-returning function for 5,000/10,000/30,000
+ *    rows, got 1,000 back every time, silently). So a 26,000-fill coin was
+ *    27 HTTP round trips.
+ *  - Those round trips WERE the cold path: the database answers a page in
+ *    18-35 ms, but 27 of them cost ~13 s of the 16 s to first bar. Paging
+ *    concurrently helped and was still the wrong shape.
+ *  - The 1,000 cap counts ROWS, so a function returning a single jsonb row
+ *    escapes it. The whole scope now arrives at once, as compact positional
+ *    arrays with epoch-ms timestamps.
+ *
+ *  Reads never use a raw parameterized asset filter: Postgres' generic plan
+ *  for "wallet = $1 AND asset = $2" can drive from the (asset, timestamp)
+ *  index — the whole asset, every wallet — and hit statement_timeout on a
+ *  popular coin. The RPC's coin guard is structurally unservable by that
+ *  index, so every plan drives from the wallet index (migration 019).
+ *
+ *  Truncation is declared, never inferred: the RPC returns the exact `total`
+ *  alongside the rows it served, and when the cap bites the rows served are
+ *  the most RECENT ones. */
 async function loadStoreFills(
   address: string,
   coin?: string,
@@ -145,35 +158,36 @@ async function loadStoreFills(
   window?: FillsWindow
 ): Promise<{ fills: Fill[]; capped: boolean }> {
   const supabase = getSupabase()
-  const ascending = Boolean(window)
-  const rows: StoreFillRow[] = []
-  for (let offset = 0; offset < STORE_MAX_FILLS; offset += STORE_PAGE) {
-    let query = supabase
-      .from('fills')
-      .select('asset,side,size,price,fee_usd,realized_pnl,trade_type,timestamp,tid,start_position')
-      .eq('wallet_address', address.toLowerCase())
-      .not('tid', 'is', null)
-    if (coin) query = query.eq('asset', coin)
-    if (window) {
-      query = query
-        .gte('timestamp', new Date(window.fromMs).toISOString())
-        .lte('timestamp', new Date(window.toMs).toISOString())
-    }
-    const { data, error } = await query
-      .order('timestamp', { ascending })
-      .order('tid', { ascending })
-      .range(offset, offset + STORE_PAGE - 1)
-    if (error) throw error
-    const page = (data ?? []) as StoreFillRow[]
-    rows.push(...page)
-    onPage?.(rows.length)
-    if (page.length < STORE_PAGE) {
-      if (!ascending) rows.reverse()
-      return { fills: rows.map(storeRowToFill), capped: false }
-    }
+  // A curated famous episode is a FIXED window in the past, so it is read by
+  // time, not by recency: the recency-capped reader keeps the most recent
+  // rows, and an actively trading wallet would carry the pinned episode out
+  // of that slice (measured: xyz:MU at 14,025 fills, ~4,600/day, against the
+  // 20,000 cap). Migration 022 mirrors 021 exactly but bounds by window.
+  const { data, error } = window
+    ? await supabase.rpc('replay_wallet_fills_window_json', {
+        p_wallet: address.toLowerCase(),
+        p_coin: coin ?? '',
+        p_from_ms: Math.floor(window.fromMs),
+        p_to_ms: Math.ceil(window.toMs),
+        p_limit: STORE_MAX_FILLS,
+      })
+    : await supabase.rpc('replay_wallet_fills_json', {
+        p_wallet: address.toLowerCase(),
+        p_coin: coin ?? '',
+        p_limit: STORE_MAX_FILLS,
+      })
+  if (error) throw error
+  const payload = (data ?? { total: 0, n: 0, rows: [] }) as {
+    total: number
+    n: number
+    rows: StoreFillRow[]
   }
-  if (!ascending) rows.reverse()
-  return { fills: rows.map(storeRowToFill), capped: true }
+  const rows = payload.rows ?? []
+  onPage?.(rows.length)
+  return {
+    fills: rows.map(storeRowToFill),
+    capped: Number(payload.total) > rows.length,
+  }
 }
 
 /** POST to the exchange info API. A failed request THROWS — it must never
@@ -247,7 +261,7 @@ async function loadExchangeFills(
 }
 
 /** Capture-gap coins for a wallet — a tiny bounded read (unique per coin). */
-async function loadGapCoins(address: string): Promise<string[]> {
+export async function loadGapCoins(address: string): Promise<string[]> {
   try {
     const supabase = getSupabase()
     const { data } = await supabase
@@ -268,6 +282,10 @@ export async function loadWalletFills(
   opts: {
     coin?: string
     onPage?: (fillsSoFar: number) => void
+    /** The wallets row when the caller already read it (the doc route reads
+     *  it to decide cohort freshness). Saves a second identical round trip
+     *  in the request path; `null` means "known absent", not "unknown". */
+    wallet?: WalletRow | null
     /** Load only this window (curated famous-episode builds). The coverage
      *  note names the scope so a windowed doc never reads as full history. */
     window?: FillsWindow
@@ -280,8 +298,11 @@ export async function loadWalletFills(
     forceSource?: 'store' | 'exchange'
   } = {}
 ): Promise<WalletFills> {
-  const wallet = await loadWalletRow(address)
+  const wallet = opts.wallet !== undefined ? opts.wallet : await loadWalletRow(address)
   const isCohort = Boolean(wallet?.capture_enabled)
+  /** A cohort wallet that had to fall back to the exchange — its captured
+   *  history exists but could not be read. Declared, never quietly served. */
+  let degraded = false
 
   if (isCohort && opts.forceSource !== 'exchange') {
     try {
@@ -308,9 +329,16 @@ export async function loadWalletFills(
             : 'AlphaLens capture store: no captured fills yet for this cohort wallet',
         },
       }
-    } catch {
+    } catch (err) {
       // Store unreachable: fall through to the exchange window rather than
-      // failing the page — but the coverage block says which source answered.
+      // failing the page — but say so. This wallet HAS captured history
+      // deeper than the exchange's window, and serving that shallow window
+      // unremarked would present a degraded read as a complete one.
+      degraded = true
+      console.error(
+        'store fills read failed, falling back to exchange window:',
+        err instanceof Error ? err.message : err
+      )
     }
   }
 
@@ -329,12 +357,16 @@ export async function loadWalletFills(
       to,
       fill_count: fills.length,
       capped,
-      note: fills.length
-        ? (opts.window
-            ? `Exchange fills over the curated episode window: ${fills.length.toLocaleString()} fills, ${fmtDay(fills[0].time)} to ${fmtDay(fills[fills.length - 1].time)}`
-            : `Exchange-retained window only (older fills age out of the API): ${fills.length.toLocaleString()} fills, ${fmtDay(fills[0].time)} to ${fmtDay(fills[fills.length - 1].time)}`) +
-          (capped ? ' (page budget reached; the window may hold more fills than served)' : '')
-        : 'No fills in the exchange-served window (older fills age out of the API)',
+      note:
+        (fills.length
+          ? (opts.window
+              ? `Exchange fills over the curated episode window: ${fills.length.toLocaleString()} fills, ${fmtDay(fills[0].time)} to ${fmtDay(fills[fills.length - 1].time)}`
+              : `Recent window only (older fills age out of the API): ${fills.length.toLocaleString()} fills, ${fmtDay(fills[0].time)} to ${fmtDay(fills[fills.length - 1].time)}`)
+          : 'No fills in the exchange-served window (older fills age out of the API)') +
+        (capped ? ' (page budget reached; the window may hold more fills than served)' : '') +
+        (degraded
+          ? ' — our capture store did not answer for this cohort wallet, so its deeper captured history is NOT included here'
+          : ''),
     },
   }
 }

@@ -21,6 +21,16 @@
  * silence. Docs are memoized in sessionStorage so rewatching and episode
  * switching are instant, and playback itself never touches the network: the
  * rAF loop only indexes into the decoded timeline.
+ *
+ * Replay v2.2 — perceived speed. The first paint is the COIN MENU: one cheap
+ * read (an SQL aggregate for cohort wallets, one exchange-window read for
+ * pasted ones) renders the pair-selection grid without waiting on episode
+ * detection or document building. Episodes and the doc are built only for
+ * the coin the viewer picks, scoped to that coin's fills. A cold build
+ * streams a partial HEAD doc (the opening window) so playback starts while
+ * the tail loads — the head is a strict prefix of the full doc, so swapping
+ * it in never moves the playhead. A head is declared partial on the strip
+ * and never memoized.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -52,7 +62,6 @@ import {
   rangeKey,
   type DocEpisode,
   type ReplayDoc,
-  type WireCoin,
 } from '@/lib/replay/docspec'
 import { collectFlashGroups, flashesAt, drawFlashes } from '@/lib/replay/flash'
 import { drawChart } from '@/lib/replay/chart'
@@ -147,6 +156,44 @@ function memoSet(key: string, doc: ReplayDoc) {
   }
 }
 
+// --- Coin menu (replay-coins.v1) -------------------------------------------
+// The page's first paint: per-coin counts, spans and realized PnL from one
+// cheap read. No episode detection, no document building — those are
+// per-coin work and start only when a coin is picked.
+
+interface MenuCoin {
+  coin: string
+  fills: number
+  from: number
+  to: number
+  realized_pnl: number
+  /** Cumulative realized-PnL samples, present only where the fills were
+   *  already in hand server-side (exchange path). */
+  spark: number[] | null
+}
+
+interface CoinMenuResp {
+  identity: { label: string | null; archetype: string | null; cohort_member: boolean }
+  coverage: {
+    source: 'store' | 'exchange'
+    from: string | null
+    to: string | null
+    fill_count: number
+    capped: boolean
+    note: string
+  }
+  gap_coins: string[]
+  coins_capped: boolean
+  coins: MenuCoin[]
+}
+
+async function fetchMenu(address: string): Promise<CoinMenuResp> {
+  const res = await fetch(`/api/replay/${address}/coins`, { cache: 'no-store' })
+  const body = await res.json()
+  if (!res.ok) throw new Error(body?.error ?? `coin menu error ${res.status}`)
+  return body as CoinMenuResp
+}
+
 // --- Doc fetch --------------------------------------------------------------
 
 interface BuildEvent {
@@ -174,7 +221,10 @@ function progressText(ev: BuildEvent): string {
 async function fetchDoc(
   address: string,
   r: DocReq,
-  onProgress: (text: string) => void
+  onProgress: (text: string) => void,
+  /** A cold build streams a partial head doc (opening window) before the
+   *  full one — playback starts on it while the tail loads. */
+  onHead?: (head: ReplayDoc) => void
 ): Promise<{ doc: ReplayDoc; behind: number }> {
   const qs = new URLSearchParams()
   if (r.coin) qs.set('coin', r.coin)
@@ -206,8 +256,9 @@ async function fetchDoc(
           continue
         }
         if (ev.phase === 'done' && ev.doc) doc = ev.doc as ReplayDoc
+        else if (ev.phase === 'head' && ev.doc) onHead?.(ev.doc as ReplayDoc)
         else if (ev.phase === 'error') errText = String(ev.error ?? 'could not build this replay')
-        else onProgress(progressText(ev))
+        else if (ev.phase !== 'stored') onProgress(progressText(ev))
       }
       if (done) break
     }
@@ -245,24 +296,35 @@ export interface FamousChrome {
 
 export function ReplayPlayer({
   address,
+  initialCoin = null,
   initial,
   famous,
 }: {
   address: string
-  /** Pinned starting request (famous replays); defaults to the landing doc. */
+  /** ?coin= deep link: skip the menu and build this coin straight away. */
+  initialCoin?: string | null
+  /** A curated famous replay pins the WHOLE request (coin, episode range and
+   *  bar width), not just the coin, and so skips the menu the same way a
+   *  ?coin= deep link does. */
   initial?: Partial<DocReq>
   /** Present when this view is a curated famous replay. */
   famous?: FamousChrome
 }) {
-  const [request, setRequest] = useState<DocReq>({
-    coin: initial?.coin ?? '',
-    range: initial?.range ?? 'default',
-    interval: initial?.interval ?? 'auto',
-  })
+  /** null = the coin menu is the view; a request means a coin was picked. */
+  const [request, setRequest] = useState<DocReq | null>(
+    initial?.coin
+      ? {
+          coin: initial.coin,
+          range: initial.range ?? 'default',
+          interval: initial.interval ?? 'auto',
+        }
+      : initialCoin
+        ? { coin: initialCoin, range: 'default', interval: 'auto' }
+        : null
+  )
+  const [menu, setMenu] = useState<CoinMenuResp | null>(null)
+  const [menuError, setMenuError] = useState<string | null>(null)
   const [doc, setDoc] = useState<ReplayDoc | null>(null)
-  /** Cross-coin picker list: only the default doc carries it, so it is kept
-   *  across coin-scoped docs. */
-  const [coins, setCoins] = useState<WireCoin[] | null>(null)
   const [behind, setBehind] = useState(0)
   const [buildLine, setBuildLine] = useState<string | null>(null)
   const [dataError, setDataError] = useState<string | null>(null)
@@ -288,6 +350,12 @@ export function ReplayPlayer({
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const at = useRef(0) // playhead bar, source of truth for the loop
   const lastCuedBar = useRef(-1)
+  /** Mirror of `phase` readable inside async closures (the streamed tail
+   *  needs to know whether the short head already finished playing). */
+  const phaseRef = useRef<Phase>('title')
+  useEffect(() => {
+    phaseRef.current = phase
+  }, [phase])
 
   const [grade, setGrade] = useState<GradeSummary | null>(null)
 
@@ -330,8 +398,34 @@ export function ReplayPlayer({
     }
   }, [])
 
-  // --- One doc per view: memo → cache → streamed build ----------------------
+  // --- The coin menu: the page's first paint --------------------------------
   useEffect(() => {
+    let dead = false
+    setMenu(null)
+    setMenuError(null)
+    fetchMenu(address)
+      .then(m => {
+        if (!dead) setMenu(m)
+      })
+      .catch(err => {
+        if (!dead) setMenuError(err instanceof Error ? err.message : 'could not load the coins')
+      })
+    return () => {
+      dead = true
+    }
+  }, [address])
+
+  // --- One doc per picked coin: memo → cache → streamed build ---------------
+  useEffect(() => {
+    if (!request) {
+      // Back on the menu: clear the doc flow so a stale replay cannot linger
+      // behind the grid.
+      setDoc(null)
+      setLoading(false)
+      setDataError(null)
+      setBuildLine(null)
+      return
+    }
     let dead = false
     setLoading(true)
     setDataError(null)
@@ -341,7 +435,6 @@ export function ReplayPlayer({
       if (dead) return
       setDoc(next)
       setBehind(behindNow)
-      if (next.coins) setCoins(next.coins)
       setZoom(1)
       at.current = 0
       setAtDisplay(0)
@@ -353,6 +446,20 @@ export function ReplayPlayer({
       setLoading(false)
     }
 
+    // The streamed tail replacing a playing head: the head is a strict
+    // prefix of the full doc, so the doc swaps under the playhead without
+    // moving it. If the short head already ran out, roll on into the tail.
+    const softApply = (next: ReplayDoc) => {
+      if (dead) return
+      setDoc(next)
+      setBehind(0)
+      setLoading(false)
+      if (phaseRef.current === 'end') {
+        setPhase('run')
+        setPlaying(true)
+      }
+    }
+
     const requestedKey = memoKey(address, request)
     const memoized = memoGet(requestedKey)
     if (memoized) {
@@ -362,9 +469,19 @@ export function ReplayPlayer({
       }
     }
 
-    fetchDoc(address, request, text => {
-      if (!dead) setBuildLine(text)
-    })
+    let headDoc: ReplayDoc | null = null
+    fetchDoc(
+      address,
+      request,
+      text => {
+        if (!dead) setBuildLine(text)
+      },
+      head => {
+        if (dead) return
+        headDoc = head
+        apply(head, 0)
+      }
+    )
       .then(({ doc: next, behind: behindNow }) => {
         if (dead) return
         memoSet(requestedKey, next)
@@ -380,7 +497,21 @@ export function ReplayPlayer({
             next
           )
         }
-        apply(next, behindNow)
+        // Swap under the playhead ONLY while the head is a true prefix of
+        // what replaced it — same coin, same range, same bar width. Anything
+        // else is a different series, and keeping the bar index would move
+        // the replay in time: restart it honestly instead.
+        const head: ReplayDoc | null = headDoc
+        const prefix =
+          head !== null &&
+          head.resolved !== null &&
+          next.resolved !== null &&
+          head.resolved.coin === next.resolved.coin &&
+          head.resolved.range === next.resolved.range &&
+          head.resolved.interval_ms === next.resolved.interval_ms &&
+          next.candles.length >= head.candles.length
+        if (head && prefix) softApply(next)
+        else apply(next, behindNow)
       })
       .catch(err => {
         if (dead) return
@@ -482,14 +613,17 @@ export function ReplayPlayer({
   }, [doc, fills, pickedEpisode, episodes])
 
   // --- Title card: hold, then roll ------------------------------------------
+  // Keyed on readiness, not the timeline object: the streamed tail swaps the
+  // doc under a running title card, and that must not restart the hold.
+  const timelineReady = Boolean(timeline) && total >= 2
   useEffect(() => {
-    if (phase !== 'title' || !timeline || total < 2 || clipping !== null) return
+    if (phase !== 'title' || !timelineReady || clipping !== null) return
     const t = setTimeout(() => {
       setPhase('run')
       setPlaying(true)
     }, TITLE_MS)
     return () => clearTimeout(t)
-  }, [phase, timeline, total, clipping])
+  }, [phase, timelineReady, clipping])
 
   // --- The paint-and-play loop ---------------------------------------------
   // Drawn imperatively every animation frame (React state only for the DOM
@@ -737,19 +871,63 @@ export function ReplayPlayer({
     setPhase('title')
   }, [])
 
+  // Coin selection drives the URL too, so a picked replay is shareable and
+  // survives a reload without going back through the menu.
+  const selectCoin = useCallback((coin: string) => {
+    setShowAllEpisodes(false)
+    setRequest({ coin, range: 'default', interval: 'auto' })
+    try {
+      const u = new URL(window.location.href)
+      u.searchParams.set('coin', coin)
+      history.replaceState(null, '', u)
+    } catch {
+      // URL sync is a convenience, never a dependency
+    }
+  }, [])
+
+  const backToMenu = useCallback(() => {
+    setRequest(null)
+    try {
+      const u = new URL(window.location.href)
+      u.searchParams.delete('coin')
+      history.replaceState(null, '', u)
+    } catch {
+      // URL sync is a convenience, never a dependency
+    }
+  }, [])
+
+  // --- The coin menu: first paint, never blocked on episode detection -------
+  if (!request) {
+    return <CoinMenuView address={address} menu={menu} error={menuError} onPick={selectCoin} />
+  }
+
   if (dataError && !doc) {
     return (
-      <div className="card p-6 text-center max-w-2xl mx-auto">
+      <div className="card p-6 text-center max-w-2xl mx-auto space-y-2">
         <p className="text-sm font-semibold mb-1">Replay unavailable</p>
         <p className="text-xs text-white/40">{dataError}</p>
+        <button
+          type="button"
+          onClick={backToMenu}
+          className="text-[10px] text-[#34EAB9] hover:underline"
+        >
+          back to the coin list
+        </button>
       </div>
     )
   }
   if (doc && !doc.resolved) {
     return (
-      <div className="card p-6 text-center max-w-2xl mx-auto">
+      <div className="card p-6 text-center max-w-2xl mx-auto space-y-2">
         <p className="text-sm font-semibold mb-1">Nothing to replay</p>
         <p className="text-xs text-white/40">{doc.coverage.fills.note}</p>
+        <button
+          type="button"
+          onClick={backToMenu}
+          className="text-[10px] text-[#34EAB9] hover:underline"
+        >
+          back to the coin list
+        </button>
       </div>
     )
   }
@@ -764,7 +942,7 @@ export function ReplayPlayer({
             {address.slice(0, 8)}…{address.slice(-6)}
           </p>
           <p className="font-mono text-lg font-bold text-[#F5A623]">
-            {resolvedCoin ?? '—'}
+            {resolvedCoin ?? request.coin ?? '—'}
             {episodeCard && (
               <span className="ml-2 text-[10px] font-normal text-white/40 uppercase tracking-wider">
                 {episodeCard.which}
@@ -804,7 +982,7 @@ export function ReplayPlayer({
             )}
           </div>
         )}
-        {dataError && (
+        {dataError && !timeline && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[#0F1A1E] p-6 text-center">
             <p className="text-[11px] font-semibold text-[#FF3B5C] uppercase tracking-wider">
               could not draw this replay
@@ -961,6 +1139,17 @@ export function ReplayPlayer({
             <p className="text-[10px] text-[#F5A623]/80 font-mono leading-relaxed">
               cached document · {behind} newer fill{behind === 1 ? '' : 's'} not yet included —
               refreshes automatically
+            </p>
+          )}
+          {doc.partial && !dataError && (
+            <p className="text-[10px] text-[#34EAB9]/80 font-mono leading-relaxed">
+              opening window playing · streaming the remainder behind the playhead
+            </p>
+          )}
+          {doc.partial && dataError && (
+            <p className="text-[10px] text-[#F5A623]/90 font-mono leading-relaxed">
+              the remainder of this replay failed to load — only the opening window is shown ·{' '}
+              {dataError}
             </p>
           )}
         </div>
@@ -1129,31 +1318,36 @@ export function ReplayPlayer({
       {/* Coin, episode, zoom and interval pickers */}
       {doc && (
         <div className="space-y-2">
-          {coins && (
+          {menu && menu.coins.length > 0 && (
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="text-[9px] text-white/35 uppercase tracking-wider w-full sm:w-auto">
                 coin
               </span>
-              {coins.slice(0, 10).map(([c, fillCount, from, to, epCount]) => (
+              {menu.coins.slice(0, 10).map(c => (
                 <button
-                  key={c}
+                  key={c.coin}
                   type="button"
                   disabled={locked}
-                  onClick={() => {
-                    setRequest({ coin: c, range: 'default', interval: 'auto' })
-                    setShowAllEpisodes(false)
-                  }}
+                  onClick={() => selectCoin(c.coin)}
                   className={`min-h-[30px] px-2 rounded border font-mono text-[10px] transition-colors ${
-                    resolvedCoin === c
+                    resolvedCoin === c.coin
                       ? 'border-[#F5A623]/50 bg-[#F5A623]/10 text-[#F5A623]'
                       : 'border-white/[0.12] text-white/40 hover:text-white/70'
                   }`}
-                  title={`${fillCount.toLocaleString()} fills, ${dayStamp(from)} – ${dayStamp(to)} · ${epCount} episodes`}
+                  title={`${c.fills.toLocaleString()} fills, ${dayStamp(c.from)} – ${dayStamp(c.to)} · realized ${signedUsd(c.realized_pnl)}`}
                 >
-                  {c}
-                  <span className="ml-1 text-white/30">{fillCount}</span>
+                  {c.coin}
+                  <span className="ml-1 text-white/30">{c.fills}</span>
                 </button>
               ))}
+              <button
+                type="button"
+                disabled={locked}
+                onClick={backToMenu}
+                className="min-h-[30px] px-2 rounded border border-white/[0.12] font-mono text-[10px] uppercase text-white/40 hover:text-white/70"
+              >
+                all coins
+              </button>
             </div>
           )}
 
@@ -1302,6 +1496,124 @@ export function ReplayPlayer({
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+/** Cumulative realized-PnL sparkline — real sums of real fills, sampled
+ *  server-side. Colored by where the line ends. */
+function Spark({ points }: { points: number[] }) {
+  if (points.length < 2) return null
+  const min = Math.min(...points, 0)
+  const max = Math.max(...points, 0)
+  const range = max - min || 1
+  const W = 96
+  const H = 22
+  const pts = points
+    .map((v, i) => `${((i / (points.length - 1)) * W).toFixed(1)},${(H - ((v - min) / range) * H).toFixed(1)}`)
+    .join(' ')
+  const up = points[points.length - 1] >= 0
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-5" preserveAspectRatio="none" aria-hidden>
+      <polyline
+        points={pts}
+        fill="none"
+        stroke={up ? '#34EAB9' : '#FF3B5C'}
+        strokeWidth="1.5"
+        vectorEffect="non-scaling-stroke"
+        opacity="0.75"
+      />
+    </svg>
+  )
+}
+
+/** The pair-selection grid: the page's first paint. One cheap read — never
+ *  blocked on episode detection or document building, which start only for
+ *  the coin the viewer picks. */
+function CoinMenuView({
+  address,
+  menu,
+  error,
+  onPick,
+}: {
+  address: string
+  menu: CoinMenuResp | null
+  error: string | null
+  onPick: (coin: string) => void
+}) {
+  if (error) {
+    return (
+      <div className="card p-6 text-center max-w-2xl mx-auto">
+        <p className="text-sm font-semibold mb-1">Replay unavailable</p>
+        <p className="text-xs text-white/40">{error}</p>
+      </div>
+    )
+  }
+  if (!menu) {
+    return (
+      <div className="card p-6 max-w-2xl mx-auto flex flex-col items-center gap-2 text-center">
+        <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/[0.12] border-t-[#34EAB9]" />
+        <p className="text-[10px] text-white/40 uppercase tracking-wider">
+          reading which coins this wallet traded
+        </p>
+      </div>
+    )
+  }
+  if (menu.coins.length === 0) {
+    return (
+      <div className="card p-6 text-center max-w-2xl mx-auto">
+        <p className="text-sm font-semibold mb-1">Nothing to replay</p>
+        <p className="text-xs text-white/40">{menu.coverage.note}</p>
+      </div>
+    )
+  }
+  const gapCoins = new Set(menu.gap_coins)
+  return (
+    <div className="max-w-2xl mx-auto space-y-3">
+      <div className="flex items-end justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[10px] text-white/40 font-mono tracking-wider">
+            {menu.identity.label ? `${menu.identity.label} · ` : ''}
+            {address.slice(0, 8)}…{address.slice(-6)}
+          </p>
+          <p className="text-sm font-bold">Pick a pair to replay</p>
+        </div>
+        <p className="text-[9px] text-white/35 uppercase tracking-wider text-right shrink-0">
+          {menu.coins.length} coin{menu.coins.length === 1 ? '' : 's'} ·{' '}
+          {menu.coverage.fill_count.toLocaleString()} fills
+        </p>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+        {menu.coins.map(c => (
+          <button
+            key={c.coin}
+            type="button"
+            onClick={() => onPick(c.coin)}
+            className="card p-3 text-left space-y-1.5 border border-transparent hover:border-[#34EAB9]/40 transition-colors"
+            title={`${c.fills.toLocaleString()} fills · ${dayStamp(c.from)} – ${dayStamp(c.to)}${gapCoins.has(c.coin) ? ' · capture starts mid-position (partial picture)' : ''}`}
+          >
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="font-mono text-sm font-bold text-[#F5A623] truncate">
+                {c.coin}
+                {gapCoins.has(c.coin) && <span className="ml-1 text-[10px] text-[#F5A623]/80">◐</span>}
+              </span>
+              <span
+                className={`font-mono text-[11px] font-semibold shrink-0 ${c.realized_pnl >= 0 ? 'text-[#34EAB9]' : 'text-[#FF3B5C]'}`}
+              >
+                {signedUsd(c.realized_pnl)}
+              </span>
+            </div>
+            {c.spark && c.spark.length >= 2 && <Spark points={c.spark} />}
+            <p className="text-[9px] text-white/40 font-mono">
+              {c.fills.toLocaleString()} fills · {dayStamp(c.from)} – {dayStamp(c.to)}
+            </p>
+          </button>
+        ))}
+      </div>
+      <p className="text-[10px] text-white/40 font-mono leading-relaxed">
+        {menu.coverage.note} · realized PnL is the exchange&rsquo;s own figures over this window.
+        Episodes and the replay are built for the coin you pick.
+      </p>
     </div>
   )
 }

@@ -1,10 +1,11 @@
 /**
- * Cohort replay pre-builder (Replay v2.1) — a low-priority loop inside the
+ * Cohort replay pre-builder (Replay v2.2) — a low-priority loop inside the
  * verification worker (NOT pg_cron; heavy work never goes there, see
- * CLAUDE.md) that keeps the default replay document warm for every cohort
- * wallet, most-active first. The /cohort links and the example chips land on
- * /replay/<address>, whose first request is the default doc — this loop makes
- * that request ahead of the first viewer.
+ * CLAUDE.md) that keeps replay documents warm for every cohort wallet,
+ * most-active first. Since the menu-first rework, /replay/<address> opens on
+ * the coin menu (one SQL aggregate — nothing to pre-build) and viewers fetch
+ * PER-COIN docs, so this loop warms each wallet's most-traded coins: the
+ * coin list from the app's /coins endpoint, then that coin's default doc.
  *
  * The loop is deliberately dumb: it calls the app's own doc endpoint with
  * prebuild=1 and lets the ROUTE decide freshness (served cached, or rebuilt
@@ -19,7 +20,8 @@
  *
  * Env: REPLAY_APP_URL (e.g. https://alphalens.vercel.app; unset = disabled),
  *      PREBUILD_SWEEP_MS (pause between full sweeps, default 10 min),
- *      PREBUILD_GAP_MS (pause between wallets, default 3 s).
+ *      PREBUILD_GAP_MS (pause between doc warms, default 3 s),
+ *      PREBUILD_COINS (most-traded coins warmed per wallet, default 3).
  */
 
 import { sb } from './lib/db.mjs'
@@ -27,7 +29,8 @@ import { sb } from './lib/db.mjs'
 const APP_URL = (process.env.REPLAY_APP_URL || '').replace(/\/$/, '')
 const SWEEP_MS = parseInt(process.env.PREBUILD_SWEEP_MS || String(10 * 60_000), 10)
 const GAP_MS = parseInt(process.env.PREBUILD_GAP_MS || '3000', 10)
-/** A cold build pages a wallet's full captured history; give it room. */
+const COINS_PER_WALLET = parseInt(process.env.PREBUILD_COINS || '3', 10)
+/** A cold build pages a coin's captured history; give it room. */
 const BUILD_TIMEOUT_MS = 120_000
 const PAGE = 500
 
@@ -63,9 +66,32 @@ async function listFamousEntries() {
   }
 }
 
+/** The wallet's most-traded coins, from the app's own menu endpoint (the
+ *  same SQL aggregate the page's first paint reads). */
+async function walletCoins(address) {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 30_000)
+  try {
+    const res = await fetch(`${APP_URL}/api/replay/${address}/coins`, {
+      signal: controller.signal,
+    })
+    if (!res.ok) return { ok: false, note: `coins HTTP ${res.status}` }
+    const body = await res.json()
+    const coins = Array.isArray(body.coins) ? body.coins : []
+    return { ok: true, coins: coins.slice(0, COINS_PER_WALLET).map((c) => c.coin) }
+  } catch (e) {
+    return { ok: false, note: e.name === 'AbortError' ? 'coins timed out' : e.message }
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 /** One doc request: ask the app; the route serves cached or builds.
- *  The response is NDJSON (a build) or JSON (already cached). */
-async function warmWallet(address, params = 'range=default') {
+ *  `params` is the full query string minus prebuild=1, so this serves both
+ *  the cohort sweep's per-coin warms and the curated entries' pinned
+ *  (coin, range, interval) triples. The response is NDJSON (a build) or
+ *  JSON (already cached). */
+async function warmDocParams(address, params) {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), BUILD_TIMEOUT_MS)
   try {
@@ -121,7 +147,7 @@ export function startPrebuildLoop({ isBusy, log }) {
           while (isBusy()) await sleep(5000)
           const qs = new URLSearchParams({ range: f.range, interval: f.interval })
           if (f.coin) qs.set('coin', f.coin)
-          const r = await warmWallet(f.address, qs.toString())
+          const r = await warmDocParams(f.address, qs.toString())
           if (!r.ok) {
             failed++
             log(`prebuild famous ${f.slug}: FAILED — ${r.note}`)
@@ -133,28 +159,41 @@ export function startPrebuildLoop({ isBusy, log }) {
         }
 
         const wallets = await listCohortWallets()
-        log(`prebuild sweep: ${wallets.length} cohort wallets, most-active first`)
-        for (const w of wallets) {
+        log(`prebuild sweep: ${wallets.length} cohort wallets, most-active first, top ${COINS_PER_WALLET} coins each`)
+        sweep: for (const w of wallets) {
           while (isBusy()) await sleep(5000) // verification jobs come first
-          const r = await warmWallet(w.address)
-          if (!r.ok) {
+          const list = await walletCoins(w.address)
+          if (!list.ok) {
             failed++
-            log(`prebuild ${w.address}: FAILED — ${r.note}`)
-          } else if (r.cached) {
-            cached++
-          } else {
-            built++
-            log(`prebuild ${w.address}: built in ${((r.buildMs ?? 0) / 1000).toFixed(1)}s`)
-            if (r.cacheWrite === 'failed') {
-              // Built but not stored: the app cannot write replay_docs
-              // (missing service-role key?). Every sweep would rebuild every
-              // wallet — stop this sweep and say so, loudly, once.
-              log('prebuild ABORTING sweep: the app reports cache_write=failed — '
-                + 'built docs are not being stored (check SUPABASE_SERVICE_ROLE_KEY on the app)')
-              break
-            }
+            log(`prebuild ${w.address}: FAILED — ${list.note}`)
+            await sleep(GAP_MS)
+            continue
           }
-          await sleep(GAP_MS)
+          for (const coin of list.coins) {
+            while (isBusy()) await sleep(5000)
+            const r = await warmDocParams(
+              w.address,
+              `coin=${encodeURIComponent(coin)}&range=default`
+            )
+            if (!r.ok) {
+              failed++
+              log(`prebuild ${w.address} ${coin}: FAILED — ${r.note}`)
+            } else if (r.cached) {
+              cached++
+            } else {
+              built++
+              log(`prebuild ${w.address} ${coin}: built in ${((r.buildMs ?? 0) / 1000).toFixed(1)}s`)
+              if (r.cacheWrite === 'failed') {
+                // Built but not stored: the app cannot write replay_docs
+                // (missing service-role key?). Every sweep would rebuild every
+                // wallet — stop this sweep and say so, loudly, once.
+                log('prebuild ABORTING sweep: the app reports cache_write=failed — '
+                  + 'built docs are not being stored (check SUPABASE_SERVICE_ROLE_KEY on the app)')
+                break sweep
+              }
+            }
+            await sleep(GAP_MS)
+          }
         }
         log(`prebuild sweep done: ${built} built, ${cached} already warm, ${failed} failed`)
       } catch (e) {

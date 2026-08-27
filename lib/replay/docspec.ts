@@ -128,6 +128,12 @@ export interface ReplayDoc {
     coarsen: number
   } | null
   identity: { label: string | null; archetype: string | null; cohort_member: boolean }
+  /** True only on a streamed HEAD document: the opening window of candles
+   *  and fills, sent so playback can start while the tail loads. Head docs
+   *  declare themselves (the player says the remainder is streaming), are
+   *  never cached, and are always followed by the full document — or by an
+   *  error, never by silence dressed as completeness. */
+  partial?: boolean
   built_at: string
   /** Newest fill timestamp included (doc scope), ISO; null when none. */
   built_through: string | null

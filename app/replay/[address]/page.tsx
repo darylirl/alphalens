@@ -29,8 +29,19 @@ export function generateMetadata({ params }: { params: { address: string } }): M
   }
 }
 
-export default function ReplayPage({ params }: { params: { address: string } }) {
+export default function ReplayPage({
+  params,
+  searchParams,
+}: {
+  params: { address: string }
+  searchParams?: { coin?: string }
+}) {
   const address = validateAddress(params.address)
+  // ?coin= deep link: a shared replay skips the menu and builds that coin
+  // straight away. Same charset rule the doc API enforces.
+  const coinParam = searchParams?.coin
+  const initialCoin =
+    typeof coinParam === 'string' && /^[A-Za-z0-9@:_.-]{1,32}$/.test(coinParam) ? coinParam : null
 
   return (
     <div className="pb-20 md:pb-8">
@@ -50,7 +61,7 @@ export default function ReplayPage({ params }: { params: { address: string } }) 
         </div>
 
         {address ? (
-          <ReplayPlayer address={address} />
+          <ReplayPlayer address={address} initialCoin={initialCoin} />
         ) : (
           <div className="card p-6 text-center max-w-2xl mx-auto">
             <p className="text-sm font-semibold mb-1">Not a wallet address</p>
