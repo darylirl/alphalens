@@ -52,20 +52,11 @@ export const HEARTBEAT_STREAMS: HeartbeatStream[] = [
     key: 'scorer',
     service: 'scorer',
     label: 'ledger scorer',
-    // TEMPORARY — REVERT IMMEDIATELY AFTER THE BARK TEST.
-    // Tightened from 12 * 60_000 to 1s so the next scheduled cron run trips
-    // this stream and fires a real Telegram alert against the real bot. The
-    // scorer is healthy; nothing is wrong with it. `scorer` was chosen over
-    // `capture` because "ledger scorer is silent" is the least alarming
-    // headline to put in an ops channel, and a 1s threshold sitting next to a
-    // rationale that says 12m is self-evidently an artefact rather than a
-    // real reading.
-    //
     // verify-service/scorer.mjs sets a 60s beat interval, but its work loop
     // ticks every SCORER_POLL_MS (5 min default) and a long tick can delay a
     // beat. 12m tolerates two missed ticks plus slack, so a slow scoring pass
     // is never mistaken for a dead scorer.
-    staleMs: 1_000,
+    staleMs: 12 * 60_000,
     rationale: 'tick cadence is 5m; 12m = two missed ticks plus slack',
   },
 ]
