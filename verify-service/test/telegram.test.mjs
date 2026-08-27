@@ -14,7 +14,7 @@ process.env.LEDGER_TELEGRAM_MIN_INTERVAL_MS = '0'
 process.env.LEDGER_PUBLIC_URL = 'https://alphalens.test/'
 
 const {
-  formatCall, formatResolution, announce, announceSweep, ledgerTelegramConfigured,
+  formatCall, formatResolution, announce, announceSweep, resetFailed, ledgerTelegramConfigured,
 } = await import('../lib/telegram.mjs')
 
 const verdictCall = {
@@ -124,6 +124,18 @@ function fakeDb() {
     }
 
     if (method === 'PATCH') {
+      // A bulk PATCH (no call_id filter) — resetFailed's shape.
+      if (!path.includes('call_id=eq.')) {
+        const hit = [...rows.values()].filter((r) => {
+          if (path.includes('posted_at=is.null') && r.posted_at !== null) return false
+          const gt = path.match(/attempts=gt\.(\d+)/)
+          if (gt && !(r.attempts > Number(gt[1]))) return false
+          return true
+        })
+        hit.forEach((r) => Object.assign(r, body))
+        return hit
+      }
+
       const k = key(path)
       const row = rows.get(k)
       if (!row) return []
@@ -222,6 +234,28 @@ test('a Telegram failure is recorded and returned, never thrown at the caller', 
     const row = rows.get('2:publish')
     assert.equal(row.posted_at, null, 'a failed post must stay pending')
     assert.match(row.last_error, /chat not found/)
+    // The error names the chat it tried: "chat not found" alone cannot tell a
+    // wrong channel id from a missing grant, and that is the first question.
+    assert.match(row.last_error, /@alphalens_ledger/)
+  })
+})
+
+test('resetFailed re-arms a config failure without touching what did post', async () => {
+  await withEnv(CONFIGURED, async () => {
+    fakeTelegram({ fail: true })
+    const { db, rows, calls } = fakeDb()
+
+    await announce(verdictCall, 'publish', { db })
+    assert.equal(rows.get('2:publish').attempts, 1)
+
+    const n = await resetFailed({ db })
+    assert.equal(n, 1)
+    assert.equal(rows.get('2:publish').attempts, 0)
+    assert.equal(rows.get('2:publish').last_error, null)
+    // Only unposted rows with a failed attempt are touched — a posted row
+    // must never be re-armed, or the channel repeats itself.
+    const patch = calls.findLast((c) => c.method === 'PATCH' && c.path.includes('posted_at=is.null'))
+    assert.match(patch.path, /attempts=gt\.0/)
   })
 })
 

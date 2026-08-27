@@ -88,7 +88,14 @@ async function sendMessage(text, { retryAfter429 = true } = {}) {
     await sleep((wait + 1) * 1000)
     return sendMessage(text, { retryAfter429: false })
   }
-  throw new Error(`telegram sendMessage ${res.status}: ${String(body?.description || '').slice(0, 200)}`)
+  // Name the chat we actually tried. "chat not found" says nothing about
+  // whether the username is wrong, the channel does not exist, or the bot was
+  // never added — and the first thing anyone needs is the value that failed.
+  // The channel id is a public @name or a chat id, never a secret; the token
+  // is neither logged nor interpolated into this message.
+  throw new Error(
+    `telegram sendMessage ${res.status} to ${chat}: ${String(body?.description || '').slice(0, 200)}`,
+  )
 }
 
 // ── Message text (pure — this is what the tests pin down) ───────────────────
@@ -287,6 +294,36 @@ export async function announce(call, phase, { log = () => {}, db = sb, attempts 
 
 export const announceCall = (call, opts) => announce(call, 'publish', opts)
 export const announceResolution = (call, opts) => announce(call, 'resolution', opts)
+
+/**
+ * Clear the failure counters on everything still unposted, so the sweep will
+ * try again from the top.
+ *
+ * The five-attempt cap exists so ONE malformed call cannot hold up the queue
+ * forever. It is the wrong instrument for a configuration failure — a wrong
+ * channel id, a bot that is not an admin, a channel that does not exist yet —
+ * because that fails every message equally, and burns all five attempts on
+ * each of them within the hour. The Ledger would then be permanently
+ * un-mirrored with nothing in the pending view to say so, which is the
+ * failure mode this whole module is built to avoid.
+ *
+ * So: fix the configuration, run this, and the backlog posts on the next
+ * sweep. The claims stay in place, so anything that DID post stays posted —
+ * this resets the right to retry, never the record of having posted.
+ *
+ * @returns {Promise<number>} how many announcements were re-armed
+ */
+export async function resetFailed({ log = () => {}, db = sb } = {}) {
+  const rows = await db('ledger_telegram_posts?posted_at=is.null&attempts=gt.0', {
+    method: 'PATCH',
+    prefer: 'return=representation',
+    body: { attempts: 0, last_error: null, claimed_at: new Date(0).toISOString() },
+  })
+  const n = rows?.length || 0
+  log(n ? `re-armed ${n} failed announcement(s) — the next sweep will retry them`
+        : 'nothing to re-arm: no unposted announcement has a failed attempt')
+  return n
+}
 
 /**
  * The catch-all, and the backfill: every call whose publish or resolution has
