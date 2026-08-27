@@ -94,6 +94,29 @@ aggregation that under-counted unnoticed).
 - An unordered query without a limit is doubly wrong: the ~1,000 rows returned
   are an arbitrary slice, not the first or the latest.
 
+## Invariant: fixtures for external formats come from captured bytes
+
+Test fixtures for an external data format must be derived from real captured
+bytes, never from the parser author's assumptions. Synthetic fixtures that
+mirror the implementation's guess validate the guess against itself.
+
+This is not hypothetical. The S3 archive read path shipped with seventeen
+passing checks that built their own `.lz4` objects in the real directory
+layout — the right instinct — but populated them with the shape the parser
+expected: `node_fills_by_block` as `[meta, [[addr, fill], ...]]`. The real
+line is a block envelope, a dict with an `events` list. Fixture and parser
+agreed, so the suite went green while the parser kept **0 fills out of
+849,573 real lines**. Zero coverage is indistinguishable from a universe that
+never traded, which is exactly the failure this repo's "missing data is never
+zero" invariant exists to prevent — reached through the test suite instead of
+through the data.
+
+In practice: capture a real object, commit a small slice of it (or the code
+that fetches one), and derive fixtures from that. When a format cannot be
+captured before the parser is written, say so in the test and treat every
+result from it as provisional until real bytes have been read. A test that
+cannot fail against real data is not evidence.
+
 ## Database verification surface (Supabase, project qrmekrpeoijzprsriaux)
 
 - `verification_jobs` (status: queued → running → done | failed) is claimed via
