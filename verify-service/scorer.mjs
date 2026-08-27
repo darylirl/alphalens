@@ -10,6 +10,12 @@
  *      on provenance->result_id makes double-publish impossible).
  *   2. Score — due cohort_signal calls resolve against captured tape via
  *      lib/scorer.mjs, which refuses to score across data gaps.
+ *   3. Announce — anything in the Ledger the Telegram channel has not
+ *      mirrored yet gets posted, oldest event first. Both write paths above
+ *      also announce inline, so this is the catch-all AND the backfill: on
+ *      first configuration it walks the whole Ledger from the beginning.
+ *      Claimed in the database (ledger_telegram_posts), so a restart resumes
+ *      rather than replaying.
  *
  * Capacity budget: every read is a single bounded page per tick, the loop
  * paces itself (SCORER_POLL_MS, default 5 minutes), and it is a killable
@@ -27,7 +33,7 @@ import { hostname } from 'node:os'
 import { assertConfigured, heartbeat } from './lib/db.mjs'
 import { scoreTick } from './lib/scorer.mjs'
 import { sweepUnpublished } from './lib/publish.mjs'
-import { ledgerTelegramConfigured } from './lib/telegram.mjs'
+import { announceSweep, ledgerTelegramConfigured } from './lib/telegram.mjs'
 
 const POLL_MS = parseInt(process.env.SCORER_POLL_MS || String(5 * 60_000), 10)
 const HEARTBEAT_MS = 60_000
@@ -35,7 +41,7 @@ const ONCE = process.argv.includes('--once')
 const WORKER_ID = `${hostname()}:${process.pid}`
 
 const log = (...a) => console.log(new Date().toISOString(), ...a)
-const state = { ticks: 0, resolved: 0, published: 0, lastError: null }
+const state = { ticks: 0, resolved: 0, published: 0, posted: 0, lastError: null }
 
 async function beat() {
   try {
@@ -44,7 +50,8 @@ async function beat() {
       // visible in capture_health rather than masked by the worker's beats.
       service: 'scorer',
       note: `scorer=${WORKER_ID} ticks=${state.ticks} resolved=${state.resolved}`
-        + ` published=${state.published}${state.lastError ? ` lastError=${state.lastError.slice(0, 120)}` : ''}`,
+        + ` published=${state.published} posted=${state.posted}`
+        + `${state.lastError ? ` lastError=${state.lastError.slice(0, 120)}` : ''}`,
     })
   } catch (e) { log('heartbeat failed:', e.message) }
 }
@@ -55,9 +62,22 @@ async function tick() {
 
   const scored = await scoreTick({ log })
   state.resolved += scored.resolved
+
+  // Announcing last, and in its own try: a Telegram outage is never allowed
+  // to abort a tick that has already published or resolved. Whatever it could
+  // not post stays pending and is retried next tick.
+  let announced = { posted: 0, failed: 0 }
+  try {
+    announced = await announceSweep({ log })
+    state.posted += announced.posted
+  } catch (e) {
+    log('telegram sweep failed (ledger is unaffected):', e.message)
+  }
+
   state.ticks += 1
-  if (swept.published || scored.resolved || scored.waiting) {
-    log(`tick: published=${swept.published} resolved=${scored.resolved} waiting=${scored.waiting}`)
+  if (swept.published || scored.resolved || scored.waiting || announced.posted || announced.failed) {
+    log(`tick: published=${swept.published} resolved=${scored.resolved} waiting=${scored.waiting}`
+      + ` posted=${announced.posted} post_failed=${announced.failed}`)
   }
 }
 
