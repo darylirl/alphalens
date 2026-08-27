@@ -9,6 +9,7 @@
     "test": "node --test 'test/*.test.mjs'",
     "enqueue": "node enqueue.mjs",
     "backfill": "node backfill.mjs",
-    "scorer": "node scorer.mjs"
+    "scorer": "node scorer.mjs",
+    "announce": "node announce.mjs"
   }
 }

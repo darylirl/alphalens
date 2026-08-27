@@ -28,6 +28,7 @@ triggered.
 | `index.mjs` | Worker loop: claim → run → persist → heartbeat |
 | `scorer.mjs` | Ledger scorer loop: publish sweep + horizon scoring |
 | `enqueue.mjs` | CLI: validate a spec file and enqueue it |
+| `announce.mjs` | CLI: post the Ledger's pending announcements (backfill / dry run) |
 | `publish-founding.mjs` | One-shot: the Ledger's two founding entries |
 
 Node >= 22, zero npm dependencies — same shape as `capture-service`.
@@ -148,10 +149,40 @@ trigger still validates.
   late capture, then records `unresolvable` with no Brier score and the gap
   documented. Aggregate/strategy subjects only — a wallet-bearing subject is
   rejected by the database.
-- **Telegram** (`lib/telegram.mjs`): posts each new call and each resolution
-  to a public channel via `LEDGER_TELEGRAM_BOT_TOKEN` +
-  `LEDGER_TELEGRAM_CHANNEL_ID`. Deliberately separate from the watchdog alert
-  bot's env; unconfigured means messages are logged and dropped.
+- **Telegram** (`lib/telegram.mjs`, migration 023): mirrors the Ledger to the
+  public channel [@alphalens_ledger](https://t.me/alphalens_ledger) — every
+  new call (kind, claim, verdict or horizon, confidence where there is one,
+  permalink) and every resolution (outcome, Brier score, permalink). Plain
+  text; a data gap posts as `unresolvable` with no score, exactly as it is
+  recorded.
+
+  - **Env:** `LEDGER_TELEGRAM_BOT_TOKEN` + `LEDGER_TELEGRAM_CHANNEL_ID`.
+    Deliberately separate from the watchdog alert bot's `TELEGRAM_BOT_TOKEN` /
+    `TELEGRAM_CHAT_ID`, and the module refuses to fall back to them: the same
+    bot may serve both, the same *chat* may not. Content and alerts never
+    share a channel. Unconfigured is a normal state — messages are logged and
+    dropped, and nothing else changes.
+  - **Post-once:** every announcement claims its `(call_id, phase)` row in
+    `ledger_telegram_posts` before sending, so a restart mid-backfill resumes
+    instead of replaying. A claim that never posted is retried after ten
+    minutes, five times, then left with its error on the row.
+  - **Backfill:** the sweep walks `ledger_telegram_pending` oldest event
+    first, so a cold channel opens with the autopsy and the verdicts in the
+    order they were made. It runs every scorer tick, and on demand:
+    `node announce.mjs --dry-run` prints exactly what would be posted;
+    `node announce.mjs` posts it.
+  - **After a configuration fault:** a wrong channel id, a bot that is not an
+    admin, or a channel that does not exist yet fails every message equally
+    and burns the five-attempt cap on each within the hour — leaving the
+    Ledger un-mirrored with an empty pending view. Fix the configuration, then
+    `node announce.mjs --reset-failed` re-arms the backlog. It clears attempt
+    counters on unposted rows only; a row that did post is never re-armed.
+  - **Never a gate:** a Telegram failure is logged and returned, never thrown.
+    The Ledger is the source of truth; the channel is a mirror, and a mirror
+    that is down does not stop a publish or a resolution.
+  - **Paced:** one message per `LEDGER_TELEGRAM_MIN_INTERVAL_MS` (default
+    3.5s, ~17/min against Telegram's ~20/min channel guidance), 10 per tick,
+    and a 429's `retry_after` is obeyed rather than fought.
 
 ## Run locally
 
@@ -160,6 +191,8 @@ SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... node index.mjs         # worker
 SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... node scorer.mjs        # ledger scorer
 SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... \
   node enqueue.mjs specs/btc-cohort-flow-flip.json me                 # enqueue
+SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... \
+  node announce.mjs --dry-run                                         # channel preview
 npm test                                                              # invariants
 ```
 
@@ -190,6 +223,14 @@ worker's beats:
 
 ```sql
 select * from capture_health where service = 'scorer' order by ts desc limit 5;
+```
+
+Its note carries `posted=` (channel announcements) alongside `published=` and
+`resolved=`. What the channel still owes the Ledger:
+
+```sql
+select call_id, phase, event_at from ledger_telegram_pending order by event_at;
+select * from ledger_telegram_posts where posted_at is null;   -- stuck claims
 ```
 
 ## API

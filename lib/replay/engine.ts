@@ -22,14 +22,34 @@ export interface RCandle {
   v: number
 }
 
-/** One exchange fill, as the replay consumes it. */
-export interface RFill {
+/**
+ * What PLAYBACK needs from a fill, and nothing else: the moment, the
+ * exchange-reported price and size, the side, the direction string and the
+ * exchange's own realized PnL. This is exactly the set the chart, the flash
+ * painter and the timeline read — see the doc format, which carries only
+ * these on the wire.
+ */
+export interface PlayFill {
   t: number
   px: number
   sz: number
   side: 'B' | 'A'
   dir: string
   pnl: number
+}
+
+/**
+ * One exchange fill as the SERVER holds it — playback's fields plus the two
+ * the server needs and the wire does not carry: the exchange's reported fee
+ * and the position before the fill.
+ *
+ * The split is deliberate. Episode detection and the position series consume
+ * `fee` and `start` server-side, where they are always real; the replay
+ * document ships their RESULTS (episode fees, the per-bar position series)
+ * rather than their inputs. Because the wire type simply lacks the fields,
+ * no decoder can hand the player a fabricated zero for a fee we never sent.
+ */
+export interface RFill extends PlayFill {
   fee: number
   start: number | null
 }
@@ -56,7 +76,7 @@ export function barAt(candles: { t: number }[], ts: number): number {
 /** What one bar of the replay contains, precomputed. */
 export interface BarEvents {
   /** Fills that land in this bar, in time order. */
-  fills: RFill[]
+  fills: PlayFill[]
   /** Notional opened in this bar (Open * directions). */
   openedUsd: number
   /** Realized PnL closed in this bar (sum of fill pnl). */
@@ -81,10 +101,14 @@ export interface Timeline {
   totalFills: number
 }
 
-const isEntry = (f: RFill) => /^open/i.test(f.dir)
-const isClose = (f: RFill) => /close|liquidat|>/i.test(f.dir) || f.pnl !== 0
+const isEntry = (f: PlayFill) => /^open/i.test(f.dir)
+const isClose = (f: PlayFill) => /close|liquidat|>/i.test(f.dir) || f.pnl !== 0
 
-export function buildTimeline(candles: RCandle[], intervalMs: number, fills: RFill[]): Timeline {
+export function buildTimeline(
+  candles: RCandle[],
+  intervalMs: number,
+  fills: PlayFill[]
+): Timeline {
   const events: BarEvents[] = candles.map(() => ({
     fills: [],
     openedUsd: 0,

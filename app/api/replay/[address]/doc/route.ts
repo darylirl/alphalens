@@ -14,7 +14,6 @@ import {
 import {
   parseRangeKey,
   rangeKey,
-  REPLAY_DOC_SCHEMA,
   REFRESH_FILL_THRESHOLD,
   SERVE_STALE_MAX_FILLS,
   PASTED_TTL_MS,
@@ -40,8 +39,15 @@ import { famousPin } from '@/lib/replay/famous'
 // ~10K-fill window slides regardless of our capture stream.
 
 export const dynamic = 'force-dynamic'
-// Cold builds page a cohort wallet's full captured history; give them room.
-export const maxDuration = 60
+// Cold builds page a wallet's history; a CURATED famous episode pads its
+// window by 48h on each side, and on the heaviest wallets that is a very
+// large walk — the comeback entry's window covers ~22K fills/day and was
+// killed at 60s having walked 77,045 fills across 40 pages. The pad is not
+// the thing to shrink: it is what makes a pinned episode's boundaries detect
+// identically to a full-history load, so trimming it would change the build
+// inputs behind already-verified figures. Give the cold path room instead.
+// Warm reads are unaffected — those are a single indexed row.
+export const maxDuration = 300
 
 interface CacheRow {
   content_hash: string
@@ -147,17 +153,44 @@ export async function GET(req: NextRequest, { params }: { params: { address: str
     const pin = famousPin(addr, coin, rangeStr, interval)
     const pinned = Boolean(pin)
 
-    // A doc built under an older schema cannot carry the gap block, and a
-    // gapless doc for a wallet WITH gaps draws a continuous story across
-    // unmeasured time. Older schemas are a cache miss, not a served answer.
-    const usable =
-      cached && (cached.doc as { schema?: string } | null)?.schema === REPLAY_DOC_SCHEMA
-
-    if (cached && usable) {
+    if (cached) {
       let fresh = false
       let behind = 0
+      // A document cached in an older wire format is not stale by DATA — its
+      // fills are as real as the day they were built — but it is four times
+      // the bytes, and bytes are what the warm path costs. Rebuilding it once
+      // is how the v2 packing reaches documents already in the cache; a row
+      // that is never re-viewed is never rebuilt. The DECODER still reads v1,
+      // for rows served in the deploy window and for documents already in a
+      // viewer's sessionStorage.
+      //
+      // v3 raises the stakes: a pre-v3 document carries no gap block, so for a
+      // wallet with a PROVEN capture gap it draws a continuous story across
+      // time nobody measured. That is not a byte-count preference, it is the
+      // dishonesty this format version exists to end — so an older document is
+      // rebuilt rather than served.
+      const staleFormat = (cached.doc as { v?: number } | null)?.v !== 3
+
+      // Pinned wins over the format upgrade, deliberately. A curated episode
+      // may no longer be rebuildable at all — that is the whole reason it is
+      // pinned — so rebuilding one to save bytes could destroy a record the
+      // exchange will not serve again. Curated documents therefore keep
+      // whatever format they were built in; the set is small and fixed, and
+      // moving them to v3 is a deliberate act (drop the row and re-run
+      // scripts/prebuild-famous-local.mts while the window is still live),
+      // never an automatic rebuild in a viewer's request path.
+      //
+      // This carve-out survives the gap block only because every pinned entry
+      // was CHECKED: each published entry's pinned window was re-walked
+      // against the gap detector, and the two whose episodes turned out to
+      // contain proven gaps (aguila-second-collapse, qwatio-40x-short) are
+      // withheld in the manifest — a withheld entry does not pin, so it
+      // cannot reach this branch. A pinned document is gapless by
+      // verification, not by assumption; re-verify when adding an entry.
       if (pinned) {
         fresh = true
+      } else if (staleFormat) {
+        fresh = false
       } else if (isCohort && cached.source === 'store') {
         const newest = await newestStoreFill(addr, coin)
         if (!newest) {
