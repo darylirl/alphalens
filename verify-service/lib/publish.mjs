@@ -17,6 +17,9 @@
 import { validateSpec, SpecError } from './spec.mjs'
 import { sb } from './db.mjs'
 import { announceCall } from './telegram.mjs'
+// The scorer's own rules, imported rather than restated: a call is publishable
+// only if the code that will have to resolve it can read it.
+import { scoreableSubject, PRICE_SEARCH_MIN } from './scorer.mjs'
 
 export const CANONICAL_ENGINE_PREFIX = 'verify-engine@'
 
@@ -198,4 +201,193 @@ export async function sweepUnpublished({ limit = 50, log = () => {}, db = sb } =
     if (ok) published += 1
   }
   return { published }
+}
+
+// ── Publishing: forward-looking cohort signals ──────────────────────────────
+
+/**
+ * A cohort_signal is the only Ledger kind published BEFORE its evidence
+ * exists: it names a coin, a direction and an instant, and the scorer settles
+ * it later against captured tape. That asymmetry is exactly why this path is
+ * the strict one.
+ *
+ * Three things are checked here that no database constraint can check:
+ *
+ *  1. THE DEPLOYED SCORER MUST BE ABLE TO RESOLVE IT. The subject is run
+ *     through the scorer's own `scoreableSubject()`, not a local copy of the
+ *     rules. A call the scorer cannot read resolves 'unresolvable' by
+ *     construction — a permanent hole in the calibration curve dressed up as
+ *     a data gap — so it is refused at publication instead.
+ *  2. THE STATED DIRECTION MUST BE THE SNAPSHOT'S DIRECTION. The pulse
+ *     snapshot the call is derived from is passed in and re-read here: a call
+ *     to go short against net-long positioning, or off a skew too small or
+ *     too thinly-populated to be anything but noise, is refused. Publishing
+ *     the opposite of your own evidence is not a contrarian call, it is an
+ *     undocumented one.
+ *  3. THE SNAPSHOT MUST BE RECORDED. provenance carries the matview refresh
+ *     time, wallet count, notional and net flow the call was read from, so
+ *     the call can be re-derived from the same numbers later. A signal whose
+ *     basis is not written down cannot be audited, only believed.
+ *
+ * resolves_at is computed from publishedAt and the horizon rather than
+ * accepted separately, so horizon_hours and the resolution instant can never
+ * disagree — the scorer trusts resolves_at and the reader trusts the horizon.
+ */
+
+/** Floors below which a skew is not a signal. Guardrails, not preferences. */
+export const SIGNAL_MIN_WALLETS = 3
+export const SIGNAL_MIN_SKEW_PCT = 5
+export const SIGNAL_MIN_NOTIONAL_USD = 250_000
+
+const usd = (n) => `$${Math.round(Math.abs(n)).toLocaleString('en-US')}`
+
+/**
+ * Build the cohort_signal row. Pure — throws rather than returning a call
+ * that the scorer, the database, or the honesty contract would reject.
+ *
+ * @param {object} input
+ * @param {string} input.coin            coin symbol, as the tape names it
+ * @param {'up'|'down'} input.direction  the called direction of price
+ * @param {number} input.confidence      P(claim true), strictly in (0, 1)
+ * @param {string} input.publishedAt     ISO instant of publication (= entry)
+ * @param {number} input.horizonHours    hours to resolution
+ * @param {object} input.snapshot        the /api/pulse row + coverage it came from
+ * @param {object} [input.analysis]      supporting figures recorded in provenance
+ */
+export function cohortSignalCall({
+  coin, direction, confidence, publishedAt, horizonHours, snapshot, analysis = null,
+}) {
+  const errors = []
+
+  // 1. Scoreable by the deployed scorer — its rules, not a copy of them.
+  const subject = { scope: 'cohort', coin, direction }
+  const scoreable = scoreableSubject(subject)
+  if (!scoreable.ok) errors.push(...scoreable.errors)
+
+  if (!(Number(confidence) > 0 && Number(confidence) < 1)) {
+    errors.push('confidence: must be strictly between 0 and 1 (a probability, not a certainty)')
+  }
+  if (!(Number(horizonHours) > 0)) errors.push('horizonHours: must be positive')
+  const publishedMs = Date.parse(publishedAt)
+  if (!Number.isFinite(publishedMs)) errors.push('publishedAt: must be an ISO instant')
+
+  // 2. The snapshot must exist, be legible, and point the way the call points.
+  const netFlow = Number(snapshot?.netFlowUsd)
+  const notional = Number(snapshot?.notionalUsd)
+  const wallets = Number(snapshot?.activeWallets)
+  const computedAt = snapshot?.computedAt
+  if (snapshot?.coin !== coin) {
+    errors.push(`snapshot.coin ${JSON.stringify(snapshot?.coin ?? null)} is not the coin being called (${coin})`)
+  }
+  if (!Number.isFinite(netFlow) || !Number.isFinite(notional) || notional <= 0) {
+    errors.push('snapshot: netFlowUsd and a positive notionalUsd are required')
+  }
+  if (!Number.isFinite(wallets)) errors.push('snapshot.activeWallets: required')
+  if (typeof computedAt !== 'string' || !Number.isFinite(Date.parse(computedAt))) {
+    errors.push('snapshot.computedAt: the matview refresh time is required — an unrecorded snapshot is unauditable')
+  }
+
+  const skewPct = Number.isFinite(netFlow) && notional > 0 ? (netFlow / notional) * 100 : NaN
+  if (Number.isFinite(skewPct)) {
+    const snapshotDirection = skewPct > 0 ? 'up' : 'down'
+    if (direction !== snapshotDirection) {
+      errors.push(
+        `direction "${direction}" contradicts the snapshot: net flow ${usd(netFlow)} is `
+        + `${netFlow >= 0 ? 'net long' : 'net short'} (${skewPct.toFixed(1)}% of notional)`,
+      )
+    }
+    if (Math.abs(skewPct) < SIGNAL_MIN_SKEW_PCT) {
+      errors.push(
+        `snapshot skew ${skewPct.toFixed(1)}% is under the ${SIGNAL_MIN_SKEW_PCT}% floor — `
+        + 'a balanced book is not a directional call',
+      )
+    }
+  }
+  if (Number.isFinite(wallets) && wallets < SIGNAL_MIN_WALLETS) {
+    errors.push(`snapshot has ${wallets} active wallet(s), under the ${SIGNAL_MIN_WALLETS} floor — `
+      + 'one or two wallets are a position, not a cohort')
+  }
+  if (Number.isFinite(notional) && notional < SIGNAL_MIN_NOTIONAL_USD) {
+    errors.push(`snapshot notional ${usd(notional)} is under the ${usd(SIGNAL_MIN_NOTIONAL_USD)} floor`)
+  }
+
+  if (errors.length) throw new Error(`cohort_signal is not publishable: ${errors.join('; ')}`)
+
+  const resolvesAt = new Date(publishedMs + Number(horizonHours) * HOUR_MS).toISOString()
+  const publishedIso = new Date(publishedMs).toISOString()
+  const side = direction === 'up' ? 'higher' : 'lower'
+
+  // The claim states the resolution procedure the scorer actually runs, so it
+  // is falsifiable as written: no clause here needs a human to interpret it.
+  const claim =
+    `${coin} is strictly ${side} ${horizonHours}h from publication: the first captured price print at or after `
+    + `${resolvesAt} is ${direction === 'up' ? 'above' : 'below'} the first captured print at or after `
+    + `${publishedIso}. A print is the 1m candle open, or a captured cohort fill price when no candle `
+    + `exists, searched up to ${PRICE_SEARCH_MIN} minutes past each instant; equal prices resolve `
+    + `INCORRECT, and a missing print at either instant resolves UNRESOLVABLE with no Brier score. `
+    + `Basis: the /api/pulse snapshot computed ${computedAt}, in which the tracked cohort's rolling-24h `
+    + `${coin} flow was net ${netFlow >= 0 ? 'long' : 'short'} ${usd(netFlow)} on ${usd(notional)} of `
+    + `notional across ${wallets} active wallets (${skewPct.toFixed(1)}% of notional directed `
+    + `${netFlow >= 0 ? 'long' : 'short'}).`
+
+  return {
+    published_at: publishedIso,
+    kind: 'cohort_signal',
+    subject,
+    claim,
+    confidence: Number(confidence),
+    provenance: {
+      engine: 'ledger-cohort-signal@1.0.0',
+      source: '/api/pulse',
+      snapshot: {
+        computed_at: computedAt,               // matview refresh time
+        active_wallets: wallets,
+        notional_usd: Math.round(notional),
+        net_flow_usd: Math.round(netFlow),
+        skew_pct: Number(skewPct.toFixed(2)),
+        long_pct: snapshot?.longPct ?? null,
+        long_pct_change: snapshot?.longPctChange ?? null,
+      },
+      coverage: snapshot?.coverage ?? null,
+      ...(analysis ? { selection_analysis: analysis } : {}),
+    },
+    horizon_hours: Number(horizonHours),
+    resolves_at: resolvesAt,
+  }
+}
+
+/**
+ * Publish one cohort_signal. Idempotent on (coin, snapshot refresh time): the
+ * pulse matview refreshes on a schedule, so re-running this against the same
+ * snapshot must not mint a second call for the same reading. A genuinely new
+ * call needs a genuinely new snapshot.
+ *
+ * @returns {{published: boolean, call?: object, reasons?: string[]}}
+ */
+export async function publishCohortSignal(input, { log = () => {}, db = sb } = {}) {
+  const row = cohortSignalCall(input)
+  const computedAt = row.provenance.snapshot.computed_at
+
+  const existing = await db(
+    'ledger_calls?select=id&kind=eq.cohort_signal'
+    + `&subject->>coin=eq.${encodeURIComponent(row.subject.coin)}`
+    + `&provenance->snapshot->>computed_at=eq.${encodeURIComponent(computedAt)}`
+    + '&order=id.asc&limit=1',
+  )
+  if (existing?.length) {
+    log(`${row.subject.coin} signal from snapshot ${computedAt} already published as call ${existing[0].id}`
+      + ' — skipping (one call per snapshot)')
+    return { published: false, reasons: [`snapshot already published as call ${existing[0].id}`] }
+  }
+
+  const [call] = await db('ledger_calls', {
+    method: 'POST',
+    prefer: 'return=representation',
+    body: [row],
+  })
+
+  log(`published Ledger call ${call.id}: ${row.subject.coin} ${row.subject.direction}`
+    + ` @ ${row.confidence} — resolves ${row.resolves_at}`)
+  await announceCall(call, { log }).catch((e) => log(`telegram announce failed: ${e.message}`))
+  return { published: true, call }
 }
