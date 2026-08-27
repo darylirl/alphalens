@@ -1,4 +1,9 @@
 User-agent: *
 Allow: /
 
+# The admin console. Gated by ADMIN_API_TOKEN regardless — this only keeps it
+# out of indexes, alongside the noindex header on the page itself. It is also
+# absent from app/sitemap.ts and from both nav components.
+Disallow: /admin
+
 Sitemap: https://alphalens-taupe.vercel.app/sitemap.xml

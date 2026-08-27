@@ -99,6 +99,15 @@ export async function PATCH(req: NextRequest, { params }: { params: { address: s
       updates.manually_tagged = Boolean(body.manually_tagged)
     }
 
+    // capture_enabled is the enforced capacity budget (CLAUDE.md, "Capacity
+    // budget: capture scope"): the daemon reads this flag to decide what it
+    // subscribes to and sweeps. Flipping it on adds a wallet to the capture
+    // set — it never widens the daemon's query — so it belongs here, on the
+    // same admin-gated PATCH as the other wallet fields, rather than in psql.
+    if ('capture_enabled' in body) {
+      updates.capture_enabled = Boolean(body.capture_enabled)
+    }
+
     if (Object.keys(updates).length === 0) {
       return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 })
     }
