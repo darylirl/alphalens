@@ -193,7 +193,8 @@ UPSTASH_REDIS_REST_URL=...        # API response caching
 UPSTASH_REDIS_REST_TOKEN=...
 TELEGRAM_BOT_TOKEN=...            # capture-daemon stall alerts
 ANTHROPIC_API_KEY=sk-ant-your-key # AI agent
-ADMIN_API_TOKEN=...               # gates wallet management + POST /api/verify
+ADMIN_API_TOKEN=...               # gates wallet management + POST /api/verify;
+                                  # also unlocks the /admin console
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 ```
 
@@ -213,6 +214,24 @@ Note: public hypothesis submission (`POST /api/verify`) is planned but
 stays admin-gated pending rate limiting. Reads are public.
 
 ---
+
+### The admin console (`/admin`)
+
+Privileged actions in the browser instead of a shell: enqueue a verification
+from a committed spec (validated against grammar v1 client-side, by the same
+`verify-service/lib/grammar.mjs` the engine runs), watch the job queue, flip
+`capture_enabled` and re-run classification on wallets, and read which
+verification results reached the Ledger and which are held back and why.
+
+Sign in with `ADMIN_API_TOKEN` once; it is stored in an httpOnly, secure,
+8-hour cookie that the existing `isAuthorized()` gate already accepts, so every
+control is an ordinary call to an API that already exists. The page adds no
+capability, only a way to reach the ones already there without pasting a token
+into a terminal. It is `noindex`, `Disallow`ed in `robots.txt`, and absent from
+the sitemap and both nav bars — unlisted, not secret; the token is the gate.
+
+Nothing here writes to the Ledger: publishing stays with the runner and the
+scorer, through the one tested path in `verify-service/lib/publish.mjs`.
 
 ## What this is not
 
