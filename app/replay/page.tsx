@@ -5,6 +5,8 @@ import { loadExampleWallets, type CohortWallet } from '@/lib/cohort'
 import { BottomNav } from '@/components/layout/BottomNav'
 import { AddressPaste } from '@/components/card/AddressPaste'
 import { ExampleWallets } from '@/components/card/ExampleWallets'
+import { FamousStrip } from '@/components/replay/FamousStrip'
+import { listFamousReplays } from '@/lib/replay/famous'
 
 // Index page for Trade Replay: the entry point reached from the nav. Paste
 // any address, or tap a live example from the capture cohort.
@@ -41,6 +43,8 @@ export default async function ReplayIndexPage() {
             never a mark-priced reconstruction.
           </p>
         </div>
+
+        <FamousStrip entries={listFamousReplays()} />
 
         <AddressPaste basePath="/replay" />
 

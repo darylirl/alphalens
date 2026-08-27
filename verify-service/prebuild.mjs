@@ -52,6 +52,20 @@ async function listCohortWallets() {
   return wallets
 }
 
+/** The curated Famous Replays manifest, from the app itself — one source of
+ *  truth (content/famous-replays.json via /api/replay/famous), so the worker
+ *  warms exactly the entries the app ships. */
+async function listFamousEntries() {
+  try {
+    const res = await fetch(`${APP_URL}/api/replay/famous`)
+    if (!res.ok) return []
+    const body = await res.json()
+    return Array.isArray(body?.entries) ? body.entries : []
+  } catch {
+    return []
+  }
+}
+
 /** The wallet's most-traded coins, from the app's own menu endpoint (the
  *  same SQL aggregate the page's first paint reads). */
 async function walletCoins(address) {
@@ -72,14 +86,17 @@ async function walletCoins(address) {
   }
 }
 
-/** One coin's default doc: ask the app; the route serves cached or builds.
- *  The response is NDJSON (a build) or JSON (already cached). */
-async function warmDoc(address, coin) {
+/** One doc request: ask the app; the route serves cached or builds.
+ *  `params` is the full query string minus prebuild=1, so this serves both
+ *  the cohort sweep's per-coin warms and the curated entries' pinned
+ *  (coin, range, interval) triples. The response is NDJSON (a build) or
+ *  JSON (already cached). */
+async function warmDocParams(address, params) {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), BUILD_TIMEOUT_MS)
   try {
     const res = await fetch(
-      `${APP_URL}/api/replay/${address}/doc?coin=${encodeURIComponent(coin)}&range=default&prebuild=1`,
+      `${APP_URL}/api/replay/${address}/doc?${params}&prebuild=1`,
       { signal: controller.signal }
     )
     const text = await res.text()
@@ -120,6 +137,27 @@ export function startPrebuildLoop({ isBusy, log }) {
       let cached = 0
       let failed = 0
       try {
+        // Famous replays first: curated entries open from the /replay strip,
+        // so they are the docs most likely to meet a cold visitor. Once
+        // built they are pinned server-side (a curated episode is closed
+        // history), so every later sweep sees them cached — this loop's job
+        // is only the very first build and rebuilds after a manifest edit.
+        const famous = await listFamousEntries()
+        for (const f of famous) {
+          while (isBusy()) await sleep(5000)
+          const qs = new URLSearchParams({ range: f.range, interval: f.interval })
+          if (f.coin) qs.set('coin', f.coin)
+          const r = await warmDocParams(f.address, qs.toString())
+          if (!r.ok) {
+            failed++
+            log(`prebuild famous ${f.slug}: FAILED — ${r.note}`)
+          } else if (!r.cached) {
+            built++
+            log(`prebuild famous ${f.slug}: built in ${((r.buildMs ?? 0) / 1000).toFixed(1)}s`)
+          }
+          await sleep(GAP_MS)
+        }
+
         const wallets = await listCohortWallets()
         log(`prebuild sweep: ${wallets.length} cohort wallets, most-active first, top ${COINS_PER_WALLET} coins each`)
         sweep: for (const w of wallets) {
@@ -133,7 +171,10 @@ export function startPrebuildLoop({ isBusy, log }) {
           }
           for (const coin of list.coins) {
             while (isBusy()) await sleep(5000)
-            const r = await warmDoc(w.address, coin)
+            const r = await warmDocParams(
+              w.address,
+              `coin=${encodeURIComponent(coin)}&range=default`
+            )
             if (!r.ok) {
               failed++
               log(`prebuild ${w.address} ${coin}: FAILED — ${r.note}`)

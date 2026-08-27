@@ -1,6 +1,7 @@
 import type { MetadataRoute } from 'next'
 import { getSupabase } from '@/lib/db/supabase'
 import { APP_URL } from '@/lib/ledger/api'
+import { listFamousReplays } from '@/lib/replay/famous'
 
 // Served per request so new Ledger permalinks appear without a redeploy.
 // The only query is a light, explicitly paginated id/timestamp read.
@@ -80,6 +81,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ...staticRoutes.map(({ path, priority }) => ({
       url: `${APP_URL}${path}`,
       priority,
+    })),
+    ...listFamousReplays().map((e) => ({
+      url: `${APP_URL}/replay/famous/${e.slug}`,
+      lastModified: e.verified.at,
+      priority: 0.7,
     })),
     ...calls.map((c) => ({
       url: `${APP_URL}/ledger/${c.id}`,
