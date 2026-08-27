@@ -239,6 +239,15 @@ the sitemap and both nav bars — unlisted, not secret; the token is the gate.
 Nothing here writes to the Ledger: publishing stays with the runner and the
 scorer, through the one tested path in `verify-service/lib/publish.mjs`.
 
+The **Monitor** tab runs the external dead-man's monitor on demand. The monitor
+route is protected by `CRON_SECRET`, which is what makes it awkward to exercise
+by hand — triggering it from a terminal means putting the secret in a terminal.
+The button calls it server-side instead, so the operator gets a result and the
+secret never leaves Vercel. It calls the deployed route over HTTP rather than
+importing its logic: the point is to prove that what the cron actually invokes
+works, and an in-process shortcut would test a copy of the path while leaving
+the real one unverified.
+
 ---
 
 ## The external dead-man's monitor
@@ -304,6 +313,14 @@ Required Vercel environment variables:
 
 Alerts carry an `[alphalens-monitor]` prefix, distinct from the daemon's
 `[alphalens-capture]`, so you can tell which of the two is still able to speak.
+
+To hear it bark without waiting for something to die, use the **Monitor** tab in
+[`/admin`](#the-admin-console-admin). A healthy run sends nothing — that is the
+point — so confirming the alert path end to end means tightening a threshold in
+`lib/monitor/thresholds.ts` until a stream trips, running the check, and putting
+the threshold back. There is deliberately no "send a test alert" switch: a
+message that says it is a test proves the send works, not that the monitor's
+judgment does, and those are the two different things this needs to get right.
 
 ---
 

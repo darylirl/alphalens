@@ -7,12 +7,14 @@ import { EnqueuePanel } from './EnqueuePanel'
 import { JobsPanel } from './JobsPanel'
 import { WalletsPanel } from './WalletsPanel'
 import { PublishPanel } from './PublishPanel'
+import { MonitorPanel } from './MonitorPanel'
 
 const TABS = [
   { id: 'enqueue', label: 'Enqueue verification' },
   { id: 'jobs', label: 'Jobs' },
   { id: 'wallets', label: 'Wallets' },
   { id: 'publish', label: 'Ledger publishing' },
+  { id: 'monitor', label: 'Monitor' },
 ] as const
 
 type TabId = (typeof TABS)[number]['id']
@@ -173,6 +175,7 @@ export function AdminConsole({
           {tab === 'jobs' && <JobsPanel publishStatus={publishStatus} />}
           {tab === 'wallets' && <WalletsPanel />}
           {tab === 'publish' && <PublishPanel publishStatus={publishStatus} />}
+          {tab === 'monitor' && <MonitorPanel />}
         </>
       )}
     </div>
